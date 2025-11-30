@@ -13,6 +13,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      localeResolutionCallback: (locale, supportedLocales) {
+        // Se a língua do dispositivo é português, usa português
+        if (locale != null && locale.languageCode == 'pt') {
+          return const Locale('pt');
+        }
+        // Para todas as outras línguas (incluindo inglês), usa inglês como fallback
+        return const Locale('en');
+      },
       title: 'Fan App',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const Home(),
