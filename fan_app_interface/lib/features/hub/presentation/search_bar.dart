@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fan_app_interface/l10n/app_localizations.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   const SearchBarBottomSheet({Key? key}) : super(key: key);
@@ -10,7 +11,8 @@ class SearchBarBottomSheet extends StatefulWidget {
 class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
   late TextEditingController _searchController;
 
-  final List<String> items = [
+  // Nomes dos restaurantes/bares (não traduzem)
+  static const List<String> items = [
     'Restaurante Central',
     'Café Bem-vindo',
     'Pizzaria Do Dragão',
@@ -83,7 +85,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                           fontSize: 20,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Search...',
+                          hintText: AppLocalizations.of(context)!.search,
                           hintStyle: TextStyle(
                             color: Colors.white70,
                             fontFamily: 'Gabarito',
@@ -130,7 +132,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                       onTap: () {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Selecionado: $item')),
+                          SnackBar(content: Text(AppLocalizations.of(context)!.selected(item))),
                         );
                       },
                     );

@@ -1,0 +1,19 @@
+{
+  "@selected": {
+    "description": "Message shown when an item is selected",
+    "placeholders": {
+      "item": {
+        "example": "Restaurant Name",
+        "type": "String"
+      }
+    }
+  },
+  "exit": "Exit",
+  "food": "Food",
+  "search": "Search...",
+  "seat": "Seat",
+  "selected": "Selected: {item}",
+  "tapToSelect": "Tap to select",
+  "wc": "WC",
+  "whereToQuestion": "Where to?"
+}

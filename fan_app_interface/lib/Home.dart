@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'l10n/app_localizations.dart';
 import 'features/map/presentation/pages/map_page.dart';
 import 'features/poi/presentation/navbar.dart';
 import 'features/hub/presentation/search_bar.dart';
@@ -70,10 +71,10 @@ class Home extends StatelessWidget {
                       child: const Icon(Icons.search, color: Colors.white, size: 30),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Search...',
-                        style: TextStyle(
+                        AppLocalizations.of(context)!.search,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontFamily: 'Gabarito',
                           fontSize: 20,
