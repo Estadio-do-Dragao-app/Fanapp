@@ -1,19 +1,32 @@
 {
+  "search": "Pesquisar...",
+  "whereToQuestion": "Para onde?",
+  "seat": "Lugar",
+  "wc": "WC",
+  "food": "Comida",
+  "exit": "Saída",
+  "selected": "Selecionado: {item}",
   "@selected": {
     "description": "Mensagem mostrada quando um item é selecionado",
     "placeholders": {
       "item": {
-        "example": "Nome do Restaurante",
-        "type": "String"
+        "type": "String",
+        "example": "Nome do Restaurante"
       }
     }
   },
-  "exit": "Saída",
-  "food": "Comida",
-  "search": "Pesquisar...",
-  "seat": "Lugar",
-  "selected": "Selecionado: {item}",
   "tapToSelect": "Toque para selecionar",
-  "wc": "WC",
-  "whereToQuestion": "Para onde?"
+  "chooseLocation": "Escolha uma localização",
+  "chooseLocationButton": "Escolher localização",
+  "faster": "Mais rápido",
+  "minutes": "{count} min",
+  "@minutes": {
+    "description": "Tempo em minutos",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  }
 }
