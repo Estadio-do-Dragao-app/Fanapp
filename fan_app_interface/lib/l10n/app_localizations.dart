@@ -95,11 +95,29 @@ abstract class AppLocalizations {
     Locale('pt')
   ];
 
-  /// No description provided for @exit.
+  /// No description provided for @search.
   ///
   /// In en, this message translates to:
-  /// **'Exit'**
-  String get exit;
+  /// **'Search...'**
+  String get search;
+
+  /// No description provided for @whereToQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Where to?'**
+  String get whereToQuestion;
+
+  /// No description provided for @seat.
+  ///
+  /// In en, this message translates to:
+  /// **'Seat'**
+  String get seat;
+
+  /// No description provided for @wc.
+  ///
+  /// In en, this message translates to:
+  /// **'WC'**
+  String get wc;
 
   /// No description provided for @food.
   ///
@@ -107,17 +125,11 @@ abstract class AppLocalizations {
   /// **'Food'**
   String get food;
 
-  /// No description provided for @search.
+  /// No description provided for @exit.
   ///
   /// In en, this message translates to:
-  /// **'Search...'**
-  String get search;
-
-  /// No description provided for @seat.
-  ///
-  /// In en, this message translates to:
-  /// **'Seat'**
-  String get seat;
+  /// **'Exit'**
+  String get exit;
 
   /// Message shown when an item is selected
   ///
@@ -131,17 +143,41 @@ abstract class AppLocalizations {
   /// **'Tap to select'**
   String get tapToSelect;
 
-  /// No description provided for @wc.
+  /// No description provided for @chooseLocation.
   ///
   /// In en, this message translates to:
-  /// **'WC'**
-  String get wc;
+  /// **'Choose a location'**
+  String get chooseLocation;
 
-  /// No description provided for @whereToQuestion.
+  /// No description provided for @chooseLocationButton.
   ///
   /// In en, this message translates to:
-  /// **'Where to?'**
-  String get whereToQuestion;
+  /// **'Choose location'**
+  String get chooseLocationButton;
+
+  /// No description provided for @faster.
+  ///
+  /// In en, this message translates to:
+  /// **'Faster'**
+  String get faster;
+
+  /// Time in minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min'**
+  String minutes(int count);
+
+  /// No description provided for @evacuation.
+  ///
+  /// In en, this message translates to:
+  /// **'EVACUATION'**
+  String get evacuation;
+
+  /// No description provided for @map.
+  ///
+  /// In en, this message translates to:
+  /// **'MAP'**
+  String get map;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
