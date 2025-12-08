@@ -47,4 +47,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String minutes(int count) {
     return '$count min';
   }
+
+  @override
+  String get evacuation => 'EVACUATION';
+
+  @override
+  String get map => 'MAP';
 }

@@ -166,6 +166,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} min'**
   String minutes(int count);
+
+  /// No description provided for @evacuation.
+  ///
+  /// In en, this message translates to:
+  /// **'EVACUATION'**
+  String get evacuation;
+
+  /// No description provided for @map.
+  ///
+  /// In en, this message translates to:
+  /// **'MAP'**
+  String get map;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

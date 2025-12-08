@@ -28,5 +28,7 @@
         "example": "5"
       }
     }
-  }
+  },
+  "evacuation": "EVACUAÇÃO",
+  "map": "MAPA"
 }

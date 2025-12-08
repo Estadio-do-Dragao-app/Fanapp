@@ -1,3 +1,4 @@
+import 'package:fan_app_interface/features/emergency/presentation/alert.dart';
 import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
 import 'Home.dart';
@@ -23,7 +24,7 @@ class MyApp extends StatelessWidget {
       },
       title: 'Fan App',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: const Home(),
+      home: const EmergencyAlertPage(),
     );
   }
 }
