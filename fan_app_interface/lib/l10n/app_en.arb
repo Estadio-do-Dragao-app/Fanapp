@@ -1,19 +1,32 @@
 {
+  "search": "Search...",
+  "whereToQuestion": "Where to?",
+  "seat": "Seat",
+  "wc": "WC",
+  "food": "Food",
+  "exit": "Exit",
+  "selected": "Selected: {item}",
   "@selected": {
     "description": "Message shown when an item is selected",
     "placeholders": {
       "item": {
-        "example": "Restaurant Name",
-        "type": "String"
+        "type": "String",
+        "example": "Restaurant Name"
       }
     }
   },
-  "exit": "Exit",
-  "food": "Food",
-  "search": "Search...",
-  "seat": "Seat",
-  "selected": "Selected: {item}",
   "tapToSelect": "Tap to select",
-  "wc": "WC",
-  "whereToQuestion": "Where to?"
+  "chooseLocation": "Choose a location",
+  "chooseLocationButton": "Choose location",
+  "faster": "Faster",
+  "minutes": "{count} min",
+  "@minutes": {
+    "description": "Time in minutes",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  }
 }
