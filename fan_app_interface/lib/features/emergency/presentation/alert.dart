@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../map/presentation/stadium_map_page.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 
 class EmergencyAlertPage extends StatefulWidget {
@@ -55,15 +56,8 @@ return Scaffold(
       return Stack(
         children: [
           // Fundo (mapa)
-          Container(
-            
-            color: Colors.grey[300],
-            child: Center(
-              child: Text(
-                'MAP PLACEHOLDER',
-                style: TextStyle(color: Colors.grey[600], fontSize: 18),
-              ),
-            ),
+          Positioned.fill(
+            child: StadiumMapPage(),
           ),
 
           // Borda vermelha ANIMADA (AGORA ocupa o ecrã INTEIRO)

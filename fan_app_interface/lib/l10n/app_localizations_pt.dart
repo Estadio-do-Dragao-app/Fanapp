@@ -24,7 +24,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get food => 'Comida';
 
   @override
-  String get exit => 'Saída';
+  String get exit => 'Saída de Emergência';
 
   @override
   String selected(String item) {
@@ -53,4 +53,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get map => 'MAPA';
+
+  @override
+  String get merchandising => 'Merchandising';
+
+  @override
+  String get information => 'Informação';
+
+  @override
+  String get firstAid => 'Primeiros Socorros';
 }

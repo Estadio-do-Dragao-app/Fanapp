@@ -1,31 +1,24 @@
 import 'package:flutter/material.dart';
+import '../stadium_map_page.dart';
 
-/// Simple MapPage implementation that shows a placeholder 'map' area and a
-/// horizontal row of category buttons overlayed at the top.
+/// MapPage implementation with functional stadium map
 class MapPage extends StatefulWidget {
 	const MapPage({Key? key}) : super(key: key);
 
 	@override
-	State<MapPage> createState() => _MapPageState();
+	State<MapPage> createState() => MapPageState();
 }
 
-class _MapPageState extends State<MapPage> {
+class MapPageState extends State<MapPage> {
+	final GlobalKey<StadiumMapPageState> _stadiumMapKey = GlobalKey<StadiumMapPageState>();
+	
+	// Public method to zoom to POI
+	void zoomToPOI(poi) {
+		_stadiumMapKey.currentState?.zoomToPOI(poi);
+	}
 
 	@override
 	Widget build(BuildContext context) {
-    // Scaffold provides the basic visual layout structure.
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Placeholder for the actual map widget. Replace with your MapWidget.
-          Positioned.fill(
-            child: Image.asset(
-              'assets/images/map_placeholder.png',
-              fit: BoxFit.cover,
-            ),
-          ),
-        ],
-      ),
-    );
+    return StadiumMapPage(key: _stadiumMapKey);
   }
 }

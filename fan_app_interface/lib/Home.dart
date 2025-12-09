@@ -5,8 +5,16 @@ import 'features/poi/presentation/navbar.dart';
 import 'features/hub/presentation/search_bar.dart';
 import 'features/hub/presentation/menu_button.dart';
 
-class Home extends StatelessWidget {
+class Home extends StatefulWidget {
   const Home({super.key});
+  
+  @override
+  State<Home> createState() => _HomeState();
+}
+
+class _HomeState extends State<Home> {
+  // GlobalKey para acessar o state do MapPage (agora público)
+  final GlobalKey<MapPageState> _mapPageKey = GlobalKey<MapPageState>();
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +22,7 @@ class Home extends StatelessWidget {
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          const MapPage(),
+          MapPage(key: _mapPageKey),
           Positioned(
             top: 0,
             left: 0,
@@ -45,7 +53,12 @@ class Home extends StatelessWidget {
                     ),
                   ),
                   builder: (context) {
-                    return SearchBarBottomSheet();
+                    return SearchBarBottomSheet(
+                      onPOISelected: (poi) {
+                        // Fazer zoom no POI após fechar a barra de pesquisa
+                        _mapPageKey.currentState?.zoomToPOI(poi);
+                      },
+                    );
                   },
                 );
               },
