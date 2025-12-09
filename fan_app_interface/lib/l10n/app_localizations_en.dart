@@ -53,4 +53,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get map => 'MAP';
+
+  @override
+  String get merchandising => 'Merchandising';
+
+  @override
+  String get information => 'Information';
+
+  @override
+  String get firstAid => 'First aid';
 }

@@ -178,6 +178,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'MAP'**
   String get map;
+
+  /// No description provided for @merchandising.
+  ///
+  /// In en, this message translates to:
+  /// **'Merchandising'**
+  String get merchandising;
+
+  /// No description provided for @information.
+  ///
+  /// In en, this message translates to:
+  /// **'Information'**
+  String get information;
+
+  /// No description provided for @firstAid.
+  ///
+  /// In en, this message translates to:
+  /// **'First aid'**
+  String get firstAid;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

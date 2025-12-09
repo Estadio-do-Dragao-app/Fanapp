@@ -1,4 +1,5 @@
 import 'package:fan_app_interface/features/emergency/presentation/alert.dart';
+import 'package:fan_app_interface/features/map/presentation/stadium_map_page.dart';
 import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
 import 'Home.dart';
@@ -24,7 +25,11 @@ class MyApp extends StatelessWidget {
       },
       title: 'Fan App',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: const EmergencyAlertPage(),
+      home: const Home(),
+      routes: {
+        '/map': (context) => const StadiumMapPage(),
+        '/emergency-alert': (context) => const EmergencyAlertPage(),
+      },
     );
   }
 }
