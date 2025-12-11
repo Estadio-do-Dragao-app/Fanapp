@@ -23,7 +23,8 @@ class EmergencyNavigationPage extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<EmergencyNavigationPage> createState() => _EmergencyNavigationPageState();
+  State<EmergencyNavigationPage> createState() =>
+      _EmergencyNavigationPageState();
 }
 
 class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
@@ -32,15 +33,20 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
   late AnimationController _blinkController;
   final MapController _mapController = MapController();
 
-  // Conversão de metros Cartesianos para LatLng (MESMA origem do StadiumMapPage!)
-  static const double _metersToLatDegrees = 0.000009;
-  static const double _metersToLngDegrees = 0.000012;
-  static const LatLng _mapOrigin = LatLng(41.161758, -8.583933); // Centro do estádio
+  // Conversão de unidades do backend para LatLng (MESMA lógica do StadiumMapPage!)
+  static const double _backendCenterX = 499.0;
+  static const double _backendCenterY = 400.0;
+  static const double _unitsToLatDegrees = 0.000004;
+  static const double _unitsToLngDegrees = 0.000005;
+  static const LatLng _mapOrigin = LatLng(
+    41.161758,
+    -8.583933,
+  ); // Centro do estádio
 
   @override
   void initState() {
     super.initState();
-    
+
     _controller = NavigationController(
       route: widget.route,
       destination: widget.destination,
@@ -66,10 +72,10 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
   void _onNavigationUpdate() {
     if (!mounted) return;
     setState(() {});
-    
+
     // Câmara segue o utilizador (tipo Google Maps)
     _followUserPosition();
-    
+
     // Chegada: voltar ao mapa automaticamente (com delay para evitar crash)
     if (_controller.hasArrived) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -82,9 +88,13 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
 
   void _followUserPosition() {
     final tracker = _controller.tracker;
-    final userLat = _mapOrigin.latitude + (tracker.currentY * _metersToLatDegrees);
-    final userLng = _mapOrigin.longitude + (tracker.currentX * _metersToLngDegrees);
-    
+    // Centrar as coordenadas antes de converter
+    final centeredX = tracker.currentX - _backendCenterX;
+    final centeredY = tracker.currentY - _backendCenterY;
+
+    final userLat = _mapOrigin.latitude + (centeredY * _unitsToLatDegrees);
+    final userLng = _mapOrigin.longitude + (centeredX * _unitsToLngDegrees);
+
     // Move câmara suavemente para a posição do utilizador
     _mapController.move(LatLng(userLat, userLng), 19.0);
   }
@@ -96,7 +106,9 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
 
   String _getArrivalTime() {
     final now = DateTime.now();
-    final arrivalTime = now.add(Duration(seconds: _controller.remainingTimeSeconds));
+    final arrivalTime = now.add(
+      Duration(seconds: _controller.remainingTimeSeconds),
+    );
     return '${arrivalTime.hour}:${arrivalTime.minute.toString().padLeft(2, '0')}';
   }
 
@@ -104,8 +116,11 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
   Widget build(BuildContext context) {
     final radius = MediaQuery.of(context).viewPadding.top > 0 ? 70.0 : 0.0;
     final tracker = _controller.tracker;
-    final userLat = _mapOrigin.latitude + (tracker.currentY * _metersToLatDegrees);
-    final userLng = _mapOrigin.longitude + (tracker.currentX * _metersToLngDegrees);
+    // Centrar as coordenadas antes de converter
+    final centeredX = tracker.currentX - _backendCenterX;
+    final centeredY = tracker.currentY - _backendCenterY;
+    final userLat = _mapOrigin.latitude + (centeredY * _unitsToLatDegrees);
+    final userLng = _mapOrigin.longitude + (centeredX * _unitsToLngDegrees);
     final userPosition = LatLng(userLat, userLng);
 
     return Scaffold(
@@ -114,7 +129,7 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
           // Mapa de fundo com rota destacada (vermelha)
           Positioned.fill(
             child: StadiumMapPage(
-              highlightedRoute: widget.route,
+              highlightedRoute: _controller.route, // Usar rota atual
               highlightedPOI: widget.destination,
               mapController: _mapController,
               isNavigating: true,
@@ -135,9 +150,9 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(radius),
                     border: Border.all(
-                      color: const Color(0xFFBD453D).withOpacity(
-                        _blinkController.value,
-                      ),
+                      color: const Color(
+                        0xFFBD453D,
+                      ).withOpacity(_blinkController.value),
                       width: 35,
                     ),
                   ),
@@ -183,7 +198,10 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
                         mini: true,
                         backgroundColor: const Color(0xFFBD453D),
                         onPressed: () => _controller.moveUser(0, 5),
-                        child: const Icon(Icons.arrow_upward, color: Colors.white),
+                        child: const Icon(
+                          Icons.arrow_upward,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -194,7 +212,10 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
                             mini: true,
                             backgroundColor: const Color(0xFFBD453D),
                             onPressed: () => _controller.moveUser(-5, 0),
-                            child: const Icon(Icons.arrow_back, color: Colors.white),
+                            child: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           // Direita
@@ -203,7 +224,10 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
                             mini: true,
                             backgroundColor: const Color(0xFFBD453D),
                             onPressed: () => _controller.moveUser(5, 0),
-                            child: const Icon(Icons.arrow_forward, color: Colors.white),
+                            child: const Icon(
+                              Icons.arrow_forward,
+                              color: Colors.white,
+                            ),
                           ),
                         ],
                       ),
@@ -214,7 +238,10 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
                         mini: true,
                         backgroundColor: const Color(0xFFBD453D),
                         onPressed: () => _controller.moveUser(0, -5),
-                        child: const Icon(Icons.arrow_downward, color: Colors.white),
+                        child: const Icon(
+                          Icons.arrow_downward,
+                          color: Colors.white,
+                        ),
                       ),
                     ],
                   ),

@@ -31,7 +31,6 @@ class _NavigationPageState extends State<NavigationPage> {
   final MapController _mapController = MapController();
 
   // Escala para corresponder ao StadiumMapPage
-  static const double _coordScale = 0.001;
 
   @override
   void initState() {
@@ -54,10 +53,10 @@ class _NavigationPageState extends State<NavigationPage> {
   void _onNavigationUpdate() {
     if (!mounted) return;
     setState(() {});
-    
+
     // Câmara segue o utilizador (tipo Google Maps)
     _followUserPosition();
-    
+
     // Chegada ao destino: voltar ao mapa automaticamente (com delay para evitar crash)
     if (_controller.hasArrived) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -70,10 +69,22 @@ class _NavigationPageState extends State<NavigationPage> {
 
   void _followUserPosition() {
     final tracker = _controller.tracker;
-    // Conversão direta Cartesian -> Visual LatLng
-    final userLat = tracker.currentY * _coordScale;
-    final userLng = tracker.currentX * _coordScale;
-    
+    // Usar mesma lógica de projeção corrigida do StadiumMapPage
+    // Centro das coordenadas do backend
+    const backendCenterX = 499.0;
+    const backendCenterY = 400.0;
+    const unitsToLatDegrees = 0.000004;
+    const unitsToLngDegrees = 0.000005;
+
+    final center = StadiumMapPageState.stadiumCenter;
+
+    // Centrar as coordenadas antes de converter
+    final centeredX = tracker.currentX - backendCenterX;
+    final centeredY = tracker.currentY - backendCenterY;
+
+    final userLat = center.latitude + (centeredY * unitsToLatDegrees);
+    final userLng = center.longitude + (centeredX * unitsToLngDegrees);
+
     // Move câmara suavemente para a posição do utilizador
     _mapController.move(LatLng(userLat, userLng), 19.0);
   }
@@ -85,23 +96,39 @@ class _NavigationPageState extends State<NavigationPage> {
 
   String _getArrivalTime() {
     final now = DateTime.now();
-    final arrivalTime = now.add(Duration(seconds: _controller.remainingTimeSeconds));
+    final arrivalTime = now.add(
+      Duration(seconds: _controller.remainingTimeSeconds),
+    );
     return '${arrivalTime.hour}:${arrivalTime.minute.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     final tracker = _controller.tracker;
-    // Wrapper "Legacy" para passar X,Y brutos para o StadiumMapPage
-    // StadiumMapPage espera (Latitude=Y, Longitude=X)
-    final userPosition = LatLng(tracker.currentY, tracker.currentX);
-    
+
+    // Calcular posição para o mapa (usando mesma projeção corrigida)
+    const backendCenterX = 499.0;
+    const backendCenterY = 400.0;
+    const unitsToLatDegrees = 0.000004;
+    const unitsToLngDegrees = 0.000005;
+    final center = StadiumMapPageState.stadiumCenter;
+
+    // Centrar as coordenadas antes de converter
+    final centeredX = tracker.currentX - backendCenterX;
+    final centeredY = tracker.currentY - backendCenterY;
+
+    final userPosition = LatLng(
+      center.latitude + (centeredY * unitsToLatDegrees),
+      center.longitude + (centeredX * unitsToLngDegrees),
+    );
+
     return Scaffold(
       body: Stack(
         children: [
           // Mapa de fundo com rota destacada
           StadiumMapPage(
-            highlightedRoute: widget.route,
+            highlightedRoute: _controller
+                .route, // Usar rota atual (pode ter sido recalculada)
             highlightedPOI: widget.destination,
             mapController: _mapController,
             isNavigating: true,
@@ -146,7 +173,8 @@ class _NavigationPageState extends State<NavigationPage> {
                   heroTag: 'forward',
                   mini: false, // Maior destaque
                   backgroundColor: const Color(0xFF5B6FE8),
-                  onPressed: () => _controller.moveForward(5), // +5m na direção atual
+                  onPressed: () =>
+                      _controller.moveForward(5), // +5m na direção atual
                   child: const Icon(Icons.arrow_upward, color: Colors.white),
                 ),
                 const SizedBox(height: 16),
@@ -156,12 +184,26 @@ class _NavigationPageState extends State<NavigationPage> {
                   mini: false,
                   backgroundColor: Colors.white,
                   onPressed: () => _controller.rotateUser(45), // +45 graus
-                  child: const Icon(Icons.rotate_right, color: Color(0xFF5B6FE8)),
+                  child: const Icon(
+                    Icons.rotate_right,
+                    color: Color(0xFF5B6FE8),
+                  ),
                 ),
               ],
             ),
           ),
-          
+
+          // Botão de centrar (apenas na NavigationPage)
+          Positioned(
+            left: 16,
+            bottom: 200,
+            child: FloatingActionButton(
+              heroTag: 'center',
+              backgroundColor: Colors.white,
+              onPressed: _followUserPosition,
+              child: const Icon(Icons.my_location, color: Colors.blue),
+            ),
+          ),
         ],
       ),
     );

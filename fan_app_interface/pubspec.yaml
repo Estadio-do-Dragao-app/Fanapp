@@ -42,7 +42,13 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   http: ^1.2.2
-  shared_preferences: ^2.3.3
+  shared_preferences: ^2.3.3 # Keeping the higher version for shared_preferences
+  
+  # Ticket Scanner
+  mobile_scanner: ^5.1.1
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

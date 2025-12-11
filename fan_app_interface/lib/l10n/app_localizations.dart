@@ -233,6 +233,84 @@ abstract class AppLocalizations {
   /// **'End Route'**
   String get endRoute;
 
+  /// No description provided for @addTicket.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Ticket'**
+  String get addTicket;
+
+  /// No description provided for @scanTicketQR.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan Ticket QR Code'**
+  String get scanTicketQR;
+
+  /// No description provided for @ticketInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Ticket Information'**
+  String get ticketInfo;
+
+  /// No description provided for @sector.
+  ///
+  /// In en, this message translates to:
+  /// **'Sector'**
+  String get sector;
+
+  /// No description provided for @row.
+  ///
+  /// In en, this message translates to:
+  /// **'Row'**
+  String get row;
+
+  /// No description provided for @gate.
+  ///
+  /// In en, this message translates to:
+  /// **'Gate'**
+  String get gate;
+
+  /// No description provided for @ticketType.
+  ///
+  /// In en, this message translates to:
+  /// **'Ticket Type'**
+  String get ticketType;
+
+  /// No description provided for @deleteTicket.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Ticket'**
+  String get deleteTicket;
+
+  /// No description provided for @deleteTicketConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this ticket?'**
+  String get deleteTicketConfirm;
+
+  /// No description provided for @noTicketScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'No ticket scanned'**
+  String get noTicketScanned;
+
+  /// No description provided for @noTicketScannedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Please scan your ticket QR code to navigate to your seat.'**
+  String get noTicketScannedMessage;
+
+  /// No description provided for @scanNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan Now'**
+  String get scanNow;
+
+  /// No description provided for @cancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancel;
+
   /// No description provided for @firstAid.
   ///
   /// In en, this message translates to:

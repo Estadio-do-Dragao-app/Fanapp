@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "fan_app_interface",
+            "cwd": "fan_app_interface",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "fan_app_interface (profile mode)",
+            "cwd": "fan_app_interface",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "fan_app_interface (release mode)",
+            "cwd": "fan_app_interface",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}

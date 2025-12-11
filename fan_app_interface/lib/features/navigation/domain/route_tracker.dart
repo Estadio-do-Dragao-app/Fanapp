@@ -8,15 +8,32 @@ import '../data/models/navigation_instruction.dart';
 class RouteTracker {
   final RouteModel route;
   final List<NodeModel> allNodes;
-  
+
+  // Mapa para lookup rápido de coordenadas corretas (do Map Service)
+  late final Map<String, NodeModel> _nodesMap;
+
   int _currentWaypointIndex = 0;
   double _userX = 0;
   double _userY = 0;
 
-  RouteTracker({
-    required this.route,
-    required this.allNodes,
-  });
+  RouteTracker({required this.route, required this.allNodes}) {
+    // Criar mapa de nós para lookup O(1)
+    _nodesMap = {for (var n in allNodes) n.id: n};
+  }
+
+  /// Obtém coordenadas corretas de um waypoint usando o Map Service
+  /// O Routing Service retorna coordenadas incorretas, mas os node_ids são válidos
+  ({double x, double y}) getCorrectWaypointCoords(PathNode wp) {
+    final node = _nodesMap[wp.nodeId];
+    if (node != null) {
+      return (x: node.x, y: node.y);
+    }
+    // Fallback: usar coordenadas do routing (podem estar erradas)
+    print(
+      '[RouteTracker] AVISO: Nó ${wp.nodeId} não encontrado no Map Service',
+    );
+    return (x: wp.x, y: wp.y);
+  }
 
   // Getters para posição atual (para camera follow)
   double get currentX => _userX;
@@ -35,7 +52,13 @@ class RouteTracker {
   bool get hasArrived {
     if (route.waypoints.isEmpty) return false;
     final lastWaypoint = route.waypoints.last;
-    final distToLast = _calculateDistance(_userX, _userY, lastWaypoint.x, lastWaypoint.y);
+    final lastCoords = getCorrectWaypointCoords(lastWaypoint);
+    final distToLast = _calculateDistance(
+      _userX,
+      _userY,
+      lastCoords.x,
+      lastCoords.y,
+    );
     // Chegou se está a menos de 3 metros do último waypoint
     return distToLast < 3.0;
   }
@@ -45,19 +68,34 @@ class RouteTracker {
     if (_currentWaypointIndex >= route.waypoints.length) {
       return 0;
     }
-    
+
     // Distância do utilizador até o próximo waypoint
     final nextWaypoint = route.waypoints[_currentWaypointIndex];
-    double total = _calculateDistance(_userX, _userY, nextWaypoint.x, nextWaypoint.y);
-    
+    final nextCoords = getCorrectWaypointCoords(nextWaypoint);
+    double total = _calculateDistance(
+      _userX,
+      _userY,
+      nextCoords.x,
+      nextCoords.y,
+    );
+
     // Somar distâncias dos waypoints seguintes
     for (int i = _currentWaypointIndex; i < route.waypoints.length - 1; i++) {
       final current = route.waypoints[i];
       final next = route.waypoints[i + 1];
-      total += _calculateDistance(current.x, current.y, next.x, next.y);
+      final currentCoords = getCorrectWaypointCoords(current);
+      final nextCoordsLoop = getCorrectWaypointCoords(next);
+      total += _calculateDistance(
+        currentCoords.x,
+        currentCoords.y,
+        nextCoordsLoop.x,
+        nextCoordsLoop.y,
+      );
     }
-    
-    print('[RouteTracker] Distância restante: ${total.toStringAsFixed(1)}m (waypoint $_currentWaypointIndex/${route.waypoints.length})');
+
+    print(
+      '[RouteTracker] Distância restante: ${total.toStringAsFixed(1)}m (waypoint $_currentWaypointIndex/${route.waypoints.length})',
+    );
     return total;
   }
 
@@ -71,13 +109,22 @@ class RouteTracker {
   /// Gera a próxima instrução de navegação
   NavigationInstruction? getNextInstruction() {
     if (route.waypoints.isEmpty) return null;
-    
+
     // Verificar se chegou ao destino
     final lastWaypoint = route.waypoints.last;
-    final distToLast = _calculateDistance(_userX, _userY, lastWaypoint.x, lastWaypoint.y);
-    
-    if (distToLast < 3.0 || _currentWaypointIndex >= route.waypoints.length - 1) {
-      print('[RouteTracker] Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m');
+    final lastCoords = getCorrectWaypointCoords(lastWaypoint);
+    final distToLast = _calculateDistance(
+      _userX,
+      _userY,
+      lastCoords.x,
+      lastCoords.y,
+    );
+
+    if (distToLast < 3.0 ||
+        _currentWaypointIndex >= route.waypoints.length - 1) {
+      print(
+        '[RouteTracker] Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m',
+      );
       return NavigationInstruction(
         type: 'arrive',
         distanceToNextTurn: distToLast,
@@ -87,25 +134,44 @@ class RouteTracker {
 
     // NOVO: Agrupar waypoints "straight" consecutivos
     int nextTurnIndex = _findNextTurn(_currentWaypointIndex);
-    
+
     // Calcular distância total até a próxima curva (ou destino)
     double totalDistance = 0.0;
-    
+
     // Distância da posição atual até o próximo waypoint
-    final nextWaypoint = route.waypoints[(_currentWaypointIndex + 1).clamp(0, route.waypoints.length - 1)];
-    totalDistance += _calculateDistance(_userX, _userY, nextWaypoint.x, nextWaypoint.y);
-    
+    final nextWaypoint =
+        route.waypoints[(_currentWaypointIndex + 1).clamp(
+          0,
+          route.waypoints.length - 1,
+        )];
+    final nextCoords = getCorrectWaypointCoords(nextWaypoint);
+    totalDistance += _calculateDistance(
+      _userX,
+      _userY,
+      nextCoords.x,
+      nextCoords.y,
+    );
+
     // Somar distâncias dos waypoints intermediários straight
     for (int i = _currentWaypointIndex + 1; i < nextTurnIndex; i++) {
       final wp1 = route.waypoints[i];
       final wp2 = route.waypoints[i + 1];
-      totalDistance += _calculateDistance(wp1.x, wp1.y, wp2.x, wp2.y);
+      final coords1 = getCorrectWaypointCoords(wp1);
+      final coords2 = getCorrectWaypointCoords(wp2);
+      totalDistance += _calculateDistance(
+        coords1.x,
+        coords1.y,
+        coords2.x,
+        coords2.y,
+      );
     }
-    
+
     // Determinar tipo de instrução (straight ou tipo da próxima curva)
     final turnType = _determineTurnType(nextTurnIndex);
-    
-    print('[RouteTracker] Próxima instrução: $turnType em ${totalDistance.toStringAsFixed(1)}m (waypoints $_currentWaypointIndex → $nextTurnIndex)');
+
+    print(
+      '[RouteTracker] Próxima instrução: $turnType em ${totalDistance.toStringAsFixed(1)}m (waypoints $_currentWaypointIndex → $nextTurnIndex)',
+    );
 
     return NavigationInstruction(
       type: turnType,
@@ -113,14 +179,14 @@ class RouteTracker {
       nodeId: route.waypoints[nextTurnIndex].nodeId,
     );
   }
-  
+
   /// Encontra o índice do próximo waypoint com curva (não-straight)
   int _findNextTurn(int startIndex) {
     // Se já estamos no último ou penúltimo, retornar próximo
     if (startIndex >= route.waypoints.length - 2) {
       return (startIndex + 1).clamp(0, route.waypoints.length - 1);
     }
-    
+
     // Procurar o próximo waypoint que NÃO seja straight
     for (int i = startIndex + 1; i < route.waypoints.length - 1; i++) {
       final turnType = _determineTurnType(i);
@@ -128,7 +194,7 @@ class RouteTracker {
         return i;
       }
     }
-    
+
     // Se todos são straight até o final, retornar último
     return route.waypoints.length - 1;
   }
@@ -143,11 +209,16 @@ class RouteTracker {
     final current = route.waypoints[waypointIndex];
     final next = route.waypoints[waypointIndex + 1];
 
+    // Obter coordenadas corretas do Map Service
+    final prevCoords = getCorrectWaypointCoords(prev);
+    final currentCoords = getCorrectWaypointCoords(current);
+    final nextCoords = getCorrectWaypointCoords(next);
+
     // Calcular vetores
-    final dx1 = current.x - prev.x;
-    final dy1 = current.y - prev.y;
-    final dx2 = next.x - current.x;
-    final dy2 = next.y - current.y;
+    final dx1 = currentCoords.x - prevCoords.x;
+    final dy1 = currentCoords.y - prevCoords.y;
+    final dx2 = nextCoords.x - currentCoords.x;
+    final dy2 = nextCoords.y - currentCoords.y;
 
     // Calcular ângulo entre vetores
     final angle1 = atan2(dy1, dx1);
@@ -174,8 +245,9 @@ class RouteTracker {
   void _updateCurrentWaypoint() {
     for (int i = _currentWaypointIndex; i < route.waypoints.length; i++) {
       final waypoint = route.waypoints[i];
-      final distance = _calculateDistance(_userX, _userY, waypoint.x, waypoint.y);
-      
+      final coords = getCorrectWaypointCoords(waypoint);
+      final distance = _calculateDistance(_userX, _userY, coords.x, coords.y);
+
       // Se está a menos de 2 metros do waypoint, avançar para o próximo
       if (distance < 2.0 && i < route.waypoints.length - 1) {
         _currentWaypointIndex = i + 1;

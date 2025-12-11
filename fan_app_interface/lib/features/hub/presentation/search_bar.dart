@@ -6,11 +6,10 @@ import '../../map/data/models/node_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
-import 'dart:math';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
-  
+
   const SearchBarBottomSheet({Key? key, this.onPOISelected}) : super(key: key);
 
   @override
@@ -21,10 +20,10 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
   late TextEditingController _searchController;
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
-  
+
   // Posição fixa do utilizador (mesma do StadiumMapPage)
   static const String userNodeId = 'N1';
-  
+
   List<POIModel> _allPOIs = [];
   List<NodeModel> _allNodes = [];
   bool _isLoading = true;
@@ -35,7 +34,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
     _searchController = TextEditingController();
     _loadPOIs();
   }
-  
+
   Future<void> _loadPOIs() async {
     try {
       final pois = await _mapService.getAllPOIs();
@@ -58,63 +57,55 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
     _searchController.dispose();
     super.dispose();
   }
-  
-  /// Encontra o nó mais próximo de um POI baseado em coordenadas (x, y)
-  String _findNearestNode(POIModel poi) {
-    if (_allNodes.isEmpty) return userNodeId;
-    
-    NodeModel? nearest;
-    double minDistance = double.infinity;
-    
-    for (var node in _allNodes) {
-      // Só considerar nós do mesmo piso
-      if (node.level != poi.level) continue;
-      
-      // Calcular distância euclidiana
-      final dx = node.x - poi.x;
-      final dy = node.y - poi.y;
-      final distance = sqrt(dx * dx + dy * dy);
-      
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearest = node;
-      }
-    }
-    
-    return nearest?.id ?? userNodeId;
-  }
-  
+
   /// Mostra detalhes do POI selecionado
   Future<void> _showPOIDetails(POIModel poi) async {
     // Fechar a barra de pesquisa primeiro
     Navigator.pop(context);
-    
+
     // Aguardar um frame para garantir que o modal foi fechado
     await Future.delayed(const Duration(milliseconds: 100));
-    
+
     // Notificar callback para fazer zoom (se existir)
     widget.onPOISelected?.call(poi);
-    
+
     // Calcular rota para o POI (apenas para mostrar distância/tempo)
     RouteModel? route;
     try {
-      final nearestNode = _findNearestNode(poi);
-      route = await _routingService.getRoute(
-        fromNode: userNodeId,
-        toNode: nearestNode,
+      // Obter posição do utilizador a partir do nó N1
+      final userNode = _allNodes.firstWhere(
+        (n) => n.id == userNodeId,
+        orElse: () => _allNodes.first,
+      );
+
+      // Usar nova API com coordenadas
+      route = await _routingService.getRouteToPOI(
+        startX: userNode.x,
+        startY: userNode.y,
+        startLevel: userNode.level,
+        poiId: poi.id,
       );
     } catch (e) {
       print('[SearchBar] Erro ao calcular rota: $e');
     }
-    
+
     if (!mounted) return;
-    
+
+    // Capturar o messenger antes de mostrar o sheet (evita usar context desmontado)
+    final messenger = ScaffoldMessenger.of(context);
+
     // Mostrar detalhes do POI (sem desenhar rota)
     POIDetailsSheet.show(
       context,
       poi: poi,
       route: route,
       allNodes: _allNodes,
+      onNavigate: () {
+        // Usa o messenger capturado (safe mesmo se widget desmontado)
+        messenger.showSnackBar(
+          SnackBar(content: Text('Navegação para ${poi.name}')),
+        );
+      },
     );
   }
 
@@ -125,10 +116,12 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         final filteredPOIs = _searchController.text.isEmpty
             ? _allPOIs
             : _allPOIs
-                .where((poi) => poi.name
-                    .toLowerCase()
-                    .contains(_searchController.text.toLowerCase()))
-                .toList();
+                  .where(
+                    (poi) => poi.name.toLowerCase().contains(
+                      _searchController.text.toLowerCase(),
+                    ),
+                  )
+                  .toList();
 
         return FractionallySizedBox(
           heightFactor: 1.0,
@@ -152,10 +145,14 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                 child: Row(
                   children: [
                     const SizedBox(width: 12),
-                     Transform(
+                    Transform(
                       alignment: Alignment.center,
                       transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                      child: const Icon(Icons.search, color: Colors.white, size: 30),
+                      child: const Icon(
+                        Icons.search,
+                        color: Colors.white,
+                        size: 30,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -188,8 +185,11 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                           _searchController.clear();
                           setModalState(() {});
                         },
-                        child: const Icon(Icons.clear,
-                            color: Colors.white, size: 30),
+                        child: const Icon(
+                          Icons.clear,
+                          color: Colors.white,
+                          size: 30,
+                        ),
                       ),
                     const SizedBox(width: 12),
                   ],
@@ -198,41 +198,43 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
               // Results List
               Expanded(
                 child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Color(0xFF161A3E)),
-                    )
-                  : ListView.builder(
-                      itemCount: filteredPOIs.length,
-                      itemBuilder: (context, index) {
-                        final poi = filteredPOIs[index];
-                        final textColor = const Color(0xFF161A3E);
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF161A3E),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: filteredPOIs.length,
+                        itemBuilder: (context, index) {
+                          final poi = filteredPOIs[index];
+                          final textColor = const Color(0xFF161A3E);
 
-                        return ListTile(
-                          leading: Icon(
-                            _getCategoryIcon(poi.category),
-                            color: textColor,
-                          ),
-                          title: Text(
-                            poi.name,
-                            style: TextStyle(
-                              fontFamily: 'Gabarito',
-                              fontSize: 16,
+                          return ListTile(
+                            leading: Icon(
+                              _getCategoryIcon(poi.category),
                               color: textColor,
                             ),
-                          ),
-                          subtitle: Text(
-                            _getCategoryName(context, poi.category),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: textColor.withOpacity(0.6),
+                            title: Text(
+                              poi.name,
+                              style: TextStyle(
+                                fontFamily: 'Gabarito',
+                                fontSize: 16,
+                                color: textColor,
+                              ),
                             ),
-                          ),
-                          onTap: () {
-                            _showPOIDetails(poi);
-                          },
-                        );
-                      },
-                    ),
+                            subtitle: Text(
+                              _getCategoryName(context, poi.category),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: textColor.withOpacity(0.6),
+                              ),
+                            ),
+                            onTap: () {
+                              _showPOIDetails(poi);
+                            },
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -240,7 +242,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
       },
     );
   }
-  
+
   IconData _getCategoryIcon(String category) {
     switch (category.toLowerCase()) {
       case 'restroom':
@@ -261,7 +263,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         return Icons.place;
     }
   }
-  
+
   String _getCategoryName(BuildContext context, String category) {
     final loc = AppLocalizations.of(context)!;
     switch (category.toLowerCase()) {

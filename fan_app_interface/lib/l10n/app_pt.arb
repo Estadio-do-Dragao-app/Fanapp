@@ -40,8 +40,20 @@
   "distance": "m",
   "destination": "destino",
   "endRoute": "Terminar Rota",
+  "addTicket": "Adicionar Bilhete",
+  "scanTicketQR": "Digitalizar QR do Bilhete",
+  "ticketInfo": "Informação do Bilhete",
+  "sector": "Setor",
+  "row": "Fila",
+  "gate": "Portão",
+  "ticketType": "Tipo de Bilhete",
+  "deleteTicket": "Apagar Bilhete",
+  "deleteTicketConfirm": "Tem a certeza que quer apagar este bilhete?",
+  "noTicketScanned": "Nenhum bilhete digitalizado",
+  "noTicketScannedMessage": "Por favor digitalize o código QR do seu bilhete para navegar até ao seu lugar.",
+  "scanNow": "Digitalizar Agora",
+  "cancel": "Cancelar",
   "firstAid": "Primeiros Socorros",
   "information": "Informação",
   "merchandising": "Loja"
 }
-

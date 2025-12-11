@@ -15,15 +15,16 @@ class NavigationController extends ChangeNotifier {
   final RouteModel initialRoute;
   final POIModel destination;
   final List<NodeModel> allNodes;
-  
+
   late RouteModel route;
   late RouteTracker _tracker;
   late DynamicRouteManager _routeManager;
   Timer? _updateTimer;
-  
+
   // Stream para monitorizar posição
-  final StreamController<({double x, double y})> _positionStream = StreamController.broadcast();
-  
+  final StreamController<({double x, double y})> _positionStream =
+      StreamController.broadcast();
+
   bool _isNavigating = true;
   NavigationInstruction? _currentInstruction;
 
@@ -37,17 +38,17 @@ class NavigationController extends ChangeNotifier {
   }) : initialRoute = route {
     this.route = route;
     _tracker = RouteTracker(route: route, allNodes: allNodes);
-    
-    // Encontrar nó de destino mais próximo do POI
-    final destNode = _findNearestNode(destination.x, destination.y);
-    
+
     // Inicializar gestor de rota dinâmica
+    // Usa coordenadas do POI para recalcular rotas quando user se desvia
     _routeManager = DynamicRouteManager(
-      destinationNodeId: destNode.id,
+      destinationX: destination.x,
+      destinationY: destination.y,
+      destinationLevel: destination.level,
       allNodes: allNodes,
       initialRoute: route,
     );
-    
+
     // Callback quando rota é recalculada
     _routeManager.onRouteUpdated = (newRoute) {
       print('[NavigationController] 🔄 Rota atualizada!');
@@ -56,14 +57,14 @@ class NavigationController extends ChangeNotifier {
       final currentX = _tracker.currentX;
       final currentY = _tracker.currentY;
       _tracker = RouteTracker(route: newRoute, allNodes: allNodes);
-      _tracker.updateUserPosition(currentX, currentY); 
+      _tracker.updateUserPosition(currentX, currentY);
       _updateInstruction();
       notifyListeners();
     };
-    
+
     // Iniciar monitorização
     _routeManager.startMonitoring(_positionStream.stream);
-    
+
     _initialize();
   }
 
@@ -74,17 +75,21 @@ class NavigationController extends ChangeNotifier {
   int get remainingTimeSeconds => _tracker.remainingTimeSeconds;
   double get progress => _tracker.progress;
   bool get hasArrived => _tracker.hasArrived;
-  RouteTracker get tracker => _tracker; 
+  RouteTracker get tracker => _tracker;
   double get heading => _heading;
 
   /// Inicializa o tracking e instruções
   void _initialize() {
-    // Posição inicial do utilizador (primeiro waypoint)
-    if (route.waypoints.isNotEmpty) {
-      final firstWaypoint = route.waypoints.first;
-      _tracker.updateUserPosition(firstWaypoint.x, firstWaypoint.y);
-      _updateInstruction();
-    }
+    // Posição inicial do utilizador: usar N1 (mesma posição da Home)
+    // Procurar N1 nos nós disponíveis
+    final userNode = allNodes.firstWhere(
+      (n) => n.id == 'N1',
+      orElse: () => allNodes.first,
+    );
+
+    // Usar coordenadas do nó N1 do Map Service
+    _tracker.updateUserPosition(userNode.x, userNode.y);
+    _updateInstruction();
   }
 
   /// Roda o utilizador em graus (positivo = horário)
@@ -104,17 +109,17 @@ class NavigationController extends ChangeNotifier {
     // 90 graus = Este/Direita (Eixo X positivo)
     // 180 graus = Sul/Baixo (Eixo Y positivo)
     final rad = _heading * (math.pi / 180.0);
-    
+
     // Bearing formulas for screen coordinates (Y is Down):
     // dX = meters * sin(theta)
     // dY = meters * -cos(theta)
-    
+
     // Check: 0 deg -> sin(0)=0, -cos(0)=-1 -> (0, -1) -> Up. Correct.
     // Check: 90 deg -> sin(90)=1, -cos(90)=0 -> (1, 0) -> Right. Correct.
-    
+
     final deltaX = meters * math.sin(rad);
     final deltaY = meters * -math.cos(rad);
-    
+
     moveUser(deltaX, deltaY);
   }
 
@@ -128,7 +133,7 @@ class NavigationController extends ChangeNotifier {
   void updateUserPosition(double x, double y) {
     _tracker.updateUserPosition(x, y);
     _updateInstruction();
-    
+
     if (_tracker.hasArrived) {
       _onArrival();
     }
@@ -139,26 +144,27 @@ class NavigationController extends ChangeNotifier {
     final newX = _tracker.currentX + deltaX;
     final newY = _tracker.currentY + deltaY;
     _tracker.updateUserPosition(newX, newY);
-    
+
     // Só atualizar instrução se ainda não chegou
     if (!_tracker.hasArrived) {
       _updateInstruction();
     }
-    
+
     // Emitir posição para monitorização de rota
     _positionStream.add((x: newX, y: newY));
-    
+
     if (_tracker.hasArrived) {
       _onArrival();
     }
   }
+
   void goToNextWaypoint() {
     final nextIndex = _tracker.currentWaypointIndex + 1;
     if (nextIndex < route.waypoints.length) {
       final waypoint = route.waypoints[nextIndex];
       _tracker.updateUserPosition(waypoint.x, waypoint.y);
       _updateInstruction();
-      
+
       if (_tracker.hasArrived) {
         _onArrival();
       }
@@ -179,19 +185,21 @@ class NavigationController extends ChangeNotifier {
   void _onArrival() async {
     _isNavigating = false;
     _updateTimer?.cancel();
-    
+
     // Guardar posição final como nova posição do usuário
     final finalX = _tracker.currentX;
     final finalY = _tracker.currentY;
     final finalNode = _findNearestNode(finalX, finalY);
-    
+
     await UserPositionService.savePosition(
       x: finalX,
       y: finalY,
       nodeId: finalNode.id,
     );
-    print('[NavigationController] 💾 Posição final guardada: x=$finalX, y=$finalY, node=${finalNode.id}');
-    
+    print(
+      '[NavigationController] 💾 Posição final guardada: x=$finalX, y=$finalY, node=${finalNode.id}',
+    );
+
     notifyListeners();
   }
 
@@ -213,7 +221,7 @@ class NavigationController extends ChangeNotifier {
   /// Formata tempo restante para exibição (ex: "5 min", "1h 20m")
   String get formattedRemainingTime {
     final minutes = (remainingTimeSeconds / 60).ceil();
-    
+
     if (minutes < 1) {
       return '<1 min';
     } else if (minutes < 60) {
@@ -233,23 +241,23 @@ class NavigationController extends ChangeNotifier {
       return '${(remainingDistance / 1000).toStringAsFixed(1)} km';
     }
   }
-  
+
   /// Encontra nó mais próximo de uma posição
   NodeModel _findNearestNode(double x, double y) {
     NodeModel? nearest;
     double minDistance = double.infinity;
-    
+
     for (final node in allNodes) {
       final dx = node.x - x;
       final dy = node.y - y;
       final distance = (dx * dx + dy * dy);
-      
+
       if (distance < minDistance) {
         minDistance = distance;
         nearest = node;
       }
     }
-    
+
     return nearest ?? allNodes.first;
   }
 }
