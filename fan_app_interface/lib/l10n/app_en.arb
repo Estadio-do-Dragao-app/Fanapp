@@ -1,0 +1,50 @@
+{
+  "search": "Search...",
+  "whereToQuestion": "Where to?",
+  "seat": "Seat",
+  "wc": "WC",
+  "food": "Food",
+  "exit": "Exit",
+  "selected": "Selected: {item}",
+  "@selected": {
+    "description": "Message shown when an item is selected",
+    "placeholders": {
+      "item": {
+        "type": "String",
+        "example": "Restaurant Name"
+      }
+    }
+  },
+  "tapToSelect": "Tap to select",
+  "chooseLocation": "Choose a location",
+  "chooseLocationButton": "Choose location",
+  "faster": "Faster",
+  "minutes": "{count} min",
+  "@minutes": {
+    "description": "Time in minutes",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "evacuation": "EVACUATION",
+  "map": "MAP",
+  "addTicket": "Add Ticket",
+  "scanTicketQR": "Scan Ticket QR Code",
+  "ticketInfo": "Ticket Information",
+  "sector": "Sector",
+  "row": "Row",
+  "gate": "Gate",
+  "ticketType": "Ticket Type",
+  "deleteTicket": "Delete Ticket",
+  "deleteTicketConfirm": "Are you sure you want to delete this ticket?",
+  "noTicketScanned": "No ticket scanned",
+  "noTicketScannedMessage": "Please scan your ticket QR code to navigate to your seat.",
+  "scanNow": "Scan Now",
+  "cancel": "Cancel",
+  "firstAid": "First Aid",
+  "information": "Information",
+  "merchandising": "Merchandising"
+}

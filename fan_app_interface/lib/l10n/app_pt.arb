@@ -1,0 +1,50 @@
+{
+  "search": "Pesquisar...",
+  "whereToQuestion": "Para onde?",
+  "seat": "Lugar",
+  "wc": "WC",
+  "food": "Comida",
+  "exit": "Saída",
+  "selected": "Selecionado: {item}",
+  "@selected": {
+    "description": "Mensagem mostrada quando um item é selecionado",
+    "placeholders": {
+      "item": {
+        "type": "String",
+        "example": "Nome do Restaurante"
+      }
+    }
+  },
+  "tapToSelect": "Toque para selecionar",
+  "chooseLocation": "Escolha uma localização",
+  "chooseLocationButton": "Escolher localização",
+  "faster": "Mais rápido",
+  "minutes": "{count} min",
+  "@minutes": {
+    "description": "Tempo em minutos",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "evacuation": "EVACUAÇÃO",
+  "map": "MAPA",
+  "addTicket": "Adicionar Bilhete",
+  "scanTicketQR": "Digitalizar QR do Bilhete",
+  "ticketInfo": "Informação do Bilhete",
+  "sector": "Setor",
+  "row": "Fila",
+  "gate": "Portão",
+  "ticketType": "Tipo de Bilhete",
+  "deleteTicket": "Apagar Bilhete",
+  "deleteTicketConfirm": "Tem a certeza que quer apagar este bilhete?",
+  "noTicketScanned": "Nenhum bilhete digitalizado",
+  "noTicketScannedMessage": "Por favor digitalize o código QR do seu bilhete para navegar até ao seu lugar.",
+  "scanNow": "Digitalizar Agora",
+  "cancel": "Cancelar",
+  "firstAid": "Primeiros Socorros",
+  "information": "Informação",
+  "merchandising": "Merchandising"
+}
