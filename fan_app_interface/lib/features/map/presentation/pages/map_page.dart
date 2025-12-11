@@ -3,22 +3,25 @@ import '../stadium_map_page.dart';
 
 /// MapPage implementation with functional stadium map
 class MapPage extends StatefulWidget {
-	const MapPage({Key? key}) : super(key: key);
+  final bool showHeatmap;
 
-	@override
-	State<MapPage> createState() => MapPageState();
+  const MapPage({Key? key, this.showHeatmap = false}) : super(key: key);
+
+  @override
+  State<MapPage> createState() => MapPageState();
 }
 
 class MapPageState extends State<MapPage> {
-	final GlobalKey<StadiumMapPageState> _stadiumMapKey = GlobalKey<StadiumMapPageState>();
-	
-	// Public method to zoom to POI
-	void zoomToPOI(poi) {
-		_stadiumMapKey.currentState?.zoomToPOI(poi);
-	}
+  final GlobalKey<StadiumMapPageState> _stadiumMapKey =
+      GlobalKey<StadiumMapPageState>();
 
-	@override
-	Widget build(BuildContext context) {
-    return StadiumMapPage(key: _stadiumMapKey);
+  // Public method to zoom to POI
+  void zoomToPOI(poi) {
+    _stadiumMapKey.currentState?.zoomToPOI(poi);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StadiumMapPage(key: _stadiumMapKey, showHeatmap: widget.showHeatmap);
   }
 }

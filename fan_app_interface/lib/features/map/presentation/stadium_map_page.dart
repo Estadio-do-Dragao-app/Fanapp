@@ -6,6 +6,7 @@ import '../data/models/node_model.dart';
 import '../data/models/route_model.dart';
 import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
+import '../data/services/congestion_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
 import 'dart:math';
 
@@ -14,12 +15,14 @@ class StadiumMapPage extends StatefulWidget {
   final RouteModel? highlightedRoute;
   final POIModel? highlightedPOI;
   final bool showAllPOIs;
-  
+  final bool showHeatmap;
+
   const StadiumMapPage({
     Key? key,
     this.highlightedRoute,
     this.highlightedPOI,
     this.showAllPOIs = true,
+    this.showHeatmap = false,
   }) : super(key: key);
 
   @override
@@ -30,10 +33,11 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   final MapController _mapController = MapController();
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
-  
+  final CongestionService _congestionService = CongestionService();
+
   // Posição fixa do utilizador para testes (entrada principal)
   static const String userNodeId = 'N1';
-  
+
   // Estado
   int _currentFloor = 0;
   List<POIModel> _pois = [];
@@ -41,7 +45,10 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   RouteModel? _currentRoute;
   bool _isLoading = true;
   String? _errorMessage;
-  
+
+  // Heatmap data
+  StadiumHeatmapData? _heatmapData;
+
   @override
   void didUpdateWidget(StadiumMapPage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -51,17 +58,50 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         _currentRoute = widget.highlightedRoute;
       });
     }
+    // Carregar heatmap quando ativado
+    if (widget.showHeatmap && !oldWidget.showHeatmap) {
+      _loadHeatmapData();
+    }
   }
-  
+
+  /// Carrega dados de congestão para o heatmap
+  Future<void> _loadHeatmapData() async {
+    try {
+      final data = await _congestionService.getStadiumHeatmap();
+      if (mounted) {
+        setState(() {
+          _heatmapData = data;
+        });
+      }
+    } catch (e) {
+      print('[StadiumMapPage] Erro ao carregar heatmap: $e');
+      // Usar dados de demo para visualização
+      if (mounted) {
+        setState(() {
+          _heatmapData = StadiumHeatmapData(
+            sections: {
+              'section_A': 0.85, // Alta congestão
+              'section_B': 0.45, // Média
+              'section_C': 0.15, // Baixa
+              'section_D': 0.70, // Alta
+            },
+            totalSections: 4,
+            averageCongestion: 0.54,
+          );
+        });
+      }
+    }
+  }
+
   // Coordenadas do Estádio do Dragão (Porto, Portugal)
   static const LatLng stadiumCenter = LatLng(41.161758, -8.583933);
-  
+
   // Bounding box do estádio (aproximado - ajustar com dados reais do backend)
   static final LatLngBounds stadiumBounds = LatLngBounds(
     const LatLng(41.1600, -8.5850), // Southwest
     const LatLng(41.1635, -8.5820), // Northeast
   );
-  
+
   @override
   void initState() {
     super.initState();
@@ -69,23 +109,23 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     _currentRoute = widget.highlightedRoute;
     _loadMapData();
   }
-  
+
   Future<void> _loadMapData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-    
+
     try {
       print('[StadiumMapPage] Carregando POIs do piso $_currentFloor...');
-      
+
       // Carregar POIs e nós
       final pois = await _mapService.getPOIsByFloor(_currentFloor);
       final nodes = await _mapService.getAllNodes();
-      
+
       print('[StadiumMapPage] ${pois.length} POIs carregados');
       print('[StadiumMapPage] ${nodes.length} nós carregados');
-      
+
       setState(() {
         _pois = pois;
         _nodes = nodes;
@@ -99,7 +139,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       });
     }
   }
-  
+
   /// Converte coordenadas do backend (x, y) para LatLng do mapa
   /// Assumindo que x,y do backend estão em metros relativos ao centro
   LatLng _convertToLatLng(double x, double y) {
@@ -107,53 +147,53 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     // Ajustar conforme necessário com dados reais do estádio
     const metersToLatDegrees = 0.000009;
     const metersToLngDegrees = 0.000012; // Longitude varia com latitude
-    
+
     return LatLng(
       stadiumCenter.latitude + (y * metersToLatDegrees),
       stadiumCenter.longitude + (x * metersToLngDegrees),
     );
   }
-  
+
   /// Encontra o nó mais próximo de um POI baseado em coordenadas (x, y)
   String _findNearestNode(POIModel poi) {
     if (_nodes.isEmpty) return userNodeId;
-    
+
     NodeModel? nearest;
     double minDistance = double.infinity;
-    
+
     for (var node in _nodes) {
       // Só considerar nós do mesmo piso
       if (node.level != poi.level) continue;
-      
+
       // Calcular distância euclidiana
       final dx = node.x - poi.x;
       final dy = node.y - poi.y;
       final distance = sqrt(dx * dx + dy * dy);
-      
+
       if (distance < minDistance) {
         minDistance = distance;
         nearest = node;
       }
     }
-    
+
     return nearest?.id ?? userNodeId;
   }
-  
+
   /// Método público para fazer zoom num POI (usado pela barra de pesquisa)
   void zoomToPOI(POIModel poi) {
     final poiLocation = _convertToLatLng(poi.x, poi.y);
     _mapController.move(poiLocation, 19.5);
   }
-  
+
   /// Mostra detalhes do POI num bottom sheet com zoom
   void _showPOIDetails(POIModel poi) async {
     // Guardar apenas o zoom atual (não a posição)
     final previousZoom = _mapController.camera.zoom;
-    
+
     // Fazer zoom no POI
     final poiLocation = _convertToLatLng(poi.x, poi.y);
     _mapController.move(poiLocation, 19.5);
-    
+
     // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
     RouteModel? route;
     try {
@@ -165,9 +205,9 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     } catch (e) {
       print('[StadiumMapPage] Erro ao calcular rota: $e');
     }
-    
+
     if (!mounted) return;
-    
+
     POIDetailsSheet.show(
       context,
       poi: poi,
@@ -188,7 +228,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       }
     });
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -203,7 +243,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       ],
     );
   }
-  
+
   Widget _buildMap() {
     return FlutterMap(
       mapController: _mapController,
@@ -218,45 +258,125 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       ),
       children: [
         // Remove a atribuição padrão do flutter_map
-        RichAttributionWidget(
-          attributions: [],
-        ),
+        RichAttributionWidget(attributions: []),
         // Camada de fundo cinza
         TileLayer(
           tileProvider: NetworkTileProvider(),
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.estadio.dragao.fan_app',
         ),
-        
+
         // Camada base - Imagem do estádio
         OverlayImageLayer(
           overlayImages: [
             OverlayImage(
               bounds: stadiumBounds,
               opacity: 1.0,
-              imageProvider: const AssetImage('assets/images/map_placeholder.png'),
+              imageProvider: const AssetImage(
+                'assets/images/map_placeholder.png',
+              ),
             ),
           ],
         ),
-        
+
+        // Camada de heatmap (se ativa)
+        if (widget.showHeatmap) _buildHeatmapLayer(),
+
         // Camada de rota (polyline)
         if (_currentRoute != null) _buildRouteLayer(),
-        
+
         // Camada de POIs (markers)
         _buildPOILayer(),
       ],
     );
   }
-  
+
+  /// Camada de heatmap com círculos coloridos baseados na congestão
+  Widget _buildHeatmapLayer() {
+    if (_heatmapData == null || _heatmapData!.sections.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Posições de demo para cada secção (ajustar com dados reais)
+    final sectionPositions = {
+      'section_A': const LatLng(41.1625, -8.5840),
+      'section_B': const LatLng(41.1610, -8.5830),
+      'section_C': const LatLng(41.1615, -8.5845),
+      'section_D': const LatLng(41.1620, -8.5825),
+    };
+
+    final circles = <CircleMarker>[];
+
+    _heatmapData!.sections.forEach((sectionId, congestionLevel) {
+      final position = sectionPositions[sectionId];
+      if (position == null) return;
+
+      // Cor baseada no nível de congestão (verde→amarelo→vermelho)
+      final color = _getCongestionColor(congestionLevel);
+
+      // Círculos concêntricos para efeito de gradiente
+      // Círculo exterior (maior, mais transparente)
+      circles.add(
+        CircleMarker(
+          point: position,
+          radius: 40,
+          color: color.withOpacity(0.2),
+          borderColor: Colors.transparent,
+          borderStrokeWidth: 0,
+        ),
+      );
+
+      // Círculo médio
+      circles.add(
+        CircleMarker(
+          point: position,
+          radius: 25,
+          color: color.withOpacity(0.4),
+          borderColor: Colors.transparent,
+          borderStrokeWidth: 0,
+        ),
+      );
+
+      // Círculo interior (menor, mais intenso)
+      circles.add(
+        CircleMarker(
+          point: position,
+          radius: 12,
+          color: color.withOpacity(0.7),
+          borderColor: Colors.transparent,
+          borderStrokeWidth: 0,
+        ),
+      );
+    });
+
+    return CircleLayer(circles: circles);
+  }
+
+  /// Retorna cor baseada no nível de congestão (0-1)
+  Color _getCongestionColor(double level) {
+    if (level <= 0.3) {
+      // Baixa congestão: verde/cyan
+      return const Color(0xFF00D4AA);
+    } else if (level <= 0.6) {
+      // Média congestão: amarelo/laranja
+      return const Color(0xFFFFB800);
+    } else {
+      // Alta congestão: vermelho/laranja escuro
+      return const Color(0xFFFF4444);
+    }
+  }
+
   Widget _buildRouteLayer() {
     final route = _currentRoute!;
-    
+
     // Converter waypoints para LatLng
     final points = route.waypoints
-        .where((wp) => wp.level == _currentFloor) // Só mostrar waypoints do piso atual
+        .where(
+          (wp) => wp.level == _currentFloor,
+        ) // Só mostrar waypoints do piso atual
         .map((wp) => _convertToLatLng(wp.x, wp.y))
         .toList();
-    
+
     return PolylineLayer(
       polylines: [
         Polyline(
@@ -269,7 +389,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       ],
     );
   }
-  
+
   Widget _buildPOILayer() {
     // Determinar quais POIs mostrar
     List<POIModel> poisToShow;
@@ -280,7 +400,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     } else {
       poisToShow = [];
     }
-    
+
     // Adicionar marcador da posição do utilizador (N1)
     final userMarkers = <Marker>[];
     if (_nodes.isNotEmpty) {
@@ -288,7 +408,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         (n) => n.id == userNodeId,
         orElse: () => _nodes.first,
       );
-      
+
       userMarkers.add(
         Marker(
           point: _convertToLatLng(userNode.x, userNode.y),
@@ -316,14 +436,14 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         ),
       );
     }
-    
+
     return MarkerLayer(
       markers: [
         ...userMarkers,
         ...poisToShow.map<Marker>((POIModel poi) {
           final position = _convertToLatLng(poi.x, poi.y);
           final isHighlighted = widget.highlightedPOI?.id == poi.id;
-          
+
           return Marker(
             point: position,
             width: isHighlighted ? 60 : 50,
@@ -359,7 +479,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       ],
     );
   }
-  
+
   Widget _buildFloorSelector() {
     return Card(
       child: Column(
@@ -398,13 +518,11 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       ),
     );
   }
-  
+
   Widget _buildLoadingState() {
-    return const Center(
-      child: CircularProgressIndicator(),
-    );
+    return const Center(child: CircularProgressIndicator());
   }
-  
+
   Widget _buildErrorState() {
     return Center(
       child: Padding(
@@ -414,10 +532,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
           children: [
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            Text(
-              'Error',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text('Error', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
               _errorMessage!,
@@ -435,7 +550,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       ),
     );
   }
-  
+
   Color _getPOIColor(String category) {
     switch (category.toLowerCase()) {
       case 'restroom':
@@ -453,7 +568,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         return Colors.grey.shade700;
     }
   }
-  
+
   IconData _getPOIIcon(String category) {
     switch (category.toLowerCase()) {
       case 'restroom':
