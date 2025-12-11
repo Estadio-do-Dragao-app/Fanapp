@@ -6,12 +6,14 @@ class MapPage extends StatefulWidget {
   final bool showHeatmap;
   final VoidCallback? onHeatmapConnectionError;
   final VoidCallback? onHeatmapConnectionSuccess;
+  final int currentFloor;
 
   const MapPage({
     Key? key,
     this.showHeatmap = false,
     this.onHeatmapConnectionError,
     this.onHeatmapConnectionSuccess,
+    this.currentFloor = 0,
   }) : super(key: key);
 
   @override
@@ -34,6 +36,7 @@ class MapPageState extends State<MapPage> {
       showHeatmap: widget.showHeatmap,
       onHeatmapConnectionError: widget.onHeatmapConnectionError,
       onHeatmapConnectionSuccess: widget.onHeatmapConnectionSuccess,
+      initialFloor: widget.currentFloor,
     );
   }
 }

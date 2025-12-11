@@ -131,10 +131,18 @@ class _NavbarState extends State<Navbar> {
         allNodes,
       );
 
-      // Calcular rota
-      final route = await _routingService.getRoute(
-        fromNode: userNodeId,
-        toNode: nearestNodeId,
+      // Obter posição do utilizador a partir do nó N1
+      final userNode = allNodes.firstWhere(
+        (n) => n.id == userNodeId,
+        orElse: () => allNodes.first,
+      );
+
+      // Calcular rota usando nova API com coordenadas
+      final route = await _routingService.getRouteToNode(
+        startX: userNode.x,
+        startY: userNode.y,
+        startLevel: userNode.level,
+        nodeId: nearestNodeId,
       );
 
       if (!mounted) return;

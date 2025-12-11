@@ -3,12 +3,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../data/models/poi_model.dart';
 import '../data/models/node_model.dart';
+import '../data/models/edge_model.dart';
 import '../data/models/route_model.dart';
 import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
-import 'dart:math';
+import 'layers/floor_plan_layer.dart';
+import '../../navigation/presentation/navigation_page.dart';
 import 'dart:async';
 
 /// Página principal do mapa interativo do estádio
@@ -19,6 +21,12 @@ class StadiumMapPage extends StatefulWidget {
   final bool showHeatmap;
   final VoidCallback? onHeatmapConnectionError;
   final VoidCallback? onHeatmapConnectionSuccess;
+  final MapController? mapController;
+  final bool isNavigating;
+  final LatLng? userPosition;
+  final double? userHeading;
+  final int initialFloor;
+  final bool simplifiedMode; // Skip FloorPlanLayer for performance
 
   const StadiumMapPage({
     Key? key,
@@ -28,6 +36,12 @@ class StadiumMapPage extends StatefulWidget {
     this.showHeatmap = false,
     this.onHeatmapConnectionError,
     this.onHeatmapConnectionSuccess,
+    this.mapController,
+    this.isNavigating = false,
+    this.userPosition,
+    this.userHeading,
+    this.initialFloor = 0,
+    this.simplifiedMode = false,
   }) : super(key: key);
 
   @override
@@ -35,7 +49,7 @@ class StadiumMapPage extends StatefulWidget {
 }
 
 class StadiumMapPageState extends State<StadiumMapPage> {
-  final MapController _mapController = MapController();
+  late final MapController _mapController;
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
   final CongestionService _congestionService = CongestionService();
@@ -47,6 +61,9 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   int _currentFloor = 0;
   List<POIModel> _pois = [];
   List<NodeModel> _nodes = [];
+  List<EdgeModel> _edges = [];
+  List<dynamic> _seats = [];
+  bool _isLoadingSeats = false;
   RouteModel? _currentRoute;
   bool _isLoading = true;
   String? _errorMessage;
@@ -56,6 +73,18 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   Timer? _heatmapTimer;
 
   @override
+  void initState() {
+    super.initState();
+    // Usa controller fornecido ou cria um interno
+    _mapController = widget.mapController ?? MapController();
+    // Inicializar com a rota passada como parâmetro
+    _currentRoute = widget.highlightedRoute;
+    // Usar o piso inicial fornecido
+    _currentFloor = widget.initialFloor;
+    _loadMapData();
+  }
+
+  @override
   void didUpdateWidget(StadiumMapPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Atualizar rota quando parâmetros mudarem
@@ -63,6 +92,16 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       setState(() {
         _currentRoute = widget.highlightedRoute;
       });
+    }
+    // Atualizar piso quando mudar externamente
+    if (widget.initialFloor != oldWidget.initialFloor) {
+      print(
+        '[StadiumMapPage] Piso mudou: ${oldWidget.initialFloor} -> ${widget.initialFloor}',
+      );
+      setState(() {
+        _currentFloor = widget.initialFloor;
+      });
+      _loadMapData();
     }
     // Carregar heatmap quando ativado
     if (widget.showHeatmap && !oldWidget.showHeatmap) {
@@ -133,12 +172,31 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     const LatLng(41.1635, -8.5820), // Northeast
   );
 
-  @override
-  void initState() {
-    super.initState();
-    // Inicializar com a rota passada como parâmetro
-    _currentRoute = widget.highlightedRoute;
-    _loadMapData();
+  Future<void> _loadSeats() async {
+    if (_isLoadingSeats || _seats.isNotEmpty) return;
+
+    print('[StadiumMapPage] Carregando lugares (zoom > 19)...');
+    setState(() {
+      _isLoadingSeats = true;
+    });
+
+    try {
+      final seats = await _mapService.getAllSeats();
+      if (mounted) {
+        setState(() {
+          _seats = seats;
+          _isLoadingSeats = false;
+        });
+        print('[StadiumMapPage] ${seats.length} lugares carregados');
+      }
+    } catch (e) {
+      print('[StadiumMapPage] Erro ao carregar lugares: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingSeats = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadMapData() async {
@@ -150,16 +208,19 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     try {
       print('[StadiumMapPage] Carregando POIs do piso $_currentFloor...');
 
-      // Carregar POIs e nós
+      // Carregar POIs, nós e arestas
       final pois = await _mapService.getPOIsByFloor(_currentFloor);
       final nodes = await _mapService.getAllNodes();
+      final edges = await _mapService.getAllEdges();
 
       print('[StadiumMapPage] ${pois.length} POIs carregados');
       print('[StadiumMapPage] ${nodes.length} nós carregados');
+      print('[StadiumMapPage] ${edges.length} arestas carregadas');
 
       setState(() {
         _pois = pois;
         _nodes = nodes;
+        _edges = edges;
         _isLoading = false;
       });
     } catch (e) {
@@ -172,42 +233,27 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   }
 
   /// Converte coordenadas do backend (x, y) para LatLng do mapa
-  /// Assumindo que x,y do backend estão em metros relativos ao centro
+  /// O backend usa coordenadas em unidades arbitrárias:
+  /// X: 82 a 916 (centro ~499)
+  /// Y: 60 a 740 (centro ~400)
   LatLng _convertToLatLng(double x, double y) {
-    // Aproximação: 1 metro ≈ 0.00001 graus de latitude
-    // Ajustar conforme necessário com dados reais do estádio
-    const metersToLatDegrees = 0.000009;
-    const metersToLngDegrees = 0.000012; // Longitude varia com latitude
+    // Centro das coordenadas do backend
+    const backendCenterX = 499.0; // (82 + 916) / 2
+    const backendCenterY = 400.0; // (60 + 740) / 2
+
+    // Aproximação: 1 unidade do backend ≈ graus
+    // Ajustado para que o estádio (~800 unidades largura) caiba nos bounds
+    const unitsToLatDegrees = 0.000004; // Ajustado para melhor escala
+    const unitsToLngDegrees = 0.000005; // Longitude ligeiramente diferente
+
+    // Centrar as coordenadas antes de converter
+    final centeredX = x - backendCenterX;
+    final centeredY = y - backendCenterY;
 
     return LatLng(
-      stadiumCenter.latitude + (y * metersToLatDegrees),
-      stadiumCenter.longitude + (x * metersToLngDegrees),
+      stadiumCenter.latitude + (centeredY * unitsToLatDegrees),
+      stadiumCenter.longitude + (centeredX * unitsToLngDegrees),
     );
-  }
-
-  /// Encontra o nó mais próximo de um POI baseado em coordenadas (x, y)
-  String _findNearestNode(POIModel poi) {
-    if (_nodes.isEmpty) return userNodeId;
-
-    NodeModel? nearest;
-    double minDistance = double.infinity;
-
-    for (var node in _nodes) {
-      // Só considerar nós do mesmo piso
-      if (node.level != poi.level) continue;
-
-      // Calcular distância euclidiana
-      final dx = node.x - poi.x;
-      final dy = node.y - poi.y;
-      final distance = sqrt(dx * dx + dy * dy);
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearest = node;
-      }
-    }
-
-    return nearest?.id ?? userNodeId;
   }
 
   /// Método público para fazer zoom num POI (usado pela barra de pesquisa)
@@ -228,13 +274,51 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
     RouteModel? route;
     try {
-      final nearestNode = _findNearestNode(poi);
-      route = await _routingService.getRoute(
-        fromNode: userNodeId,
-        toNode: nearestNode,
+      // Obter posição do utilizador a partir do nó N1
+      final userNode = _nodes.firstWhere(
+        (n) => n.id == userNodeId,
+        orElse: () => _nodes.first,
       );
+
+      print('[StadiumMapPage] === DEBUG ROTA ===');
+      print(
+        '[StadiumMapPage] Utilizador: ${userNode.id} em (${userNode.x}, ${userNode.y}) level ${userNode.level}',
+      );
+      print(
+        '[StadiumMapPage] Destino POI: ${poi.id} "${poi.name}" em (${poi.x}, ${poi.y}) level ${poi.level}',
+      );
+      print(
+        '[StadiumMapPage] Convertido utilizador: ${_convertToLatLng(userNode.x, userNode.y)}',
+      );
+      print(
+        '[StadiumMapPage] Convertido destino: ${_convertToLatLng(poi.x, poi.y)}',
+      );
+
+      // Usar rota por coordenadas para evitar 404 se o ID não existir no backend
+      route = await _routingService.getRouteToCoordinates(
+        startX: userNode.x,
+        startY: userNode.y,
+        startLevel: userNode.level,
+        endX: poi.x,
+        endY: poi.y,
+        endLevel: poi.level,
+        allNodes: _nodes,
+      );
+
+      print('[StadiumMapPage] Rota calculada com sucesso!');
+      print('[StadiumMapPage] - Distância: ${route.distance}m');
+      print('[StadiumMapPage] - Tempo estimado: ${route.estimatedTime}s');
+      print('[StadiumMapPage] - Waypoints: ${route.waypoints.length}');
+      if (route.waypoints.isNotEmpty) {
+        print(
+          '[StadiumMapPage] - Primeiro waypoint: (${route.waypoints.first.x}, ${route.waypoints.first.y})',
+        );
+        print(
+          '[StadiumMapPage] - Último waypoint: (${route.waypoints.last.x}, ${route.waypoints.last.y})',
+        );
+      }
     } catch (e) {
-      print('[StadiumMapPage] Erro ao calcular rota: $e');
+      print('[StadiumMapPage] ERRO ao calcular rota: $e');
     }
 
     if (!mounted) return;
@@ -244,8 +328,20 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       poi: poi,
       route: route,
       onNavigate: () {
-        // Apenas desenhar rota quando user clicar em Navigate
         if (route != null) {
+          // Navegar para a página de navegação
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NavigationPage(
+                route: route!,
+                destination: poi,
+                nodes: _nodes,
+              ),
+            ),
+          );
+
+          // Também desenhar rota no mapa caso volte
           setState(() {
             _currentRoute = route;
           });
@@ -271,6 +367,8 @@ class StadiumMapPageState extends State<StadiumMapPage> {
           _buildLoadingState()
         else
           _buildMap(),
+
+        // Botão de centrar foi removido - aparece apenas na NavigationPage
       ],
     );
   }
@@ -280,35 +378,48 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       mapController: _mapController,
       options: MapOptions(
         initialCenter: stadiumCenter,
-        initialZoom: 18.0,
-        minZoom: 17.0,
+        initialZoom: 16.5,
+        minZoom: 16.0,
         maxZoom: 20.0,
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
         ),
+        onMapEvent: (event) {
+          if (event.camera.zoom >= 19.0 && _seats.isEmpty) {
+            _loadSeats();
+          }
+        },
       ),
       children: [
         // Remove a atribuição padrão do flutter_map
         RichAttributionWidget(attributions: []),
-        // Camada de fundo cinza
-        TileLayer(
-          tileProvider: NetworkTileProvider(),
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.estadio.dragao.fan_app',
-        ),
 
-        // Camada base - Imagem do estádio
-        OverlayImageLayer(
-          overlayImages: [
-            OverlayImage(
-              bounds: stadiumBounds,
-              opacity: 1.0,
-              imageProvider: const AssetImage(
-                'assets/images/map_placeholder.png',
-              ),
-            ),
-          ],
-        ),
+        // Camada do Mapa Gerado (Floor Plan) - Skip in simplified mode for performance
+        if (!widget.simplifiedMode)
+          FloorPlanLayer(
+            edges: _edges,
+            nodes: _nodes,
+            currentLevel: _currentFloor,
+            converter: _convertToLatLng,
+          ),
+
+        // Camada de Lugares (Seats) - Apenas se zoom > 19 e não simplificado
+        if (!widget.simplifiedMode &&
+            _seats.isNotEmpty &&
+            _mapController.camera.zoom >= 19.0)
+          CircleLayer(
+            circles: _seats.map((seat) {
+              // seat espera-se que seja Map {"x":123, "y":456, ...}
+              final x = (seat['x'] as num).toDouble();
+              final y = (seat['y'] as num).toDouble();
+              return CircleMarker(
+                point: _convertToLatLng(x, y),
+                radius: 2,
+                color: Colors.green.shade800,
+                borderColor: Colors.transparent,
+              );
+            }).toList(),
+          ),
 
         // Camada de heatmap (se ativa)
         if (widget.showHeatmap) _buildHeatmapLayer(),
@@ -418,13 +529,43 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   Widget _buildRouteLayer() {
     final route = _currentRoute!;
 
-    // Converter waypoints para LatLng
-    final points = route.waypoints
-        .where(
-          (wp) => wp.level == _currentFloor,
-        ) // Só mostrar waypoints do piso atual
-        .map((wp) => _convertToLatLng(wp.x, wp.y))
-        .toList();
+    // IMPORTANTE: O Routing Service retorna coordenadas incorretas!
+    // Usamos os node_ids para buscar as coordenadas corretas dos nós do Map Service
+    final nodesMap = {for (var n in _nodes) n.id: n};
+
+    print('[StadiumMapPage] === DESENHANDO ROTA ===');
+    print(
+      '[StadiumMapPage] Waypoints do Routing Service: ${route.waypoints.length}',
+    );
+
+    final points = <LatLng>[];
+    int foundCount = 0;
+    int notFoundCount = 0;
+
+    for (var wp in route.waypoints) {
+      // Tentar encontrar o nó no Map Service
+      final node = nodesMap[wp.nodeId];
+      if (node != null) {
+        points.add(_convertToLatLng(node.x, node.y));
+        foundCount++;
+      } else {
+        // Fallback: usar coordenadas do routing service (podem estar erradas)
+        print(
+          '[StadiumMapPage] AVISO: Nó ${wp.nodeId} não encontrado no Map Service!',
+        );
+        points.add(_convertToLatLng(wp.x, wp.y));
+        notFoundCount++;
+      }
+    }
+
+    print('[StadiumMapPage] Nós encontrados no Map Service: $foundCount');
+    print('[StadiumMapPage] Nós NÃO encontrados: $notFoundCount');
+    print('[StadiumMapPage] Total de pontos na linha: ${points.length}');
+
+    if (points.isNotEmpty) {
+      print('[StadiumMapPage] Primeiro ponto: ${points.first}');
+      print('[StadiumMapPage] Último ponto: ${points.last}');
+    }
 
     return PolylineLayer(
       polylines: [
@@ -442,7 +583,13 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   Widget _buildPOILayer() {
     // Determinar quais POIs mostrar
     List<POIModel> poisToShow;
-    if (widget.showAllPOIs) {
+
+    // Durante navegação: mostrar apenas o destino (se houver)
+    if (widget.isNavigating) {
+      poisToShow = widget.highlightedPOI != null
+          ? [widget.highlightedPOI!]
+          : [];
+    } else if (widget.showAllPOIs) {
       poisToShow = _pois;
     } else if (widget.highlightedPOI != null) {
       poisToShow = [widget.highlightedPOI!];
@@ -450,9 +597,42 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       poisToShow = [];
     }
 
-    // Adicionar marcador da posição do utilizador (N1)
+    // Adicionar marcador da posição do utilizador
     final userMarkers = <Marker>[];
-    if (_nodes.isNotEmpty) {
+
+    if (widget.isNavigating && widget.userPosition != null) {
+      // Modo Navegação: Usar posição dinâmica
+      userMarkers.add(
+        Marker(
+          point: widget.userPosition!,
+          width: 60,
+          height: 60,
+          child: Transform.rotate(
+            angle: widget.userHeading ?? 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.blueAccent, // Cor diferente para navegação
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.navigation,
+                color: Colors.white,
+                size: 30,
+              ),
+            ),
+          ),
+        ),
+      );
+    } else if (_nodes.isNotEmpty) {
+      // Modo Estático: Usar posição fixa (N1)
       final userNode = _nodes.firstWhere(
         (n) => n.id == userNodeId,
         orElse: () => _nodes.first,
@@ -605,14 +785,25 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       case 'restroom':
         return Colors.blue.shade700;
       case 'food':
-      case 'bar':
         return Colors.orange.shade700;
+      case 'bar':
+        return Colors.purple.shade700;
       case 'emergency_exit':
         return Colors.red.shade700;
       case 'first_aid':
         return Colors.green.shade700;
       case 'information':
-        return Colors.purple.shade700;
+        return Colors.cyan.shade700;
+      case 'gate':
+        return Colors.indigo.shade700;
+      case 'merchandise':
+      case 'shop':
+        return Colors.pink.shade700;
+      case 'stairs':
+      case 'ramp':
+        return Colors.amber.shade700;
+      case 'entrance':
+        return Colors.teal.shade700;
       default:
         return Colors.grey.shade700;
     }
@@ -632,6 +823,17 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         return Icons.local_hospital;
       case 'information':
         return Icons.info;
+      case 'gate':
+        return Icons.door_front_door;
+      case 'merchandise':
+      case 'shop':
+        return Icons.store;
+      case 'stairs':
+        return Icons.stairs;
+      case 'ramp':
+        return Icons.accessible;
+      case 'entrance':
+        return Icons.login;
       default:
         return Icons.place;
     }

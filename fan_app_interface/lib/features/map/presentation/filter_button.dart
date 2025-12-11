@@ -5,12 +5,18 @@ class FilterButton extends StatefulWidget {
   final bool showHeatmap;
   final bool isHeatmapAvailable;
   final ValueChanged<bool> onHeatmapChanged;
+  final int currentFloor;
+  final ValueChanged<int> onFloorChanged;
+  final List<int> availableFloors;
 
   const FilterButton({
     Key? key,
     required this.showHeatmap,
     this.isHeatmapAvailable = true,
     required this.onHeatmapChanged,
+    this.currentFloor = 0,
+    required this.onFloorChanged,
+    this.availableFloors = const [0, 1],
   }) : super(key: key);
 
   @override
@@ -129,12 +135,75 @@ class _FilterButtonState extends State<FilterButton>
                   const Divider(color: Colors.white24, height: 1),
                   const SizedBox(height: 12),
 
+                  // Floor selector
+                  _buildFloorSelector(),
+                  const SizedBox(height: 12),
+                  const Divider(color: Colors.white24, height: 1),
+                  const SizedBox(height: 12),
+
                   // Heat map toggle
                   _buildHeatmapToggle(),
                 ],
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildFloorSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.layers, color: Colors.white, size: 20),
+        const SizedBox(width: 10),
+        const Text(
+          'Piso',
+          style: TextStyle(
+            color: Colors.white,
+            fontFamily: 'Gabarito',
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(width: 16),
+        // Floor buttons
+        ...widget.availableFloors.map((floor) {
+          final isSelected = floor == widget.currentFloor;
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: GestureDetector(
+              onTap: () => widget.onFloorChanged(floor),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF929AD4)
+                      : Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF929AD4)
+                        : Colors.white.withOpacity(0.3),
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '$floor',
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontFamily: 'Gabarito',
+                      fontSize: 14,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
       ],
     );
   }

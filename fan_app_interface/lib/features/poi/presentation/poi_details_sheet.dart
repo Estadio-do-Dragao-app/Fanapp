@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/models/route_model.dart';
+import '../../map/data/models/node_model.dart';
+import '../../navigation/presentation/navigation_page.dart';
 
 /// Bottom sheet que mostra detalhes de um POI
 class POIDetailsSheet extends StatelessWidget {
   final POIModel poi;
   final RouteModel? route;
+  final List<NodeModel>? allNodes;
   final VoidCallback? onNavigate;
 
   const POIDetailsSheet({
     Key? key,
     required this.poi,
     this.route,
+    this.allNodes,
     this.onNavigate,
   }) : super(key: key);
 
@@ -20,6 +24,7 @@ class POIDetailsSheet extends StatelessWidget {
     BuildContext context, {
     required POIModel poi,
     RouteModel? route,
+    List<NodeModel>? allNodes,
     VoidCallback? onNavigate,
   }) {
     return showModalBottomSheet(
@@ -31,6 +36,7 @@ class POIDetailsSheet extends StatelessWidget {
       builder: (context) => POIDetailsSheet(
         poi: poi,
         route: route,
+        allNodes: allNodes,
         onNavigate: onNavigate,
       ),
     ).then((_) {});
@@ -109,7 +115,24 @@ class POIDetailsSheet extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                onNavigate?.call();
+                
+                // Se callback fornecido, chamar
+                if (onNavigate != null) {
+                  onNavigate!();
+                }
+                // Senão, abrir página de navegação
+                else if (route != null && allNodes != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NavigationPage(
+                        route: route!,
+                        destination: poi,
+                        nodes: allNodes!,
+                      ),
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blueAccent,

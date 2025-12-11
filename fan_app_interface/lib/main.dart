@@ -3,8 +3,11 @@ import 'package:fan_app_interface/features/map/presentation/stadium_map_page.dar
 import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
 import 'Home.dart';
+import 'features/map/data/services/local_map_cache.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LocalMapCache.init();
   runApp(const MyApp());
 }
 

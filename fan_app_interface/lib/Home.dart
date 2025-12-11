@@ -26,6 +26,9 @@ class _HomeState extends State<Home> {
   bool _isHeatmapAvailable = true;
   Timer? _healthCheckTimer;
 
+  // Estado do piso
+  int _currentFloor = 0;
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +95,7 @@ class _HomeState extends State<Home> {
             showHeatmap: _showHeatmap,
             onHeatmapConnectionError: _onHeatmapConnectionError,
             onHeatmapConnectionSuccess: _onHeatmapConnectionSuccess,
+            currentFloor: _currentFloor,
           ),
           Positioned(
             top: 0,
@@ -110,6 +114,12 @@ class _HomeState extends State<Home> {
             child: FilterButton(
               showHeatmap: _showHeatmap,
               isHeatmapAvailable: _isHeatmapAvailable,
+              currentFloor: _currentFloor,
+              onFloorChanged: (floor) {
+                setState(() {
+                  _currentFloor = floor;
+                });
+              },
               onHeatmapChanged: (value) {
                 setState(() {
                   _showHeatmap = value;
