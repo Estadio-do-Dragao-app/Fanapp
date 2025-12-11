@@ -30,5 +30,17 @@
     }
   },
   "evacuation": "EVACUATION",
-  "map": "MAP"
+  "map": "MAP",
+  "turnLeft": "Turn left",
+  "turnRight": "Turn right",
+  "continueStraight": "Continue straight",
+  "arriveAtDestination": "Arrive at destination",
+  "arrival": "arrival",
+  "time": "hrs",
+  "distance": "m",
+  "destination": "destination",
+  "endRoute": "End Route",
+  "firstAid": "First Aid",
+  "information": "Information",
+  "merchandising": "Merchandising"
 }

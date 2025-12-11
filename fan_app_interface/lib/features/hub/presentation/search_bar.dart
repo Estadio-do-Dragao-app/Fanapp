@@ -114,12 +114,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
       context,
       poi: poi,
       route: route,
-      onNavigate: () {
-        // Apenas mostra feedback
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Navegação para ${poi.name}')),
-        );
-      },
+      allNodes: _allNodes,
     );
   }
 

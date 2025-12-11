@@ -5,6 +5,7 @@ import '../../map/data/models/node_model.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
+import '../../navigation/presentation/navigation_page.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'dart:math';
 
@@ -39,6 +40,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
   
   int? selectedIndex;
   List<POIWithRoute> _poisWithRoutes = [];
+  List<NodeModel> _allNodes = [];
   bool _isLoading = true;
   String? _errorMessage;
   
@@ -123,6 +125,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       final allNodes = await _mapService.getAllNodes();
       print('[DestinationSelection] Total de POIs recebidos: ${allPois.length}');
       print('[DestinationSelection] Total de nós recebidos: ${allNodes.length}');
+      
+      // Guardar nodes para uso posterior
+      _allNodes = allNodes;
       
       // Log de todas as categorias encontradas
       final categoriesFound = <String, int>{};
@@ -303,13 +308,18 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                 onPressed: selectedIndex != null 
                   ? () {
                       final selectedPOI = _poisWithRoutes[selectedIndex!];
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(localizations.selected(selectedPOI.poi.name)),
-                          duration: const Duration(seconds: 2),
+                      
+                      // Navegar para NavigationPage
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NavigationPage(
+                            route: selectedPOI.route,
+                            destination: selectedPOI.poi,
+                            nodes: _allNodes,
+                          ),
                         ),
                       );
-                      Navigator.pop(context);
                     }
                   : null,
                 child: Text(

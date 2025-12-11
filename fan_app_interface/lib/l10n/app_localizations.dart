@@ -179,11 +179,65 @@ abstract class AppLocalizations {
   /// **'MAP'**
   String get map;
 
-  /// No description provided for @merchandising.
+  /// No description provided for @turnLeft.
   ///
   /// In en, this message translates to:
-  /// **'Merchandising'**
-  String get merchandising;
+  /// **'Turn left'**
+  String get turnLeft;
+
+  /// No description provided for @turnRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn right'**
+  String get turnRight;
+
+  /// No description provided for @continueStraight.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue straight'**
+  String get continueStraight;
+
+  /// No description provided for @arriveAtDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrive at destination'**
+  String get arriveAtDestination;
+
+  /// No description provided for @arrival.
+  ///
+  /// In en, this message translates to:
+  /// **'arrival'**
+  String get arrival;
+
+  /// No description provided for @time.
+  ///
+  /// In en, this message translates to:
+  /// **'hrs'**
+  String get time;
+
+  /// No description provided for @distance.
+  ///
+  /// In en, this message translates to:
+  /// **'m'**
+  String get distance;
+
+  /// No description provided for @destination.
+  ///
+  /// In en, this message translates to:
+  /// **'destination'**
+  String get destination;
+
+  /// No description provided for @endRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'End Route'**
+  String get endRoute;
+
+  /// No description provided for @firstAid.
+  ///
+  /// In en, this message translates to:
+  /// **'First Aid'**
+  String get firstAid;
 
   /// No description provided for @information.
   ///
@@ -191,11 +245,11 @@ abstract class AppLocalizations {
   /// **'Information'**
   String get information;
 
-  /// No description provided for @firstAid.
+  /// No description provided for @merchandising.
   ///
   /// In en, this message translates to:
-  /// **'First aid'**
-  String get firstAid;
+  /// **'Merchandising'**
+  String get merchandising;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

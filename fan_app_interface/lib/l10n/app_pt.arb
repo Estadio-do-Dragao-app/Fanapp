@@ -30,5 +30,18 @@
     }
   },
   "evacuation": "EVACUAÇÃO",
-  "map": "MAPA"
+  "map": "MAPA",
+  "turnLeft": "Vire à esquerda",
+  "turnRight": "Vire à direita",
+  "continueStraight": "Continue em frente",
+  "arriveAtDestination": "Chegada ao destino",
+  "arrival": "chegada",
+  "time": "hrs",
+  "distance": "m",
+  "destination": "destino",
+  "endRoute": "Terminar Rota",
+  "firstAid": "Primeiros Socorros",
+  "information": "Informação",
+  "merchandising": "Loja"
 }
+

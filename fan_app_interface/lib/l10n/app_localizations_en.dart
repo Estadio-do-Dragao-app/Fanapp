@@ -55,11 +55,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get map => 'MAP';
 
   @override
-  String get merchandising => 'Merchandising';
+  String get turnLeft => 'Turn left';
+
+  @override
+  String get turnRight => 'Turn right';
+
+  @override
+  String get continueStraight => 'Continue straight';
+
+  @override
+  String get arriveAtDestination => 'Arrive at destination';
+
+  @override
+  String get arrival => 'arrival';
+
+  @override
+  String get time => 'hrs';
+
+  @override
+  String get distance => 'm';
+
+  @override
+  String get destination => 'destination';
+
+  @override
+  String get endRoute => 'End Route';
+
+  @override
+  String get firstAid => 'First Aid';
 
   @override
   String get information => 'Information';
 
   @override
-  String get firstAid => 'First aid';
+  String get merchandising => 'Merchandising';
 }

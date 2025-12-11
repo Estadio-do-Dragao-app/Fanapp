@@ -24,7 +24,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get food => 'Comida';
 
   @override
-  String get exit => 'Saída de Emergência';
+  String get exit => 'Saída';
 
   @override
   String selected(String item) {
@@ -55,11 +55,38 @@ class AppLocalizationsPt extends AppLocalizations {
   String get map => 'MAPA';
 
   @override
-  String get merchandising => 'Merchandising';
+  String get turnLeft => 'Vire à esquerda';
+
+  @override
+  String get turnRight => 'Vire à direita';
+
+  @override
+  String get continueStraight => 'Continue em frente';
+
+  @override
+  String get arriveAtDestination => 'Chegada ao destino';
+
+  @override
+  String get arrival => 'chegada';
+
+  @override
+  String get time => 'hrs';
+
+  @override
+  String get distance => 'm';
+
+  @override
+  String get destination => 'destino';
+
+  @override
+  String get endRoute => 'Terminar Rota';
+
+  @override
+  String get firstAid => 'Primeiros Socorros';
 
   @override
   String get information => 'Informação';
 
   @override
-  String get firstAid => 'Primeiros Socorros';
+  String get merchandising => 'Loja';
 }

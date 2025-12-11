@@ -1,25 +1,36 @@
+import 'package:fan_app_interface/features/map/presentation/controllers/map_logic_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'dart:math';
+
 import '../data/models/poi_model.dart';
 import '../data/models/node_model.dart';
 import '../data/models/route_model.dart';
 import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
+import '../../navigation/data/services/user_position_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
-import 'dart:math';
 
 /// Página principal do mapa interativo do estádio
 class StadiumMapPage extends StatefulWidget {
   final RouteModel? highlightedRoute;
   final POIModel? highlightedPOI;
   final bool showAllPOIs;
-  
+  final MapController? mapController;
+  final bool isNavigating;
+  final LatLng? userPosition; // Posição externa opcional (para navigation page)
+  final double? userHeading; // Heading externo opcional
+
   const StadiumMapPage({
     Key? key,
     this.highlightedRoute,
     this.highlightedPOI,
     this.showAllPOIs = true,
+    this.mapController,
+    this.isNavigating = false,
+    this.userPosition,
+    this.userHeading,
   }) : super(key: key);
 
   @override
@@ -27,12 +38,12 @@ class StadiumMapPage extends StatefulWidget {
 }
 
 class StadiumMapPageState extends State<StadiumMapPage> {
-  final MapController _mapController = MapController();
+  late final MapLogicController _logicController;
+  // Fallback controller se não for fornecido
+  late final MapController _internalMapController;
+  
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
-  
-  // Posição fixa do utilizador para testes (entrada principal)
-  static const String userNodeId = 'N1';
   
   // Estado
   int _currentFloor = 0;
@@ -42,32 +53,84 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   bool _isLoading = true;
   String? _errorMessage;
   
+  // Scale factor removed: Using directly 1:1 mapping for CrsSimple
+  static const double coordScale = 1.0;
+
+  // Limites do mapa baseados nos dados reais (coordenadas 0-100)
+  // Usando 0-200 para dar margem
+  static final LatLngBounds mapBounds = LatLngBounds(
+    const LatLng(0, 0), // Min: y=0, x=0
+    const LatLng(200, 200), // Max: y=200, x=200
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    // Usa controller fornecido ou cria um interno
+    _internalMapController = widget.mapController ?? MapController();
+    _logicController = MapLogicController(mapController: _internalMapController);
+
+    // Inicializar rota
+    _currentRoute = widget.highlightedRoute;
+    
+    _loadUserPosition();
+    _loadMapData();
+  }
+
+  // Novo método chamado quando o mapa está pronto
+  void _onMapReady() {
+    if (widget.isNavigating) {
+      _logicController.startNavigation();
+    }
+    
+    // Se tivermos posição inicial (diferente de default), centramos nela
+    if (_logicController.userX != 0 || _logicController.userY != 0) {
+      _logicController.centerOnUser();
+    }
+  }
+
   @override
   void didUpdateWidget(StadiumMapPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Atualizar rota quando parâmetros mudarem
     if (widget.highlightedRoute != oldWidget.highlightedRoute) {
       setState(() {
         _currentRoute = widget.highlightedRoute;
       });
     }
+    
+    if (widget.isNavigating != oldWidget.isNavigating) {
+      if (widget.isNavigating) {
+        _logicController.startNavigation();
+      } else {
+        _logicController.stopNavigation();
+      }
+    }
+    
+    // Atualização de posição externa
+    if (widget.userPosition != null && widget.userPosition != oldWidget.userPosition) {
+       _logicController.setUserPosition(
+        widget.userPosition!.longitude, // X
+        widget.userPosition!.latitude,  // Y
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
   
-  // Coordenadas do Estádio do Dragão (Porto, Portugal)
-  static const LatLng stadiumCenter = LatLng(41.161758, -8.583933);
-  
-  // Bounding box do estádio (aproximado - ajustar com dados reais do backend)
-  static final LatLngBounds stadiumBounds = LatLngBounds(
-    const LatLng(41.1600, -8.5850), // Southwest
-    const LatLng(41.1635, -8.5820), // Northeast
-  );
-  
-  @override
-  void initState() {
-    super.initState();
-    // Inicializar com a rota passada como parâmetro
-    _currentRoute = widget.highlightedRoute;
-    _loadMapData();
+  /// Carrega posição salva do utilizador
+  Future<void> _loadUserPosition() async {
+    final position = await UserPositionService.getPosition();
+    if (mounted) {
+      // Usar a posição guardada diretamente (assumindo que já está no sistema correto ou será 0,0)
+      _logicController.setUserPosition(
+        position.x,
+        position.y,
+        nodeId: position.nodeId,
+      );
+    }
   }
   
   Future<void> _loadMapData() async {
@@ -77,55 +140,42 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     });
     
     try {
-      print('[StadiumMapPage] Carregando POIs do piso $_currentFloor...');
-      
-      // Carregar POIs e nós
       final pois = await _mapService.getPOIsByFloor(_currentFloor);
       final nodes = await _mapService.getAllNodes();
       
-      print('[StadiumMapPage] ${pois.length} POIs carregados');
-      print('[StadiumMapPage] ${nodes.length} nós carregados');
-      
-      setState(() {
-        _pois = pois;
-        _nodes = nodes;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _pois = pois;
+          _nodes = nodes;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print('[StadiumMapPage] Erro ao carregar POIs: $e');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
-  
-  /// Converte coordenadas do backend (x, y) para LatLng do mapa
-  /// Assumindo que x,y do backend estão em metros relativos ao centro
-  LatLng _convertToLatLng(double x, double y) {
-    // Aproximação: 1 metro ≈ 0.00001 graus de latitude
-    // Ajustar conforme necessário com dados reais do estádio
-    const metersToLatDegrees = 0.000009;
-    const metersToLngDegrees = 0.000012; // Longitude varia com latitude
-    
-    return LatLng(
-      stadiumCenter.latitude + (y * metersToLatDegrees),
-      stadiumCenter.longitude + (x * metersToLngDegrees),
-    );
+
+  // Helper para converter x,y cartesianos para LatLng (Direct Mapping)
+  LatLng _toLatLng(double x, double y) {
+    // Y maps to Latitude, X maps to Longitude (1:1 for CrsSimple)
+    return LatLng(y, x);
   }
-  
-  /// Encontra o nó mais próximo de um POI baseado em coordenadas (x, y)
+
+  /// Encontra o nó mais próximo de um POI
   String _findNearestNode(POIModel poi) {
-    if (_nodes.isEmpty) return userNodeId;
+    if (_nodes.isEmpty) return _logicController.userNodeId;
     
     NodeModel? nearest;
     double minDistance = double.infinity;
     
     for (var node in _nodes) {
-      // Só considerar nós do mesmo piso
       if (node.level != poi.level) continue;
       
-      // Calcular distância euclidiana
       final dx = node.x - poi.x;
       final dy = node.y - poi.y;
       final distance = sqrt(dx * dx + dy * dy);
@@ -136,32 +186,30 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       }
     }
     
-    return nearest?.id ?? userNodeId;
+    return nearest?.id ?? _logicController.userNodeId;
   }
   
-  /// Método público para fazer zoom num POI (usado pela barra de pesquisa)
   void zoomToPOI(POIModel poi) {
-    final poiLocation = _convertToLatLng(poi.x, poi.y);
-    _mapController.move(poiLocation, 19.5);
+    _logicController.mapController.move(_toLatLng(poi.x, poi.y), 19.5);
   }
   
-  /// Mostra detalhes do POI num bottom sheet com zoom
   void _showPOIDetails(POIModel poi) async {
-    // Guardar apenas o zoom atual (não a posição)
-    final previousZoom = _mapController.camera.zoom;
+    final previousZoom = _logicController.mapController.camera.zoom;
     
-    // Fazer zoom no POI
-    final poiLocation = _convertToLatLng(poi.x, poi.y);
-    _mapController.move(poiLocation, 19.5);
+    // Move camera safely
+    _logicController.mapController.move(_toLatLng(poi.x, poi.y), 19.5);
     
-    // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
     RouteModel? route;
     try {
       final nearestNode = _findNearestNode(poi);
       route = await _routingService.getRoute(
-        fromNode: userNodeId,
+        fromNode: _logicController.userNodeId,
         toNode: nearestNode,
       );
+      
+      setState(() {
+        _currentRoute = route;
+      });
     } catch (e) {
       print('[StadiumMapPage] Erro ao calcular rota: $e');
     }
@@ -172,108 +220,121 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       context,
       poi: poi,
       route: route,
-      onNavigate: () {
-        // Apenas desenhar rota quando user clicar em Navigate
-        if (route != null) {
-          setState(() {
-            _currentRoute = route;
-          });
-        }
-      },
+      allNodes: _nodes,
     ).whenComplete(() {
-      // Apenas fazer zoom-out (mantém a posição centrada no POI)
+      if (!widget.isNavigating) {
+        setState(() {
+          _currentRoute = null;
+        });
+      }
+      
       if (mounted) {
-        final currentCenter = _mapController.camera.center;
-        _mapController.move(currentCenter, previousZoom);
+        final currentCenter = _logicController.mapController.camera.center;
+        _logicController.mapController.move(currentCenter, previousZoom);
       }
     });
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Mapa
-        if (_errorMessage != null)
-          _buildErrorState()
-        else if (_isLoading)
-          _buildLoadingState()
-        else
-          _buildMap(),
-      ],
+    return ListenableBuilder(
+      listenable: _logicController,
+      builder: (context, _) {
+        return Stack(
+          children: [
+            if (_errorMessage != null)
+              _buildErrorState()
+            else if (_isLoading)
+              _buildLoadingState()
+            else
+              _buildMap(),
+            
+            // Botão de foco no utilizador (apenas durante navegação)
+            if (widget.isNavigating)
+              Positioned(
+                left: 16,
+                bottom: 350,
+                child: FloatingActionButton(
+                  mini: true,
+                  backgroundColor: _logicController.isFollowingUser ? Colors.blue : Colors.white,
+                  onPressed: _logicController.toggleFollowUser,
+                  child: Icon(
+                    Icons.my_location,
+                    color: _logicController.isFollowingUser ? Colors.white : const Color(0xFF5B6FE8),
+                  ),
+                ),
+              ),
+          ],
+        );
+      }
     );
   }
   
   Widget _buildMap() {
     return FlutterMap(
-      mapController: _mapController,
+      mapController: _logicController.mapController,
       options: MapOptions(
-        initialCenter: stadiumCenter,
-        initialZoom: 18.0,
-        minZoom: 17.0,
-        maxZoom: 20.0,
-        interactionOptions: const InteractionOptions(
-          flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-        ),
+        crs: const CrsSimple(), // CRS Cartesiano Simples
+        initialCenter: _toLatLng(50, 20), // Centro aproximado dos dados
+        // Zoom levels for 200-unit map (0-200):
+        // At zoom 1, scale = 2, so 200 units = 400 pixels (fits on screen)
+        // At zoom 2, scale = 4, so 200 units = 800 pixels (zoomed in)
+        initialZoom: 1.0, // Shows a good portion of the map
+        minZoom: -1.0, // Can zoom out a bit
+        maxZoom: 4.0, // Can zoom in for detail
+        onMapReady: _onMapReady,
+        onTap: (_, pos) {
+             print("Map Tapped at: x=${pos.longitude}, y=${pos.latitude}");
+        },
       ),
       children: [
-        // Remove a atribuição padrão do flutter_map
-        RichAttributionWidget(
-          attributions: [],
-        ),
-        // Camada de fundo cinza
-        TileLayer(
-          tileProvider: NetworkTileProvider(),
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.estadio.dragao.fan_app',
-        ),
-        
-        // Camada base - Imagem do estádio
+        // Camada de fundo (Imagem / Gráfico) - ONDEM Z=0
         OverlayImageLayer(
           overlayImages: [
             OverlayImage(
-              bounds: stadiumBounds,
+              bounds: mapBounds, 
               opacity: 1.0,
               imageProvider: const AssetImage('assets/images/map_placeholder.png'),
             ),
           ],
         ),
         
-        // Camada de rota (polyline)
+        // Polylines (Rotas) - ORDEM Z=1
         if (_currentRoute != null) _buildRouteLayer(),
         
-        // Camada de POIs (markers)
+        // Markers (POIs + User) - ORDEM Z=2 (Topo)
         _buildPOILayer(),
       ],
     );
   }
-  
+
   Widget _buildRouteLayer() {
     final route = _currentRoute!;
-    
-    // Converter waypoints para LatLng
     final points = route.waypoints
-        .where((wp) => wp.level == _currentFloor) // Só mostrar waypoints do piso atual
-        .map((wp) => _convertToLatLng(wp.x, wp.y))
+        .where((wp) => wp.level == _currentFloor)
+        .map((wp) => _toLatLng(wp.x, wp.y))
         .toList();
     
     return PolylineLayer(
       polylines: [
         Polyline(
           points: points,
-          color: Colors.blue,
-          strokeWidth: 4.0,
+          color: const Color(0xFF5B6FE8),
+          strokeWidth: 5.0,
           borderColor: Colors.white,
-          borderStrokeWidth: 2.0,
+          borderStrokeWidth: 2.5,
         ),
       ],
     );
   }
   
   Widget _buildPOILayer() {
-    // Determinar quais POIs mostrar
     List<POIModel> poisToShow;
-    if (widget.showAllPOIs) {
+    
+    // Lógica de filtragem de POIs
+    if (widget.isNavigating) {
+      poisToShow = widget.highlightedPOI != null ? [widget.highlightedPOI!] : [];
+    } else if (widget.showAllPOIs) {
       poisToShow = _pois;
     } else if (widget.highlightedPOI != null) {
       poisToShow = [widget.highlightedPOI!];
@@ -281,128 +342,90 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       poisToShow = [];
     }
     
-    // Adicionar marcador da posição do utilizador (N1)
-    final userMarkers = <Marker>[];
-    if (_nodes.isNotEmpty) {
-      final userNode = _nodes.firstWhere(
-        (n) => n.id == userNodeId,
-        orElse: () => _nodes.first,
-      );
-      
-      userMarkers.add(
+    final markers = <Marker>[];
+    
+    // 1. Marcadores de POIs (Desenhados primeiro)
+    for (var poi in poisToShow) {
+      final isHighlighted = widget.highlightedPOI?.id == poi.id;
+      markers.add(
         Marker(
-          point: _convertToLatLng(userNode.x, userNode.y),
-          width: 60,
-          height: 60,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
+          point: _toLatLng(poi.x, poi.y),
+          width: isHighlighted ? 60 : 50,
+          height: isHighlighted ? 60 : 50,
+          child: GestureDetector(
+            onTap: () => _showPOIDetails(poi),
+            child: Container(
+              padding: EdgeInsets.all(isHighlighted ? 10 : 8),
+              decoration: BoxDecoration(
+                color: _getPOIColor(poi.category),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isHighlighted ? Colors.yellow : Colors.white,
+                  width: isHighlighted ? 3 : 2,
                 ),
-              ],
-            ),
-            child: const Icon(
-              Icons.person_pin_circle,
-              color: Colors.white,
-              size: 30,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: isHighlighted ? 8 : 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                _getPOIIcon(poi.category),
+                color: Colors.white,
+                size: isHighlighted ? 24 : 20,
+              ),
             ),
           ),
         ),
       );
     }
     
-    return MarkerLayer(
-      markers: [
-        ...userMarkers,
-        ...poisToShow.map<Marker>((POIModel poi) {
-          final position = _convertToLatLng(poi.x, poi.y);
-          final isHighlighted = widget.highlightedPOI?.id == poi.id;
-          
-          return Marker(
-            point: position,
-            width: isHighlighted ? 60 : 50,
-            height: isHighlighted ? 60 : 50,
-            child: GestureDetector(
-              onTap: () => _showPOIDetails(poi),
-              child: Container(
-                padding: EdgeInsets.all(isHighlighted ? 10 : 8),
-                decoration: BoxDecoration(
-                  color: _getPOIColor(poi.category),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isHighlighted ? Colors.yellow : Colors.white,
-                    width: isHighlighted ? 3 : 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: isHighlighted ? 8 : 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  _getPOIIcon(poi.category),
-                  color: Colors.white,
-                  size: isHighlighted ? 24 : 20,
-                ),
+    // 2. Marcador do Utilizador (Desenhado por último para ficar em Z mais alto)
+    // Se tivermos um heading externo (NavigationPage), usamos para rodar o ícone
+    // Se não tiver heading, usa 0
+    // O sistema de heading usa 0=Norte/Cima. O ícone arrow_upward aponta para cima.
+    // Logo, a rotação é direta.
+    final rotationRad = (widget.userHeading ?? 0) * (3.14159 / 180);
+    
+    // Só desenha se a posição não for nula/zero ou se estivermos explicitamente com tracking
+    double userX = _logicController.userX;
+    double userY = _logicController.userY;
+    
+    if (userX != 0 || userY != 0) {
+      markers.add(
+        Marker(
+          point: _toLatLng(userX, userY),
+          width: 60,
+          height: 60,
+          child: Transform.rotate(
+            angle: rotationRad,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.black26, blurRadius: 4),
+                ],
+                border: Border.all(color: Colors.blue, width: 2),
+              ),
+              child: const Icon(
+                Icons.arrow_upward, // Seta que aponta para CIMA (Norte) por defeito
+                color: Colors.blue,
+                size: 35,
               ),
             ),
-          );
-        }).toList(),
-      ],
-    );
+          ),
+        ),
+      );
+    }
+
+    return MarkerLayer(markers: markers);
   }
-  
-  Widget _buildFloorSelector() {
-    return Card(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_upward),
-            onPressed: _currentFloor < 2
-                ? () {
-                    setState(() {
-                      _currentFloor++;
-                    });
-                    _loadMapData();
-                  }
-                : null,
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Text(
-              'Floor $_currentFloor',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.arrow_downward),
-            onPressed: _currentFloor > 0
-                ? () {
-                    setState(() {
-                      _currentFloor--;
-                    });
-                    _loadMapData();
-                  }
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-  
+
   Widget _buildLoadingState() {
-    return const Center(
-      child: CircularProgressIndicator(),
-    );
+    return const Center(child: CircularProgressIndicator());
   }
   
   Widget _buildErrorState() {
@@ -419,11 +442,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
+            Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: _loadMapData,
@@ -438,38 +457,25 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   
   Color _getPOIColor(String category) {
     switch (category.toLowerCase()) {
-      case 'restroom':
-        return Colors.blue.shade700;
+      case 'restroom': return Colors.blue.shade700;
       case 'food':
-      case 'bar':
-        return Colors.orange.shade700;
-      case 'emergency_exit':
-        return Colors.red.shade700;
-      case 'first_aid':
-        return Colors.green.shade700;
-      case 'information':
-        return Colors.purple.shade700;
-      default:
-        return Colors.grey.shade700;
+      case 'bar': return Colors.orange.shade700;
+      case 'emergency_exit': return Colors.red.shade700;
+      case 'first_aid': return Colors.green.shade700;
+      case 'information': return Colors.purple.shade700;
+      default: return Colors.grey.shade700;
     }
   }
   
   IconData _getPOIIcon(String category) {
     switch (category.toLowerCase()) {
-      case 'restroom':
-        return Icons.wc;
-      case 'food':
-        return Icons.restaurant;
-      case 'bar':
-        return Icons.local_bar;
-      case 'emergency_exit':
-        return Icons.exit_to_app;
-      case 'first_aid':
-        return Icons.local_hospital;
-      case 'information':
-        return Icons.info;
-      default:
-        return Icons.place;
+      case 'restroom': return Icons.wc;
+      case 'food': return Icons.restaurant;
+      case 'bar': return Icons.local_bar;
+      case 'emergency_exit': return Icons.exit_to_app;
+      case 'first_aid': return Icons.local_hospital;
+      case 'information': return Icons.info;
+      default: return Icons.place;
     }
   }
 }
