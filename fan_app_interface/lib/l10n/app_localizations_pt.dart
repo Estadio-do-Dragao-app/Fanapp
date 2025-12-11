@@ -24,7 +24,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get food => 'Comida';
 
   @override
-  String get exit => 'Saída de Emergência';
+  String get exit => 'Saída';
 
   @override
   String selected(String item) {
@@ -55,11 +55,50 @@ class AppLocalizationsPt extends AppLocalizations {
   String get map => 'MAPA';
 
   @override
-  String get merchandising => 'Merchandising';
+  String get addTicket => 'Adicionar Bilhete';
+
+  @override
+  String get scanTicketQR => 'Digitalizar QR do Bilhete';
+
+  @override
+  String get ticketInfo => 'Informação do Bilhete';
+
+  @override
+  String get sector => 'Setor';
+
+  @override
+  String get row => 'Fila';
+
+  @override
+  String get gate => 'Portão';
+
+  @override
+  String get ticketType => 'Tipo de Bilhete';
+
+  @override
+  String get deleteTicket => 'Apagar Bilhete';
+
+  @override
+  String get deleteTicketConfirm => 'Tem a certeza que quer apagar este bilhete?';
+
+  @override
+  String get noTicketScanned => 'Nenhum bilhete digitalizado';
+
+  @override
+  String get noTicketScannedMessage => 'Por favor digitalize o código QR do seu bilhete para navegar até ao seu lugar.';
+
+  @override
+  String get scanNow => 'Digitalizar Agora';
+
+  @override
+  String get cancel => 'Cancelar';
+
+  @override
+  String get firstAid => 'Primeiros Socorros';
 
   @override
   String get information => 'Informação';
 
   @override
-  String get firstAid => 'Primeiros Socorros';
+  String get merchandising => 'Merchandising';
 }

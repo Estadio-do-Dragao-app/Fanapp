@@ -5,6 +5,7 @@ import 'features/poi/presentation/navbar.dart';
 import 'features/hub/presentation/search_bar.dart';
 import 'features/hub/presentation/menu_button.dart';
 import 'features/map/presentation/filter_button.dart';
+import 'features/ticket/presentation/ticket_menu.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -124,7 +125,7 @@ class _HomeState extends State<Home> {
             right: 16,
             child: MenuButton(
               onTap: () {
-                // Action for menu button tap
+                TicketMenu.show(context);
               },
             ),
           ),
