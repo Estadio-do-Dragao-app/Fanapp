@@ -24,7 +24,13 @@ class POIWithRoute {
 
 class DestinationSelectionPage extends StatefulWidget {
   final String categoryId;
-  const DestinationSelectionPage({Key? key, required this.categoryId}) : super(key: key);
+  final String? preselectedSeatInfo; // Formato: "sector-row-seat" (vem do bilhete)
+  
+  const DestinationSelectionPage({
+    Key? key, 
+    required this.categoryId,
+    this.preselectedSeatInfo,
+  }) : super(key: key);
 
   @override
   State<DestinationSelectionPage> createState() => _DestinationSelectionPageState();

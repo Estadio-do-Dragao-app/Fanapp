@@ -55,11 +55,50 @@ class AppLocalizationsEn extends AppLocalizations {
   String get map => 'MAP';
 
   @override
-  String get merchandising => 'Merchandising';
+  String get addTicket => 'Add Ticket';
+
+  @override
+  String get scanTicketQR => 'Scan Ticket QR Code';
+
+  @override
+  String get ticketInfo => 'Ticket Information';
+
+  @override
+  String get sector => 'Sector';
+
+  @override
+  String get row => 'Row';
+
+  @override
+  String get gate => 'Gate';
+
+  @override
+  String get ticketType => 'Ticket Type';
+
+  @override
+  String get deleteTicket => 'Delete Ticket';
+
+  @override
+  String get deleteTicketConfirm => 'Are you sure you want to delete this ticket?';
+
+  @override
+  String get noTicketScanned => 'No ticket scanned';
+
+  @override
+  String get noTicketScannedMessage => 'Please scan your ticket QR code to navigate to your seat.';
+
+  @override
+  String get scanNow => 'Scan Now';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get firstAid => 'First Aid';
 
   @override
   String get information => 'Information';
 
   @override
-  String get firstAid => 'First aid';
+  String get merchandising => 'Merchandising';
 }
