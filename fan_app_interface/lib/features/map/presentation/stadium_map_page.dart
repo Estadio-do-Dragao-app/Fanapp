@@ -9,6 +9,7 @@ import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
 import 'dart:math';
+import 'dart:async';
 
 /// Página principal do mapa interativo do estádio
 class StadiumMapPage extends StatefulWidget {
@@ -16,6 +17,8 @@ class StadiumMapPage extends StatefulWidget {
   final POIModel? highlightedPOI;
   final bool showAllPOIs;
   final bool showHeatmap;
+  final VoidCallback? onHeatmapConnectionError;
+  final VoidCallback? onHeatmapConnectionSuccess;
 
   const StadiumMapPage({
     Key? key,
@@ -23,6 +26,8 @@ class StadiumMapPage extends StatefulWidget {
     this.highlightedPOI,
     this.showAllPOIs = true,
     this.showHeatmap = false,
+    this.onHeatmapConnectionError,
+    this.onHeatmapConnectionSuccess,
   }) : super(key: key);
 
   @override
@@ -48,6 +53,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
 
   // Heatmap data
   StadiumHeatmapData? _heatmapData;
+  Timer? _heatmapTimer;
 
   @override
   void didUpdateWidget(StadiumMapPage oldWidget) {
@@ -60,35 +66,60 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     }
     // Carregar heatmap quando ativado
     if (widget.showHeatmap && !oldWidget.showHeatmap) {
-      _loadHeatmapData();
+      _startHeatmapUpdates();
+    } else if (!widget.showHeatmap && oldWidget.showHeatmap) {
+      _stopHeatmapUpdates();
     }
+  }
+
+  /// Inicia atualização periódica do heatmap (cada 10 segundos)
+  void _startHeatmapUpdates() {
+    print('[StadiumMapPage] Iniciando atualizações do heatmap (10s)');
+    _loadHeatmapData(); // Carregar imediatamente
+    _heatmapTimer?.cancel();
+    _heatmapTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      print('[StadiumMapPage] Timer tick - atualizando heatmap');
+      _loadHeatmapData();
+    });
+  }
+
+  /// Para atualização periódica do heatmap
+  void _stopHeatmapUpdates() {
+    print('[StadiumMapPage] Parando atualizações do heatmap');
+    _heatmapTimer?.cancel();
+    _heatmapTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _stopHeatmapUpdates();
+    super.dispose();
   }
 
   /// Carrega dados de congestão para o heatmap
   Future<void> _loadHeatmapData() async {
+    print('[StadiumMapPage] Carregando dados do heatmap...');
     try {
       final data = await _congestionService.getStadiumHeatmap();
+      print(
+        '[StadiumMapPage] Heatmap carregado: ${data.sections.length} seções, avg: ${data.averageCongestion}',
+      );
       if (mounted) {
         setState(() {
           _heatmapData = data;
         });
+        // Notificar sucesso de conexão
+        widget.onHeatmapConnectionSuccess?.call();
       }
     } catch (e) {
       print('[StadiumMapPage] Erro ao carregar heatmap: $e');
-      // Usar dados de demo para visualização
+      // Limpar dados do heatmap em caso de erro
       if (mounted) {
         setState(() {
-          _heatmapData = StadiumHeatmapData(
-            sections: {
-              'section_A': 0.85, // Alta congestão
-              'section_B': 0.45, // Média
-              'section_C': 0.15, // Baixa
-              'section_D': 0.70, // Alta
-            },
-            totalSections: 4,
-            averageCongestion: 0.54,
-          );
+          _heatmapData = null;
         });
+        // Notificar erro de conexão
+        widget.onHeatmapConnectionError?.call();
       }
     }
   }
@@ -297,21 +328,17 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       return const SizedBox.shrink();
     }
 
-    // Posições de demo para cada secção (ajustar com dados reais)
-    final sectionPositions = {
-      'section_A': const LatLng(41.1625, -8.5840),
-      'section_B': const LatLng(41.1610, -8.5830),
-      'section_C': const LatLng(41.1615, -8.5845),
-      'section_D': const LatLng(41.1620, -8.5825),
-    };
-
     final circles = <CircleMarker>[];
 
-    _heatmapData!.sections.forEach((sectionId, congestionLevel) {
-      final position = sectionPositions[sectionId];
+    _heatmapData!.sections.forEach((cellId, congestionLevel) {
+      // Ignorar congestão abaixo de 20%
+      if (congestionLevel < 0.20) return;
+
+      // Converter cell_X_Y para coordenadas do grid
+      final position = _cellIdToLatLng(cellId);
       if (position == null) return;
 
-      // Cor baseada no nível de congestão (verde→amarelo→vermelho)
+      // Cor baseada no nível de congestão (verde→amarelo→laranja→vermelho)
       final color = _getCongestionColor(congestionLevel);
 
       // Círculos concêntricos para efeito de gradiente
@@ -319,19 +346,8 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       circles.add(
         CircleMarker(
           point: position,
-          radius: 40,
-          color: color.withOpacity(0.2),
-          borderColor: Colors.transparent,
-          borderStrokeWidth: 0,
-        ),
-      );
-
-      // Círculo médio
-      circles.add(
-        CircleMarker(
-          point: position,
-          radius: 25,
-          color: color.withOpacity(0.4),
+          radius: 20,
+          color: color.withOpacity(0.3),
           borderColor: Colors.transparent,
           borderStrokeWidth: 0,
         ),
@@ -341,8 +357,8 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       circles.add(
         CircleMarker(
           point: position,
-          radius: 12,
-          color: color.withOpacity(0.7),
+          radius: 10,
+          color: color.withOpacity(0.6),
           borderColor: Colors.transparent,
           borderStrokeWidth: 0,
         ),
@@ -352,17 +368,50 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     return CircleLayer(circles: circles);
   }
 
-  /// Retorna cor baseada no nível de congestão (0-1)
+  /// Converte ID de célula (cell_X_Y) para coordenadas LatLng
+  LatLng? _cellIdToLatLng(String cellId) {
+    // Formato esperado: cell_X_Y
+    final parts = cellId.split('_');
+    if (parts.length != 3 || parts[0] != 'cell') return null;
+
+    final x = int.tryParse(parts[1]);
+    final y = int.tryParse(parts[2]);
+    if (x == null || y == null) return null;
+
+    // Converter coordenadas do grid para posição no mapa
+    // O grid parece ter células de ~10 unidades, mapeando para o estádio
+    // Ajustar escala para corresponder aos bounds do estádio
+    const gridSize = 20; // Tamanho de cada célula no grid
+    final mapX = (x * gridSize).toDouble();
+    final mapY = (y * gridSize).toDouble();
+
+    return _convertToLatLng(mapX, mapY);
+  }
+
+  /// Retorna cor baseada no nível de congestão (0.2-1.0)
+  /// Gradiente: verde → amarelo → laranja → vermelho → vermelho escuro
   Color _getCongestionColor(double level) {
-    if (level <= 0.3) {
-      // Baixa congestão: verde/cyan
-      return const Color(0xFF00D4AA);
-    } else if (level <= 0.6) {
-      // Média congestão: amarelo/laranja
-      return const Color(0xFFFFB800);
+    if (level <= 0.30) {
+      // 20-30%: Verde claro
+      return const Color(0xFF4CAF50);
+    } else if (level <= 0.40) {
+      // 30-40%: Verde amarelado
+      return const Color(0xFF8BC34A);
+    } else if (level <= 0.50) {
+      // 40-50%: Amarelo
+      return const Color(0xFFFFEB3B);
+    } else if (level <= 0.60) {
+      // 50-60%: Laranja claro
+      return const Color(0xFFFF9800);
+    } else if (level <= 0.70) {
+      // 60-70%: Laranja escuro
+      return const Color(0xFFFF5722);
+    } else if (level <= 0.80) {
+      // 70-80%: Vermelho
+      return const Color(0xFFF44336);
     } else {
-      // Alta congestão: vermelho/laranja escuro
-      return const Color(0xFFFF4444);
+      // 80-100%: Vermelho escuro
+      return const Color(0xFFB71C1C);
     }
   }
 

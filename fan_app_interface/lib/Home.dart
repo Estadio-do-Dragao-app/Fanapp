@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'l10n/app_localizations.dart';
 import 'features/map/presentation/pages/map_page.dart';
 import 'features/poi/presentation/navbar.dart';
@@ -6,6 +7,7 @@ import 'features/hub/presentation/search_bar.dart';
 import 'features/hub/presentation/menu_button.dart';
 import 'features/map/presentation/filter_button.dart';
 import 'features/ticket/presentation/ticket_menu.dart';
+import 'features/map/data/services/congestion_service.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -17,9 +19,67 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   // GlobalKey para acessar o state do MapPage (agora público)
   final GlobalKey<MapPageState> _mapPageKey = GlobalKey<MapPageState>();
+  final CongestionService _congestionService = CongestionService();
 
   // Estado do heatmap
   bool _showHeatmap = false;
+  bool _isHeatmapAvailable = true;
+  Timer? _healthCheckTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCongestionHealth();
+    // Iniciar timer de 30s (só verifica quando heatmap está desligado)
+    _startHealthCheckTimer();
+  }
+
+  @override
+  void dispose() {
+    _healthCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Inicia timer de verificação de saúde (30 segundos)
+  void _startHealthCheckTimer() {
+    _healthCheckTimer?.cancel();
+    _healthCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      // Só verifica quando heatmap está desligado
+      if (!_showHeatmap) {
+        _checkCongestionHealth();
+      }
+    });
+  }
+
+  Future<void> _checkCongestionHealth() async {
+    final isHealthy = await _congestionService.isServiceHealthy();
+    _updateHealthStatus(isHealthy);
+  }
+
+  /// Atualiza estado de disponibilidade (chamado pelo timer ou pelo MapPage)
+  void _updateHealthStatus(bool isHealthy) {
+    if (mounted && _isHeatmapAvailable != isHealthy) {
+      setState(() {
+        _isHeatmapAvailable = isHealthy;
+        // Desativar heatmap automaticamente se serviço falhar
+        if (!isHealthy && _showHeatmap) {
+          _showHeatmap = false;
+        }
+      });
+    }
+  }
+
+  /// Callback chamado quando há erro de conexão do heatmap (10s updates)
+  void _onHeatmapConnectionError() {
+    _updateHealthStatus(false);
+  }
+
+  /// Callback chamado quando heatmap recebe dados com sucesso
+  void _onHeatmapConnectionSuccess() {
+    if (!_isHeatmapAvailable) {
+      _updateHealthStatus(true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +87,12 @@ class _HomeState extends State<Home> {
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          MapPage(key: _mapPageKey, showHeatmap: _showHeatmap),
+          MapPage(
+            key: _mapPageKey,
+            showHeatmap: _showHeatmap,
+            onHeatmapConnectionError: _onHeatmapConnectionError,
+            onHeatmapConnectionSuccess: _onHeatmapConnectionSuccess,
+          ),
           Positioned(
             top: 0,
             left: 0,
@@ -44,10 +109,15 @@ class _HomeState extends State<Home> {
             right: 16,
             child: FilterButton(
               showHeatmap: _showHeatmap,
+              isHeatmapAvailable: _isHeatmapAvailable,
               onHeatmapChanged: (value) {
                 setState(() {
                   _showHeatmap = value;
                 });
+                // Se está a ligar, verificar saúde imediatamente
+                if (value) {
+                  _checkCongestionHealth();
+                }
               },
             ),
           ),

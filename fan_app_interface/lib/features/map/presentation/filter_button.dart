@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 /// Filter button with expandable menu for map options
 class FilterButton extends StatefulWidget {
   final bool showHeatmap;
+  final bool isHeatmapAvailable;
   final ValueChanged<bool> onHeatmapChanged;
 
   const FilterButton({
     Key? key,
     required this.showHeatmap,
+    this.isHeatmapAvailable = true,
     required this.onHeatmapChanged,
   }) : super(key: key);
 
@@ -128,12 +130,7 @@ class _FilterButtonState extends State<FilterButton>
                   const SizedBox(height: 12),
 
                   // Heat map toggle
-                  _buildToggleRow(
-                    icon: Icons.whatshot,
-                    label: 'Heat map',
-                    value: widget.showHeatmap,
-                    onChanged: widget.onHeatmapChanged,
-                  ),
+                  _buildHeatmapToggle(),
                 ],
               ),
             ),
@@ -142,38 +139,72 @@ class _FilterButtonState extends State<FilterButton>
     );
   }
 
-  Widget _buildToggleRow({
-    required IconData icon,
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget _buildHeatmapToggle() {
+    final bool isAvailable = widget.isHeatmapAvailable;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: Colors.white, size: 20),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontFamily: 'Gabarito',
-            fontSize: 14,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.whatshot,
+              color: isAvailable ? Colors.white : Colors.grey[600],
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Heat map',
+              style: TextStyle(
+                color: isAvailable ? Colors.white : Colors.grey[600],
+                fontFamily: 'Gabarito',
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(width: 16),
+            SizedBox(
+              height: 24,
+              child: Switch(
+                value: widget.showHeatmap,
+                onChanged: isAvailable ? widget.onHeatmapChanged : null,
+                activeColor: const Color(0xFF929AD4),
+                activeTrackColor: const Color(0xFF929AD4).withOpacity(0.5),
+                inactiveThumbColor: isAvailable
+                    ? Colors.grey[400]
+                    : Colors.grey[700],
+                inactiveTrackColor: isAvailable
+                    ? Colors.grey[600]
+                    : Colors.grey[800],
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 16),
-        SizedBox(
-          height: 24,
-          child: Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: const Color(0xFF929AD4),
-            activeTrackColor: const Color(0xFF929AD4).withOpacity(0.5),
-            inactiveThumbColor: Colors.grey[400],
-            inactiveTrackColor: Colors.grey[600],
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        // Error message when unavailable
+        if (!isAvailable)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange[300],
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Falha de conexão',
+                  style: TextStyle(
+                    color: Colors.orange[300],
+                    fontFamily: 'Gabarito',
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }

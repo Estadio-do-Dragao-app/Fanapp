@@ -4,8 +4,15 @@ import '../stadium_map_page.dart';
 /// MapPage implementation with functional stadium map
 class MapPage extends StatefulWidget {
   final bool showHeatmap;
+  final VoidCallback? onHeatmapConnectionError;
+  final VoidCallback? onHeatmapConnectionSuccess;
 
-  const MapPage({Key? key, this.showHeatmap = false}) : super(key: key);
+  const MapPage({
+    Key? key,
+    this.showHeatmap = false,
+    this.onHeatmapConnectionError,
+    this.onHeatmapConnectionSuccess,
+  }) : super(key: key);
 
   @override
   State<MapPage> createState() => MapPageState();
@@ -22,6 +29,11 @@ class MapPageState extends State<MapPage> {
 
   @override
   Widget build(BuildContext context) {
-    return StadiumMapPage(key: _stadiumMapKey, showHeatmap: widget.showHeatmap);
+    return StadiumMapPage(
+      key: _stadiumMapKey,
+      showHeatmap: widget.showHeatmap,
+      onHeatmapConnectionError: widget.onHeatmapConnectionError,
+      onHeatmapConnectionSuccess: widget.onHeatmapConnectionSuccess,
+    );
   }
 }
