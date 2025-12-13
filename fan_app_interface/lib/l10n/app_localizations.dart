@@ -179,6 +179,60 @@ abstract class AppLocalizations {
   /// **'MAP'**
   String get map;
 
+  /// No description provided for @turnLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn left'**
+  String get turnLeft;
+
+  /// No description provided for @turnRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn right'**
+  String get turnRight;
+
+  /// No description provided for @continueStraight.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue straight'**
+  String get continueStraight;
+
+  /// No description provided for @arriveAtDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrive at destination'**
+  String get arriveAtDestination;
+
+  /// No description provided for @arrival.
+  ///
+  /// In en, this message translates to:
+  /// **'arrival'**
+  String get arrival;
+
+  /// No description provided for @time.
+  ///
+  /// In en, this message translates to:
+  /// **'hrs'**
+  String get time;
+
+  /// No description provided for @distance.
+  ///
+  /// In en, this message translates to:
+  /// **'m'**
+  String get distance;
+
+  /// No description provided for @destination.
+  ///
+  /// In en, this message translates to:
+  /// **'destination'**
+  String get destination;
+
+  /// No description provided for @endRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'End Route'**
+  String get endRoute;
+
   /// No description provided for @addTicket.
   ///
   /// In en, this message translates to:

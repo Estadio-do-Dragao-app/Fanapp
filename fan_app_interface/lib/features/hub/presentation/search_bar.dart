@@ -6,7 +6,7 @@ import '../../map/data/models/node_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
-import 'dart:math';
+import '../../navigation/data/services/user_position_service.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
@@ -59,31 +59,6 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
     super.dispose();
   }
 
-  /// Encontra o nó mais próximo de um POI baseado em coordenadas (x, y)
-  String _findNearestNode(POIModel poi) {
-    if (_allNodes.isEmpty) return userNodeId;
-
-    NodeModel? nearest;
-    double minDistance = double.infinity;
-
-    for (var node in _allNodes) {
-      // Só considerar nós do mesmo piso
-      if (node.level != poi.level) continue;
-
-      // Calcular distância euclidiana
-      final dx = node.x - poi.x;
-      final dy = node.y - poi.y;
-      final distance = sqrt(dx * dx + dy * dy);
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearest = node;
-      }
-    }
-
-    return nearest?.id ?? userNodeId;
-  }
-
   /// Mostra detalhes do POI selecionado
   Future<void> _showPOIDetails(POIModel poi) async {
     // Fechar a barra de pesquisa primeiro
@@ -98,10 +73,33 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
     // Calcular rota para o POI (apenas para mostrar distância/tempo)
     RouteModel? route;
     try {
-      final nearestNode = _findNearestNode(poi);
-      route = await _routingService.getRoute(
-        fromNode: userNodeId,
-        toNode: nearestNode,
+      // Obter posição guardada do utilizador
+      final savedPosition = await UserPositionService.getPosition();
+      double startX;
+      double startY;
+      int startLevel;
+
+      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+        startX = savedPosition.x;
+        startY = savedPosition.y;
+        startLevel = savedPosition.level;
+      } else {
+        // Fallback para N1
+        final userNode = _allNodes.firstWhere(
+          (n) => n.id == userNodeId,
+          orElse: () => _allNodes.first,
+        );
+        startX = userNode.x;
+        startY = userNode.y;
+        startLevel = userNode.level;
+      }
+
+      // Usar nova API com coordenadas
+      route = await _routingService.getRouteToPOI(
+        startX: startX,
+        startY: startY,
+        startLevel: startLevel,
+        poiId: poi.id,
       );
     } catch (e) {
       print('[SearchBar] Erro ao calcular rota: $e');
@@ -117,6 +115,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
       context,
       poi: poi,
       route: route,
+      allNodes: _allNodes,
       onNavigate: () {
         // Usa o messenger capturado (safe mesmo se widget desmontado)
         messenger.showSnackBar(

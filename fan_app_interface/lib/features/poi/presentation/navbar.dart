@@ -10,12 +10,15 @@ import 'package:fan_app_interface/features/map/data/models/node_model.dart';
 import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
 import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
 import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
+import 'package:fan_app_interface/features/navigation/data/services/user_position_service.dart';
 import 'dart:math';
 
 /// Simple MapPage implementation that shows a placeholder 'map' area and a
 /// horizontal row of category buttons overlayed at the top.
 class Navbar extends StatefulWidget {
-  const Navbar({Key? key}) : super(key: key);
+  final VoidCallback? onNavigationEnd;
+
+  const Navbar({Key? key, this.onNavigationEnd}) : super(key: key);
 
   @override
   State<Navbar> createState() => _NavbarState();
@@ -51,6 +54,7 @@ class _NavbarState extends State<Navbar> {
       // Tem bilhete - navegar diretamente para o lugar
       if (!mounted) return;
       await _navigateToSeat(ticket, localizations);
+      if (mounted) widget.onNavigationEnd?.call();
       return;
     }
 
@@ -62,7 +66,9 @@ class _NavbarState extends State<Navbar> {
             DestinationSelectionPage(categoryId: categoryIds[i]),
         transitionsBuilder: _buildSlideTransition,
       ),
-    );
+    ).then((_) {
+      if (mounted) widget.onNavigationEnd?.call();
+    });
   }
 
   /// Encontra o nó mais próximo de uma coordenada
@@ -98,6 +104,20 @@ class _NavbarState extends State<Navbar> {
     TicketModel ticket,
     AppLocalizations localizations,
   ) async {
+    // Verificar se o bilhete tem ID do seat no Map-Service
+    if (ticket.seatNodeId == null || ticket.seatNodeId!.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'O bilhete não tem lugar associado. Contacte o suporte.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Mostrar loading
     showDialog(
       context: context,
@@ -107,20 +127,33 @@ class _NavbarState extends State<Navbar> {
     );
 
     try {
-      // Buscar todos os nós do mapa
+      // Buscar coordenadas do seat no Map-Service
+      final seatNode = await _mapService.getSeatById(ticket.seatNodeId!);
+
+      if (seatNode == null) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lugar ${ticket.seatNodeId} não encontrado no mapa.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Buscar todos os nós do mapa para calcular rota
       final allNodes = await _mapService.getAllNodes();
 
-      // Criar um POI virtual para o lugar do utilizador
-      // Assumimos que o lugar está numa posição fixa baseada no sector
-      // TODO: Implementar lógica real de mapeamento de lugares para coordenadas
+      // Criar POI com coordenadas reais do seat
       final seatPOI = POIModel(
-        id: 'seat_${ticket.sectorId}_${ticket.rowId}_${ticket.seatId}',
+        id: ticket.seatNodeId!,
         name:
             '${ticket.sectorId} - Fila ${ticket.rowId} - Lugar ${ticket.seatId}',
         category: 'seat',
-        x: 50.0, // TODO: Calcular posição real baseada no sector/fila/lugar
-        y: 50.0,
-        level: 0,
+        x: seatNode.x,
+        y: seatNode.y,
+        level: seatNode.level,
       );
 
       // Encontrar o nó mais próximo do lugar
@@ -131,10 +164,33 @@ class _NavbarState extends State<Navbar> {
         allNodes,
       );
 
+      // Obter posição guardada do utilizador
+      final savedPosition = await UserPositionService.getPosition();
+      double startX;
+      double startY;
+      int startLevel;
+
+      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+        startX = savedPosition.x;
+        startY = savedPosition.y;
+        startLevel = savedPosition.level;
+      } else {
+        // Fallback para N1
+        final userNode = allNodes.firstWhere(
+          (n) => n.id == userNodeId,
+          orElse: () => allNodes.first,
+        );
+        startX = userNode.x;
+        startY = userNode.y;
+        startLevel = userNode.level;
+      }
+
       // Calcular rota
-      final route = await _routingService.getRoute(
-        fromNode: userNodeId,
-        toNode: nearestNodeId,
+      final route = await _routingService.getRouteToNode(
+        startX: startX,
+        startY: startY,
+        startLevel: startLevel,
+        nodeId: nearestNodeId,
       );
 
       if (!mounted) return;
@@ -146,7 +202,6 @@ class _NavbarState extends State<Navbar> {
         poi: seatPOI,
         route: route,
         onNavigate: () {
-          // Feedback de navegação
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('A navegar para ${seatPOI.name}'),

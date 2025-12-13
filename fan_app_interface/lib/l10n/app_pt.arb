@@ -31,6 +31,15 @@
   },
   "evacuation": "EVACUAÇÃO",
   "map": "MAPA",
+  "turnLeft": "Vire à esquerda",
+  "turnRight": "Vire à direita",
+  "continueStraight": "Continue em frente",
+  "arriveAtDestination": "Chegada ao destino",
+  "arrival": "chegada",
+  "time": "hrs",
+  "distance": "m",
+  "destination": "destino",
+  "endRoute": "Terminar Rota",
   "addTicket": "Adicionar Bilhete",
   "scanTicketQR": "Digitalizar QR do Bilhete",
   "ticketInfo": "Informação do Bilhete",
@@ -46,5 +55,5 @@
   "cancel": "Cancelar",
   "firstAid": "Primeiros Socorros",
   "information": "Informação",
-  "merchandising": "Merchandising"
+  "merchandising": "Loja"
 }
