@@ -8,6 +8,7 @@ import 'features/hub/presentation/menu_button.dart';
 import 'features/map/presentation/filter_button.dart';
 import 'features/ticket/presentation/ticket_menu.dart';
 import 'features/map/data/services/congestion_service.dart';
+import 'features/navigation/data/services/user_position_service.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -32,9 +33,19 @@ class _HomeState extends State<Home> {
   @override
   void initState() {
     super.initState();
+    _loadInitialFilter();
     _checkCongestionHealth();
     // Iniciar timer de 30s (só verifica quando heatmap está desligado)
     _startHealthCheckTimer();
+  }
+
+  Future<void> _loadInitialFilter() async {
+    final pos = await UserPositionService.getPosition();
+    if (mounted) {
+      setState(() {
+        _currentFloor = pos.level;
+      });
+    }
   }
 
   @override
@@ -95,6 +106,13 @@ class _HomeState extends State<Home> {
             showHeatmap: _showHeatmap,
             onHeatmapConnectionError: _onHeatmapConnectionError,
             onHeatmapConnectionSuccess: _onHeatmapConnectionSuccess,
+            onFloorChanged: (floor) {
+              if (_currentFloor != floor) {
+                setState(() {
+                  _currentFloor = floor;
+                });
+              }
+            },
             currentFloor: _currentFloor,
           ),
           Positioned(
@@ -104,7 +122,11 @@ class _HomeState extends State<Home> {
             child: Container(
               height: 240,
               color: Colors.transparent,
-              child: const Navbar(),
+              child: Navbar(
+                onNavigationEnd: () {
+                  _mapPageKey.currentState?.reloadUserPosition();
+                },
+              ),
             ),
           ),
           // Filter button - top right below navbar
@@ -166,7 +188,7 @@ class _HomeState extends State<Home> {
                   borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -177,7 +199,7 @@ class _HomeState extends State<Home> {
                     const SizedBox(width: 16),
                     Transform(
                       alignment: Alignment.center,
-                      transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                      transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
                       child: const Icon(
                         Icons.search,
                         color: Colors.white,

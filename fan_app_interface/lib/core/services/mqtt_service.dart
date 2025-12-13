@@ -12,7 +12,8 @@ class MqttService {
 
   // Broker configuration (Service-to-Client-Broker)
   static const String _broker = 'localhost';
-  static const int _port = 1884; // MQTT port (mapped from container 1883)
+  static const int _port =
+      1884; // MQTT port for client-mosquitto (service-to-client-broker)
   static const String _clientId = 'fanapp_flutter';
 
   // Topics from Stadium Event Generator / Services

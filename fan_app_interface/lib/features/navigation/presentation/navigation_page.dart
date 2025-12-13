@@ -16,41 +16,71 @@ class NavigationPage extends StatefulWidget {
   final List<NodeModel> nodes;
   final double? initialX;
   final double? initialY;
+  final int? initialLevel;
 
   const NavigationPage({
-    Key? key,
+    super.key,
     required this.route,
     required this.destination,
     required this.nodes,
     this.initialX,
     this.initialY,
-  }) : super(key: key);
+    this.initialLevel,
+  });
 
   @override
   State<NavigationPage> createState() => _NavigationPageState();
 }
 
-class _NavigationPageState extends State<NavigationPage> {
+class _NavigationPageState extends State<NavigationPage>
+    with TickerProviderStateMixin {
   late NavigationController _controller;
   final MapController _mapController = MapController();
+
+  // Controlador de animação para movimento suave do mapa
+  late AnimationController _animationController;
+  Animation<double>? _latAnimation;
+  Animation<double>? _lngAnimation;
+  Animation<double>? _rotAnimation;
 
   // Escala para corresponder ao StadiumMapPage
 
   @override
   void initState() {
     super.initState();
+    // Duração curta para corresponder à frequência de updates (100ms) mas suavizar snaps
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
     _controller = NavigationController(
       route: widget.route,
       destination: widget.destination,
       allNodes: widget.nodes,
       initialX: widget.initialX,
       initialY: widget.initialY,
+      initialLevel: widget.initialLevel,
     );
     _controller.addListener(_onNavigationUpdate);
+
+    // Configurar listener da animação
+    _animationController.addListener(() {
+      if (_latAnimation != null &&
+          _lngAnimation != null &&
+          _rotAnimation != null) {
+        _mapController.moveAndRotate(
+          LatLng(_latAnimation!.value, _lngAnimation!.value),
+          20.0, // Zoom constante ou animado se necessário
+          _rotAnimation!.value,
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
+    _animationController.dispose();
     _controller.removeListener(_onNavigationUpdate);
     _controller.dispose();
     super.dispose();
@@ -67,7 +97,8 @@ class _NavigationPageState extends State<NavigationPage> {
     if (_controller.hasArrived) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
-          Navigator.of(context).pop();
+          // Voltar à Home (root) independentemente de onde veio
+          Navigator.of(context).popUntil((route) => route.isFirst);
         }
       });
     }
@@ -91,23 +122,52 @@ class _NavigationPageState extends State<NavigationPage> {
     final userLat = center.latitude + (centeredY * unitsToLatDegrees);
     final userLng = center.longitude + (centeredX * unitsToLngDegrees);
 
-    // Move e roda câmara como no Google Maps
-    // O mapa roda para que a direção de viagem esteja sempre para CIMA
+    // Mover e rodar câmara com animação
     try {
-      _mapController.moveAndRotate(
-        LatLng(userLat, userLng),
-        20.0, // Zoom
-        -_controller
-            .heading, // Rotação negativa para que o heading fique para cima
-      );
+      final targetRot = _controller.heading - 180.0;
+      _animateMapTo(LatLng(userLat, userLng), targetRot);
     } catch (e) {
       // Mapa ainda não renderizado, ignorar
     }
   }
 
-  void _endNavigation() {
-    _controller.endNavigation();
-    Navigator.of(context).pop();
+  void _animateMapTo(LatLng destLocation, double destRotation) {
+    if (!mounted) return;
+
+    // Obter valores atuais
+    final startLat = _mapController.camera.center.latitude;
+    final startLng = _mapController.camera.center.longitude;
+    final startRot = _mapController.camera.rotation;
+
+    // Calcular rotação mais curta (evitar girar 360 graus desnecessariamente)
+    double diff = (destRotation - startRot + 180) % 360 - 180;
+    // Ajustar destRotation para ser vizinha de startRot
+    final adjustedDestRot = startRot + diff;
+
+    // Se a mudança for muito pequena, movemos instantaneamente (optimização)
+    // Mas para suavidade total, animamos tudo.
+    _latAnimation = Tween<double>(begin: startLat, end: destLocation.latitude)
+        .animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.linear),
+        );
+    _lngAnimation = Tween<double>(begin: startLng, end: destLocation.longitude)
+        .animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.linear),
+        );
+    _rotAnimation = Tween<double>(begin: startRot, end: adjustedDestRot)
+        .animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
+
+    _animationController.reset();
+    _animationController.forward();
+  }
+
+  Future<void> _endNavigation() async {
+    await _controller.endNavigation();
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 
   String _getArrivalTime() {
@@ -151,6 +211,8 @@ class _NavigationPageState extends State<NavigationPage> {
             userPosition: userPosition,
             userHeading: _controller.heading,
             routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
+            initialFloor:
+                _controller.currentLevel, // Piso dinâmico durante navegação
           ),
 
           // Header com instrução de navegação (topo)

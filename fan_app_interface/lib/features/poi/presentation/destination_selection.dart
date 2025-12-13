@@ -75,7 +75,6 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
   int? selectedIndex;
   List<POIWithRoute> _poisWithRoutes = [];
   List<NodeModel> _allNodes = [];
-  NodeModel? _userNode;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -130,20 +129,6 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
   }
 
-  /// Encontra o nó mais próximo de uma posição
-  NodeModel _findNearestNode(List<NodeModel> nodes, double x, double y) {
-    NodeModel? nearest;
-    double minDist = double.infinity;
-    for (final node in nodes) {
-      final dist = _euclideanDistance(node.x, node.y, x, y);
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = node;
-      }
-    }
-    return nearest ?? nodes.first;
-  }
-
   /// Carrega POIs e inicia cálculo de rotas em background
   Future<void> _loadPOIs() async {
     setState(() {
@@ -162,11 +147,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
         _userX = savedPosition.x;
         _userY = savedPosition.y;
-        // Encontrar nível do nó mais próximo
-        final nearestNode = _findNearestNode(allNodes, _userX, _userY);
-        _userLevel = nearestNode.level;
+        _userLevel = savedPosition.level; // Usar nível guardado
         print(
-          '[DestinationSelection] 📍 Usando posição guardada: ($_userX, $_userY)',
+          '[DestinationSelection] 📍 Usando posição guardada: ($_userX, $_userY, level=$_userLevel)',
         );
       } else {
         // Fallback para N1
@@ -177,14 +160,12 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
         _userX = userNode.x;
         _userY = userNode.y;
         _userLevel = userNode.level;
-        print('[DestinationSelection] 📍 Fallback para N1: ($_userX, $_userY)');
+        print(
+          '[DestinationSelection] 📍 Fallback para N1: ($_userX, $_userY, level=$_userLevel)',
+        );
       }
 
       _allNodes = allNodes;
-      _userNode = allNodes.firstWhere(
-        (n) => n.id == userNodeId,
-        orElse: () => allNodes.first,
-      );
 
       // Filtrar POIs da categoria
       final categoryPois = allPois.where((poi) {
@@ -260,29 +241,35 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       await Future.wait(futures);
 
       if (mounted) {
-        // Encontrar o mais rápido (menor ETA)
-        int? fastestIdx;
-        int? fastestTime;
+        // Reordenar a lista pelo tempo total (Menor tempo primeiro)
+        _poisWithRoutes.sort(
+          (a, b) => a.totalEtaMinutes.compareTo(b.totalEtaMinutes),
+        );
 
-        for (int i = 0; i < _poisWithRoutes.length; i++) {
-          final eta = _poisWithRoutes[i].totalEtaMinutes;
-          if (fastestTime == null || eta < fastestTime) {
-            fastestTime = eta;
-            fastestIdx = i;
-          }
-        }
+        // Como ordenámos, o mais rápido é o primeiro (índice 0)
+        int fastestIdx = 0;
 
         setState(() {
           _isCalculatingAllRoutes = false;
           _allRoutesCalculated = true;
           _fastestIndex = fastestIdx;
 
-          // Atualizar rota selecionada se já temos
-          if (selectedIndex != null &&
-              _poisWithRoutes[selectedIndex!].hasRoute) {
-            _selectedRoute = _poisWithRoutes[selectedIndex!].route;
+          // Selecionar automaticamente o primeiro (mais rápido)
+          if (_poisWithRoutes.isNotEmpty) {
+            selectedIndex = 0;
+            if (_poisWithRoutes[0].hasRoute) {
+              _selectedRoute = _poisWithRoutes[0].route;
+            }
           }
         });
+
+        // Atualizar zoom para a rota do mais rápido
+        if (_selectedRoute != null) {
+          // Pequeno delay para garantir que o UI atualizou a lista
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _zoomToRoute(_selectedRoute!);
+          });
+        }
       }
     } catch (e) {
       print('[DestinationSelection] Erro no cálculo em background: $e');
@@ -453,6 +440,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                   highlightedRoute: _selectedRoute,
                   highlightedPOI: selectedPOI,
                   showAllPOIs: false,
+                  showOtherPOIs: false,
                 ),
                 if (_isCalculatingSelectedRoute)
                   Positioned(
@@ -582,6 +570,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                               route: _selectedRoute!,
                               destination: _poisWithRoutes[selectedIndex!].poi,
                               nodes: _allNodes,
+                              initialX: _userX,
+                              initialY: _userY,
+                              initialLevel: _userLevel,
                             ),
                           ),
                         );
@@ -693,6 +684,27 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                         ),
                         Row(
                           children: [
+                            // Piso
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.indigo.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.white30),
+                              ),
+                              child: Text(
+                                'Piso ${item.poi.level}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             // Tempo de caminhada
                             const Icon(
                               Icons.directions_walk,

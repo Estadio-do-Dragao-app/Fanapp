@@ -32,6 +32,11 @@ class RoutingService {
       avoidStairs: avoidStairs,
     );
 
+    print(
+      '[RoutingService] 🚀 POST /api/route: startLevel=$startLevel, dest=$destinationType:$destinationId',
+    );
+    print('[RoutingService] 📦 Request body: ${json.encode(request.toJson())}');
+
     final response = await http.post(
       Uri.parse('$baseUrl/api/route'),
       headers: {'Content-Type': 'application/json'},

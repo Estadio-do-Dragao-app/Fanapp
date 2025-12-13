@@ -10,12 +10,15 @@ import 'package:fan_app_interface/features/map/data/models/node_model.dart';
 import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
 import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
 import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
+import 'package:fan_app_interface/features/navigation/data/services/user_position_service.dart';
 import 'dart:math';
 
 /// Simple MapPage implementation that shows a placeholder 'map' area and a
 /// horizontal row of category buttons overlayed at the top.
 class Navbar extends StatefulWidget {
-  const Navbar({Key? key}) : super(key: key);
+  final VoidCallback? onNavigationEnd;
+
+  const Navbar({Key? key, this.onNavigationEnd}) : super(key: key);
 
   @override
   State<Navbar> createState() => _NavbarState();
@@ -51,6 +54,7 @@ class _NavbarState extends State<Navbar> {
       // Tem bilhete - navegar diretamente para o lugar
       if (!mounted) return;
       await _navigateToSeat(ticket, localizations);
+      if (mounted) widget.onNavigationEnd?.call();
       return;
     }
 
@@ -62,7 +66,9 @@ class _NavbarState extends State<Navbar> {
             DestinationSelectionPage(categoryId: categoryIds[i]),
         transitionsBuilder: _buildSlideTransition,
       ),
-    );
+    ).then((_) {
+      if (mounted) widget.onNavigationEnd?.call();
+    });
   }
 
   /// Encontra o nó mais próximo de uma coordenada
@@ -158,17 +164,32 @@ class _NavbarState extends State<Navbar> {
         allNodes,
       );
 
-      // Obter posição do utilizador a partir do nó N1
-      final userNode = allNodes.firstWhere(
-        (n) => n.id == userNodeId,
-        orElse: () => allNodes.first,
-      );
+      // Obter posição guardada do utilizador
+      final savedPosition = await UserPositionService.getPosition();
+      double startX;
+      double startY;
+      int startLevel;
+
+      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+        startX = savedPosition.x;
+        startY = savedPosition.y;
+        startLevel = savedPosition.level;
+      } else {
+        // Fallback para N1
+        final userNode = allNodes.firstWhere(
+          (n) => n.id == userNodeId,
+          orElse: () => allNodes.first,
+        );
+        startX = userNode.x;
+        startY = userNode.y;
+        startLevel = userNode.level;
+      }
 
       // Calcular rota
       final route = await _routingService.getRouteToNode(
-        startX: userNode.x,
-        startY: userNode.y,
-        startLevel: userNode.level,
+        startX: startX,
+        startY: startY,
+        startLevel: startLevel,
         nodeId: nearestNodeId,
       );
 

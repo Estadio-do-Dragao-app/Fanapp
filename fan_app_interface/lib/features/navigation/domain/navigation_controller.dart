@@ -17,6 +17,7 @@ class NavigationController extends ChangeNotifier {
   final List<NodeModel> allNodes;
   final double? initialX;
   final double? initialY;
+  final int? initialLevel;
 
   late RouteModel route;
   late RouteTracker _tracker;
@@ -33,13 +34,18 @@ class NavigationController extends ChangeNotifier {
   // Heading em graus (0 = Este/Direita, 90 = Sul/Baixo)
   double _heading = 0.0;
 
+  // Piso atual (baseado no waypoint atual)
+  int _currentLevel = 0;
+
   NavigationController({
     required RouteModel route,
     required this.destination,
     required this.allNodes,
     this.initialX,
     this.initialY,
-  }) : initialRoute = route {
+    this.initialLevel,
+  }) : initialRoute = route,
+       _currentLevel = initialLevel ?? 0 {
     this.route = route;
     _tracker = RouteTracker(route: route, allNodes: allNodes);
 
@@ -81,19 +87,29 @@ class NavigationController extends ChangeNotifier {
   bool get hasArrived => _tracker.hasArrived;
   RouteTracker get tracker => _tracker;
   double get heading => _heading;
+  int get currentLevel => _currentLevel;
 
   /// Inicializa o tracking e instruções
   /// Usa posição fornecida, ou carrega do UserPositionService, ou fallback para N1
   void _initialize() async {
     double startX;
     double startY;
+    int startLevel =
+        _currentLevel; // Inicializar com o nível passado no construtor
 
     if (initialX != null && initialY != null) {
       // Usar posição passada como parâmetro
       startX = initialX!;
       startY = initialY!;
+      // Se initialLevel foi fornecido, usá-lo, caso contrário, carregar do serviço
+      if (initialLevel != null) {
+        startLevel = initialLevel!;
+      } else {
+        final savedPosition = await UserPositionService.getPosition();
+        startLevel = savedPosition.level;
+      }
       print(
-        '[NavigationController] 📍 Usando posição fornecida: ($startX, $startY)',
+        '[NavigationController] 📍 Usando posição fornecida: ($startX, $startY, level=$startLevel)',
       );
     } else {
       // Carregar posição do UserPositionService
@@ -101,8 +117,9 @@ class NavigationController extends ChangeNotifier {
       if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
         startX = savedPosition.x;
         startY = savedPosition.y;
+        startLevel = savedPosition.level;
         print(
-          '[NavigationController] 📍 Posição carregada do serviço: ($startX, $startY)',
+          '[NavigationController] 📍 Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
         );
       } else {
         // Fallback: usar N1
@@ -112,13 +129,18 @@ class NavigationController extends ChangeNotifier {
         );
         startX = userNode.x;
         startY = userNode.y;
+        startLevel = userNode.level;
         print(
-          '[NavigationController] 📍 Fallback para nó ${userNode.id}: ($startX, $startY)',
+          '[NavigationController] 📍 Fallback para nó ${userNode.id}: ($startX, $startY, level=$startLevel)',
         );
       }
     }
 
-    _tracker.updateUserPosition(startX, startY);
+    // Usar nível do utilizador (não do primeiro waypoint!)
+    _currentLevel = startLevel;
+    print('[NavigationController] 🏢 Nível inicial: $_currentLevel');
+
+    _tracker.updateUserPosition(startX, startY, level: _currentLevel);
     _updateInstruction();
     notifyListeners();
 
@@ -160,6 +182,7 @@ class NavigationController extends ChangeNotifier {
       final node = nodesMap[targetWp.nodeId];
       final targetX = node?.x ?? targetWp.x;
       final targetY = node?.y ?? targetWp.y;
+      final targetLevel = node?.level ?? targetWp.level;
 
       final currentX = _tracker.currentX;
       final currentY = _tracker.currentY;
@@ -170,6 +193,20 @@ class NavigationController extends ChangeNotifier {
 
       // Se chegou ao waypoint atual (menos de 1.5 unidades), passar para o próximo
       if (distance < 1.5) {
+        // Verificar mudança de piso ao atingir waypoint de escadas/rampa
+        if (targetLevel != _currentLevel) {
+          print(
+            '[NavigationController] 🪜 Mudança de piso: $_currentLevel -> $targetLevel',
+          );
+          _currentLevel = targetLevel;
+          // Atualizar nível no tracker também!
+          _tracker.updateUserPosition(
+            _tracker.currentX,
+            _tracker.currentY,
+            level: _currentLevel,
+          );
+          notifyListeners(); // Notificar UI para mudar o piso do mapa
+        }
         _targetWaypointIndex++;
         continue;
       }
@@ -301,6 +338,7 @@ class NavigationController extends ChangeNotifier {
       x: finalX,
       y: finalY,
       nodeId: finalNode.id,
+      level: _currentLevel,
     );
     print(
       '[NavigationController] 💾 Posição final guardada: x=$finalX, y=$finalY, node=${finalNode.id}',
@@ -310,7 +348,7 @@ class NavigationController extends ChangeNotifier {
   }
 
   /// Termina a navegação manualmente
-  void endNavigation() async {
+  Future<void> endNavigation() async {
     _isNavigating = false;
     _updateTimer?.cancel();
 
@@ -323,6 +361,7 @@ class NavigationController extends ChangeNotifier {
       x: finalX,
       y: finalY,
       nodeId: finalNode.id,
+      level: _currentLevel,
     );
     print(
       '[NavigationController] 💾 Posição guardada ao terminar: x=$finalX, y=$finalY, node=${finalNode.id}',

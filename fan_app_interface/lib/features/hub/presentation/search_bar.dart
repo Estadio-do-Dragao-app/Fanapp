@@ -6,6 +6,7 @@ import '../../map/data/models/node_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
+import '../../navigation/data/services/user_position_service.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
@@ -72,17 +73,32 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
     // Calcular rota para o POI (apenas para mostrar distância/tempo)
     RouteModel? route;
     try {
-      // Obter posição do utilizador a partir do nó N1
-      final userNode = _allNodes.firstWhere(
-        (n) => n.id == userNodeId,
-        orElse: () => _allNodes.first,
-      );
+      // Obter posição guardada do utilizador
+      final savedPosition = await UserPositionService.getPosition();
+      double startX;
+      double startY;
+      int startLevel;
+
+      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+        startX = savedPosition.x;
+        startY = savedPosition.y;
+        startLevel = savedPosition.level;
+      } else {
+        // Fallback para N1
+        final userNode = _allNodes.firstWhere(
+          (n) => n.id == userNodeId,
+          orElse: () => _allNodes.first,
+        );
+        startX = userNode.x;
+        startY = userNode.y;
+        startLevel = userNode.level;
+      }
 
       // Usar nova API com coordenadas
       route = await _routingService.getRouteToPOI(
-        startX: userNode.x,
-        startY: userNode.y,
-        startLevel: userNode.level,
+        startX: startX,
+        startY: startY,
+        startLevel: startLevel,
         poiId: poi.id,
       );
     } catch (e) {

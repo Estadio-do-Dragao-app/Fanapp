@@ -23,6 +23,8 @@ class StadiumMapPage extends StatefulWidget {
   final POIModel? highlightedPOI;
   final bool showAllPOIs;
   final bool showHeatmap;
+  final bool
+  showOtherPOIs; // Se false, esconde todos os POIs genéricos (mostra apenas highlighted/user)
   final VoidCallback? onHeatmapConnectionError;
   final VoidCallback? onHeatmapConnectionSuccess;
   final MapController? mapController;
@@ -31,24 +33,29 @@ class StadiumMapPage extends StatefulWidget {
   final double? userHeading;
   final int initialFloor;
   final bool simplifiedMode; // Skip FloorPlanLayer for performance
-  final int routeStartWaypointIndex; // Index a partir do qual desenhar a rota
+  final int routeStartWaypointIndex; // Índice onde começa a linha da rota
+  final Function(POIModel)? onTapPOI;
+  final ValueChanged<int>? onFloorChanged;
 
   const StadiumMapPage({
-    Key? key,
+    super.key,
+    this.initialFloor = 0,
+    this.mapController,
     this.highlightedRoute,
     this.highlightedPOI,
     this.showAllPOIs = true,
+    this.showOtherPOIs = true,
     this.showHeatmap = false,
-    this.onHeatmapConnectionError,
     this.onHeatmapConnectionSuccess,
-    this.mapController,
+    this.onHeatmapConnectionError,
+    this.onTapPOI,
+    this.onFloorChanged,
     this.isNavigating = false,
     this.userPosition,
     this.userHeading,
-    this.initialFloor = 0,
     this.simplifiedMode = false,
     this.routeStartWaypointIndex = 0,
-  }) : super(key: key);
+  });
 
   @override
   State<StadiumMapPage> createState() => StadiumMapPageState();
@@ -63,6 +70,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   // Posição do utilizador (carregada do UserPositionService)
   double _userPositionX = 0.0;
   double _userPositionY = 0.0;
+  int _userLevel = 0; // Guardar nível real do utilizador
   String _userNodeId = 'N1';
   bool _userPositionLoaded = false;
   double _userHeading = 0.0; // Heading em graus (0 = Norte)
@@ -95,24 +103,32 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     _userNodeId = 'N1';
     _userPositionX = 0.0;
     _userPositionY = 0.0;
+    _userLevel = 0;
     _userPositionLoaded = false;
-    _loadUserPosition(); // Carregar posição guardada
+    loadUserPosition(); // Carregar posição guardada
     _loadMapData();
   }
 
   /// Carrega a posição guardada do utilizador
-  Future<void> _loadUserPosition() async {
+  Future<void> loadUserPosition({bool updateFloor = true}) async {
     final position = await UserPositionService.getPosition();
     if (mounted) {
       setState(() {
         _userPositionX = position.x;
         _userPositionY = position.y;
         _userNodeId = position.nodeId;
+        _userLevel = position.level; // Guardar nível real
+
+        // Só atualizar _currentFloor a partir da posição guardada se solicitado E não estivermos em navegação
+        if (updateFloor && !widget.isNavigating) {
+          if (_currentFloor != position.level) {
+            _currentFloor = position.level;
+            widget.onFloorChanged?.call(_currentFloor);
+            _loadMapData();
+          }
+        }
         _userPositionLoaded = true;
       });
-      print(
-        '[StadiumMapPage] 📍 Posição carregada: x=${position.x}, y=${position.y}, node=${position.nodeId}',
-      );
     }
   }
 
@@ -127,12 +143,11 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     }
     // Atualizar piso quando mudar externamente
     if (widget.initialFloor != oldWidget.initialFloor) {
-      print(
-        '[StadiumMapPage] Piso mudou: ${oldWidget.initialFloor} -> ${widget.initialFloor}',
-      );
-      setState(() {
-        _currentFloor = widget.initialFloor;
-      });
+      // Atualizar _currentFloor sempre que o pai mandar (NavigationPage ou FilterButton)
+      _currentFloor = widget.initialFloor;
+      loadUserPosition(
+        updateFloor: false,
+      ); // Reload position data but keep current floor
       _loadMapData();
     }
     // Carregar heatmap quando ativado
@@ -145,18 +160,15 @@ class StadiumMapPageState extends State<StadiumMapPage> {
 
   /// Inicia atualização periódica do heatmap (cada 10 segundos)
   void _startHeatmapUpdates() {
-    print('[StadiumMapPage] Iniciando atualizações do heatmap (10s)');
     _loadHeatmapData(); // Carregar imediatamente
     _heatmapTimer?.cancel();
     _heatmapTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      print('[StadiumMapPage] Timer tick - atualizando heatmap');
       _loadHeatmapData();
     });
   }
 
   /// Para atualização periódica do heatmap
   void _stopHeatmapUpdates() {
-    print('[StadiumMapPage] Parando atualizações do heatmap');
     _heatmapTimer?.cancel();
     _heatmapTimer = null;
   }
@@ -169,12 +181,8 @@ class StadiumMapPageState extends State<StadiumMapPage> {
 
   /// Carrega dados de congestão para o heatmap
   Future<void> _loadHeatmapData() async {
-    print('[StadiumMapPage] Carregando dados do heatmap...');
     try {
-      final data = await _congestionService.getStadiumHeatmap();
-      print(
-        '[StadiumMapPage] Heatmap carregado: ${data.sections.length} seções, avg: ${data.averageCongestion}',
-      );
+      final data = _congestionService.getStadiumHeatmap();
       if (mounted) {
         setState(() {
           _heatmapData = data;
@@ -183,7 +191,6 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         widget.onHeatmapConnectionSuccess?.call();
       }
     } catch (e) {
-      print('[StadiumMapPage] Erro ao carregar heatmap: $e');
       // Limpar dados do heatmap em caso de erro
       if (mounted) {
         setState(() {
@@ -204,41 +211,27 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     const LatLng(41.1635, -8.5820), // Northeast
   );
 
-  /// Filtra POIs pela viewport visível para melhor performance
-  List<POIModel> _filterPOIsByViewport(List<POIModel> pois) {
-    try {
-      final bounds = _mapController.camera.visibleBounds;
-      return pois.where((poi) {
-        final poiLatLng = _convertToLatLng(poi.x, poi.y);
-        return bounds.contains(poiLatLng);
-      }).toList();
-    } catch (e) {
-      // Se não conseguir obter bounds, retornar todos
-      return pois;
-    }
-  }
-
   Future<void> _loadMapData() async {
+    final floorToLoad = _currentFloor;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      print('[StadiumMapPage] Carregando POIs do piso $_currentFloor...');
-
       // Carregar POIs, nós, arestas, tiles e lugares guardados
-      final pois = await _mapService.getPOIsByFloor(_currentFloor);
+      // Usar a variável capturada para garantir consistência
+      final pois = await _mapService.getPOIsByFloor(floorToLoad);
       final nodes = await _mapService.getAllNodes();
       final edges = await _mapService.getAllEdges();
-      final tiles = await _mapService.getAllTiles(level: _currentFloor);
+      final tiles = await _mapService.getAllTiles(level: floorToLoad);
       final savedPlaces = await SavedPlacesService.getSavedPlaces();
 
-      print('[StadiumMapPage] ${pois.length} POIs carregados');
-      print('[StadiumMapPage] ${nodes.length} nós carregados');
-      print('[StadiumMapPage] ${edges.length} arestas carregadas');
-      print('[StadiumMapPage] ${tiles.length} tiles carregados');
-      print('[StadiumMapPage] ${savedPlaces.length} lugares guardados');
+      if (!mounted) return;
+      // Race condition protection: Se o piso mudou enquanto carregávamos, descartar
+      if (_currentFloor != floorToLoad) {
+        return;
+      }
 
       setState(() {
         _pois = pois;
@@ -252,7 +245,6 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       // Fazer zoom na posição do utilizador após carregar dados
       _zoomToUserPosition();
     } catch (e) {
-      print('[StadiumMapPage] Erro ao carregar POIs: $e');
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -276,9 +268,6 @@ class StadiumMapPageState extends State<StadiumMapPage> {
             (_userPositionX != 0.0 || _userPositionY != 0.0)) {
           final userLatLng = _convertToLatLng(_userPositionX, _userPositionY);
           _mapController.move(userLatLng, 20.0);
-          print(
-            '[StadiumMapPage] 🔍 Zoom na posição do utilizador: $_userPositionX, $_userPositionY',
-          );
         } else if (_nodes.isNotEmpty) {
           // Fallback: usar nó N1 ou primeiro nó
           final userNode = _nodes.firstWhere(
@@ -287,11 +276,8 @@ class StadiumMapPageState extends State<StadiumMapPage> {
           );
           final userLatLng = _convertToLatLng(userNode.x, userNode.y);
           _mapController.move(userLatLng, 20.0);
-          print('[StadiumMapPage] 🔍 Zoom no nó ${userNode.id}');
         }
-      } catch (e) {
-        print('[StadiumMapPage] ⚠️ Erro ao fazer zoom inicial: $e');
-      }
+      } catch (e) {}
     });
   }
 
@@ -335,31 +321,29 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     _mapController.move(poiLocation, 19.5);
 
     // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
+    // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
     RouteModel? route;
     try {
-      // Usar posição guardada do utilizador (ou fallback para nó)
-      double startX = _userPositionX;
-      double startY = _userPositionY;
-      int startLevel = 0;
+      // 1. Obter posição fresca do utilizador
+      final savedPos = await UserPositionService.getPosition();
+      double startX;
+      double startY;
+      int startLevel;
 
-      // Se não tem posição válida, usar nó guardado
-      if (startX == 0.0 && startY == 0.0 && _nodes.isNotEmpty) {
-        final userNode = _nodes.firstWhere(
-          (n) => n.id == _userNodeId,
-          orElse: () => _nodes.first,
-        );
-        startX = userNode.x;
-        startY = userNode.y;
-        startLevel = userNode.level;
+      if (savedPos.x != 0.0 || savedPos.y != 0.0) {
+        startX = savedPos.x;
+        startY = savedPos.y;
+        startLevel = savedPos.level;
+      } else {
+        startX = _userPositionX;
+        startY = _userPositionY;
+        // Se não há posição guardada, usar _userLevel se disponível, se não, fallback inteligente
+        // Se startX é 0 (posição default), assumimos N1 (nível 1).
+        // Se startX != 0 mas _userLevel é 0, usamos _currentFloor como "melhor palpite" (mas isso causou o bug, então preferimos 1 se startX for 0)
+        startLevel = _userLevel != 0
+            ? _userLevel
+            : (startX != 0.0 ? _currentFloor : 1);
       }
-
-      print('[StadiumMapPage] === DEBUG ROTA ===');
-      print(
-        '[StadiumMapPage] Utilizador em ($startX, $startY) level $startLevel',
-      );
-      print(
-        '[StadiumMapPage] Destino POI: ${poi.id} "${poi.name}" em (${poi.x}, ${poi.y}) level ${poi.level}',
-      );
 
       // Usar rota por coordenadas para evitar 404 se o ID não existir no backend
       route = await _routingService.getRouteToCoordinates(
@@ -371,22 +355,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         endLevel: poi.level,
         allNodes: _nodes,
       );
-
-      print('[StadiumMapPage] Rota calculada com sucesso!');
-      print('[StadiumMapPage] - Distância: ${route.distance}m');
-      print('[StadiumMapPage] - Tempo estimado: ${route.estimatedTime}s');
-      print('[StadiumMapPage] - Waypoints: ${route.waypoints.length}');
-      if (route.waypoints.isNotEmpty) {
-        print(
-          '[StadiumMapPage] - Primeiro waypoint: (${route.waypoints.first.x}, ${route.waypoints.first.y})',
-        );
-        print(
-          '[StadiumMapPage] - Último waypoint: (${route.waypoints.last.x}, ${route.waypoints.last.y})',
-        );
-      }
-    } catch (e) {
-      print('[StadiumMapPage] ERRO ao calcular rota: $e');
-    }
+    } catch (e) {}
 
     if (!mounted) return;
 
@@ -406,11 +375,12 @@ class StadiumMapPageState extends State<StadiumMapPage> {
                 nodes: _nodes,
                 initialX: _userPositionX,
                 initialY: _userPositionY,
+                initialLevel: _userLevel,
               ),
             ),
           ).then((_) {
             // Recarregar posição do utilizador quando voltar da navegação
-            _loadUserPosition();
+            loadUserPosition();
           });
 
           // Também desenhar rota no mapa caso volte
@@ -520,9 +490,6 @@ class StadiumMapPageState extends State<StadiumMapPage> {
 
     // Verificar se a posição pretendida é walkable
     if (!_isPositionWalkable(targetX, targetY)) {
-      print(
-        '[StadiumMapPage] ⚠️ Movimento bloqueado - área não walkable (x=$targetX, y=$targetY)',
-      );
       return;
     }
 
@@ -557,26 +524,20 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       x: newX,
       y: newY,
       nodeId: nearestNode.id,
+      level: _currentFloor,
     );
 
     // Centrar mapa no utilizador
     try {
       final userLatLng = _convertToLatLng(newX, newY);
       _mapController.move(userLatLng, _mapController.camera.zoom);
-    } catch (e) {
-      print('[StadiumMapPage] ⚠️ Erro ao mover mapa: $e');
-    }
-
-    print(
-      '[StadiumMapPage] 🚶 Utilizador moveu para x=$newX, y=$newY (nó próximo: ${nearestNode.id})',
-    );
+    } catch (e) {}
   }
 
   /// Verifica se uma posição está numa área walkable
   bool _isPositionWalkable(double x, double y) {
     // Se não há tiles carregados, permitir movimento (fallback)
     if (_tiles.isEmpty) {
-      print('[StadiumMapPage] ⚠️ Tiles não carregados - permitindo movimento');
       return true;
     }
 
@@ -603,18 +564,14 @@ class StadiumMapPageState extends State<StadiumMapPage> {
 
       // Se está a menos de 50 unidades de um nó, permitir movimento
       if (nearestNode != null && minDist < 50 * 50) {
-        print(
-          '[StadiumMapPage] ✅ Posição perto do nó ${nearestNode.id} - permitindo movimento',
-        );
         return true;
       }
     }
 
     // Fallback: permitir movimento mesmo fora dos tiles (para dev/testing)
     // Comentar esta linha para comportamento mais restrito
-    print(
-      '[StadiumMapPage] ⚠️ Posição fora de qualquer tile - permitindo movimento (modo dev)',
-    );
+    // Fallback: permitir movimento mesmo fora dos tiles (para dev/testing)
+    // Comentar esta linha para comportamento mais restrito
     return true;
   }
 
@@ -685,7 +642,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         CircleMarker(
           point: position,
           radius: 20,
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
           borderColor: Colors.transparent,
           borderStrokeWidth: 0,
         ),
@@ -696,7 +653,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         CircleMarker(
           point: position,
           radius: 10,
-          color: color.withOpacity(0.6),
+          color: color.withValues(alpha: 0.6),
           borderColor: Colors.transparent,
           borderStrokeWidth: 0,
         ),
@@ -758,73 +715,75 @@ class StadiumMapPageState extends State<StadiumMapPage> {
 
     // IMPORTANTE: O Routing Service retorna coordenadas incorretas!
     // Usamos os node_ids para buscar as coordenadas corretas dos nós do Map Service
+    // Mas confiamos no LEVEL retornado pelo Routing Service (pois define a rota 3D)
     final nodesMap = {for (var n in _nodes) n.id: n};
 
-    print('[StadiumMapPage] === DESENHANDO ROTA ===');
-    print(
-      '[StadiumMapPage] Waypoints do Routing Service: ${route.waypoints.length}',
-    );
+    // Lista de segmentos de rota (listas de pontos) para desenhar
+    // O traço pode ser interrompido (ex: vai ao piso 0 e volta ao 1)
+    final segments = <List<LatLng>>[];
+    var currentSegment = <LatLng>[];
 
-    final points = <LatLng>[];
-
-    // FILTRAR: Começar a partir do índice do próximo waypoint (não o atual)
-    // Isto evita criar uma linha de volta ao waypoint já passado
+    // FILTRAR: Começar a partir do índice do próximo waypoint
     final startIndex = widget.routeStartWaypointIndex.clamp(
       0,
       route.waypoints.length,
     );
     final remainingWaypoints = route.waypoints.skip(startIndex);
 
-    // Durante navegação: a linha começa na posição do utilizador
-    if (widget.isNavigating && widget.userPosition != null) {
-      points.add(widget.userPosition!);
-      print(
-        '[StadiumMapPage] Linha começa no utilizador: ${widget.userPosition!.latitude}, ${widget.userPosition!.longitude}',
-      );
+    // Durante navegação: a semirreta do utilizador
+    // Só adicionamos se o utilizador estiver neste piso
+    if (widget.isNavigating &&
+        widget.userPosition != null &&
+        widget.initialFloor == _currentFloor) {
+      currentSegment.add(widget.userPosition!);
+      // Nota: Não adicionamos aos segments ainda, esperamos pelo primeiro ponto válido da rota para conectar
     }
 
-    int foundCount = 0;
-    int notFoundCount = 0;
-
-    print(
-      '[StadiumMapPage] routeStartWaypointIndex=${widget.routeStartWaypointIndex}, desenhando ${remainingWaypoints.length} waypoints restantes',
-    );
-
     for (var wp in remainingWaypoints) {
-      // Tentar encontrar o nó no Map Service
-      final node = nodesMap[wp.nodeId];
-      if (node != null) {
-        points.add(_convertToLatLng(node.x, node.y));
-        foundCount++;
+      // Verificar se este ponto pertence ao piso atual OU se estamos em modo preview (mostrar tudo)
+      if (!widget.isNavigating || wp.level == _currentFloor) {
+        // Tentar encontrar o nó no Map Service para coords precisas
+        final node = nodesMap[wp.nodeId];
+        LatLng point;
+        if (node != null) {
+          point = _convertToLatLng(node.x, node.y);
+        } else {
+          point = _convertToLatLng(wp.x, wp.y);
+        }
+        currentSegment.add(point);
       } else {
-        // Fallback: usar coordenadas do routing service (podem estar erradas)
-        print(
-          '[StadiumMapPage] AVISO: Nó ${wp.nodeId} não encontrado no Map Service!',
-        );
-        points.add(_convertToLatLng(wp.x, wp.y));
-        notFoundCount++;
+        // Mudança de piso!
+        // Se tínhamos um segmento sendo construído, finalizamo-lo agora.
+        if (currentSegment.isNotEmpty) {
+          // Se o segmento tem apenas 1 ponto (o utilizador ou um ponto isolado),
+          // e esse ponto conecta a outro piso, talvez devêssemos mostrar?
+          // Mas geralmente queremos linhas com >1 ponto.
+          // Contudo, se for userPos -> Stairs (mesmo piso), são 2 pontos.
+          // Se for apenas userPos (sem waypoints neste piso), ignoramos?
+          if (currentSegment.length > 1 ||
+              (widget.isNavigating && currentSegment.isNotEmpty)) {
+            segments.add(List.from(currentSegment));
+          }
+          currentSegment = [];
+        }
       }
     }
 
-    print('[StadiumMapPage] Nós encontrados no Map Service: $foundCount');
-    print('[StadiumMapPage] Nós NÃO encontrados: $notFoundCount');
-    print('[StadiumMapPage] Total de pontos na linha: ${points.length}');
-
-    if (points.isNotEmpty) {
-      print('[StadiumMapPage] Primeiro ponto: ${points.first}');
-      print('[StadiumMapPage] Último ponto: ${points.last}');
+    // Adicionar o último segmento se existir
+    if (currentSegment.isNotEmpty) {
+      segments.add(currentSegment);
     }
 
     return PolylineLayer(
-      polylines: [
-        Polyline(
+      polylines: segments.map((points) {
+        return Polyline(
           points: points,
-          color: Colors.blue,
           strokeWidth: 4.0,
+          color: Colors.blue,
           borderColor: Colors.white,
-          borderStrokeWidth: 2.0,
-        ),
-      ],
+          borderStrokeWidth: 1.0,
+        );
+      }).toList(),
     );
   }
 
@@ -840,62 +799,82 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       currentZoom = _mapController.camera.zoom;
     } catch (e) {
       // MapController ainda não está pronto, usar valor por defeito
-      debugPrint(
-        '[StadiumMapPage] MapController not ready yet, using default zoom',
-      );
     }
-    final showPOIs = widget.isNavigating || currentZoom >= 17.5;
+    // Regra de visibilidade baseada no Zoom (Janela de Visão)
+    final showGenericPOIs = currentZoom >= 17.5;
 
     // Determinar quais POIs mostrar
-    List<POIModel> poisToShow;
+    List<POIModel> poisToShow = [];
 
-    if (widget.isNavigating) {
-      // Durante navegação: mostrar apenas o destino (se houver)
-      poisToShow = widget.highlightedPOI != null
-          ? [widget.highlightedPOI!]
-          : [];
-    } else if (widget.highlightedPOI != null) {
-      // POI destacado (preview de rota): sempre mostrar independente do zoom
-      poisToShow = [widget.highlightedPOI!];
-    } else if (!showPOIs) {
-      // Zoom afastado e sem POI destacado: não mostrar POIs
-      poisToShow = [];
-    } else if (widget.showAllPOIs) {
-      // Mostrar todos os POIs
-      poisToShow = _pois;
-    } else {
-      poisToShow = [];
+    // 1. Mostrar POIs genéricos se o zoom permitir ou "Show All" estiver ativo
+    // MAS apenas se showOtherPOIs for true
+    if (widget.showOtherPOIs && (showGenericPOIs || widget.showAllPOIs)) {
+      poisToShow.addAll(_pois);
+    }
+
+    // 2. Garantir que o POI destacado (Destino ou Seleção) é SEMPRE visível em modo Preview
+    // Em modo Navegação, respeita o piso.
+    if (widget.highlightedPOI != null) {
+      // Se NÃO estamos navegando (Preview), mostramos sempre.
+      // Se ESTAMOS navegando, só mostramos se for do piso atual.
+      bool show =
+          !widget.isNavigating || widget.highlightedPOI!.level == _currentFloor;
+
+      if (show) {
+        if (!poisToShow.any((p) => p.id == widget.highlightedPOI!.id)) {
+          poisToShow.add(widget.highlightedPOI!);
+        }
+      }
     }
 
     // Usar o userMarkers já definido acima
 
     if (widget.isNavigating && widget.userPosition != null) {
       // Modo Navegação: Usar posição dinâmica
-      userMarkers.add(
-        Marker(
-          point: widget.userPosition!,
-          width: 60,
-          height: 60,
-          // O mapa roda, então o ícone fica fixo a apontar para CIMA
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.blueAccent, // Cor diferente para navegação
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
+      // Só mostrar se o utilizador estiver no piso atual visualizado
+      // widget.initialFloor segue o nível do utilizador durante a navegação
+      if (widget.initialFloor == _currentFloor) {
+        // O mapa roda pelo heading, então precisamos contra-rodar o ícone
+        // para que a seta fique SEMPRE a apontar para CIMA no ecrã
+        final headingRadians = (widget.userHeading ?? 0) * (math.pi / 180.0);
+
+        userMarkers.add(
+          Marker(
+            point: widget.userPosition!,
+            width: 60,
+            height: 60,
+            // rotate: true (default) - o marker roda com o mapa
+            // Então usamos Transform.rotate para contra-rodar
+            child: Transform.rotate(
+              angle:
+                  -headingRadians +
+                  math.pi, // Contra-rodar + 180° para correção
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
-              ],
+                child: const Icon(
+                  Icons.navigation,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
             ),
-            child: const Icon(Icons.navigation, color: Colors.white, size: 30),
           ),
-        ),
-      );
-    } else if (_nodes.isNotEmpty || _userPositionLoaded) {
-      // Modo Estático: Usar posição guardada do utilizador
+        );
+      }
+    } else if ((_nodes.isNotEmpty || _userPositionLoaded) &&
+        _userLevel == _currentFloor) {
+      // Modo Estático: Usar posição guardada do utilizador APENAS no mesmo piso
       LatLng userLatLng;
 
       if (_userPositionLoaded &&
@@ -908,6 +887,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
           (n) => n.id == _userNodeId,
           orElse: () => _nodes.first,
         );
+        // Verificar nível do nó também? Assume-se que _userLevel está correto.
         userLatLng = _convertToLatLng(userNode.x, userNode.y);
       }
 
@@ -923,17 +903,13 @@ class StadiumMapPageState extends State<StadiumMapPage> {
               border: Border.all(color: Colors.white, width: 3),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 6,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.person_pin_circle,
-              color: Colors.white,
-              size: 30,
-            ),
+            child: const Icon(Icons.my_location, color: Colors.white, size: 30),
           ),
         ),
       );
@@ -964,7 +940,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: isHighlighted ? 8 : 4,
                       offset: const Offset(0, 2),
                     ),
@@ -978,7 +954,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
               ),
             ),
           );
-        }).toList(),
+        }),
         // POIs normais
         ...poisToShow.map<Marker>((POIModel poi) {
           final position = _convertToLatLng(poi.x, poi.y);
@@ -1010,7 +986,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: isHighlighted ? 8 : 4,
                       offset: const Offset(0, 2),
                     ),
@@ -1024,47 +1000,8 @@ class StadiumMapPageState extends State<StadiumMapPage> {
               ),
             ),
           );
-        }).toList(),
+        }),
       ],
-    );
-  }
-
-  Widget _buildFloorSelector() {
-    return Card(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_upward),
-            onPressed: _currentFloor < 2
-                ? () {
-                    setState(() {
-                      _currentFloor++;
-                    });
-                    _loadMapData();
-                  }
-                : null,
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Text(
-              'Floor $_currentFloor',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.arrow_downward),
-            onPressed: _currentFloor > 0
-                ? () {
-                    setState(() {
-                      _currentFloor--;
-                    });
-                    _loadMapData();
-                  }
-                : null,
-          ),
-        ],
-      ),
     );
   }
 
