@@ -14,12 +14,16 @@ class NavigationPage extends StatefulWidget {
   final RouteModel route;
   final POIModel destination;
   final List<NodeModel> nodes;
+  final double? initialX;
+  final double? initialY;
 
   const NavigationPage({
     Key? key,
     required this.route,
     required this.destination,
     required this.nodes,
+    this.initialX,
+    this.initialY,
   }) : super(key: key);
 
   @override
@@ -39,6 +43,8 @@ class _NavigationPageState extends State<NavigationPage> {
       route: widget.route,
       destination: widget.destination,
       allNodes: widget.nodes,
+      initialX: widget.initialX,
+      initialY: widget.initialY,
     );
     _controller.addListener(_onNavigationUpdate);
   }
@@ -85,8 +91,18 @@ class _NavigationPageState extends State<NavigationPage> {
     final userLat = center.latitude + (centeredY * unitsToLatDegrees);
     final userLng = center.longitude + (centeredX * unitsToLngDegrees);
 
-    // Move câmara suavemente para a posição do utilizador
-    _mapController.move(LatLng(userLat, userLng), 19.0);
+    // Move e roda câmara como no Google Maps
+    // O mapa roda para que a direção de viagem esteja sempre para CIMA
+    try {
+      _mapController.moveAndRotate(
+        LatLng(userLat, userLng),
+        20.0, // Zoom
+        -_controller
+            .heading, // Rotação negativa para que o heading fique para cima
+      );
+    } catch (e) {
+      // Mapa ainda não renderizado, ignorar
+    }
   }
 
   void _endNavigation() {
@@ -134,6 +150,7 @@ class _NavigationPageState extends State<NavigationPage> {
             isNavigating: true,
             userPosition: userPosition,
             userHeading: _controller.heading,
+            routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
           ),
 
           // Header com instrução de navegação (topo)
@@ -159,37 +176,6 @@ class _NavigationPageState extends State<NavigationPage> {
               destination: widget.destination,
               onEndRoute: _endNavigation,
               isEmergency: false,
-            ),
-          ),
-
-          // Controlos manuais (Tank Controls)
-          Positioned(
-            right: 16,
-            bottom: 350,
-            child: Column(
-              children: [
-                // Frente
-                FloatingActionButton(
-                  heroTag: 'forward',
-                  mini: false, // Maior destaque
-                  backgroundColor: const Color(0xFF5B6FE8),
-                  onPressed: () =>
-                      _controller.moveForward(5), // +5m na direção atual
-                  child: const Icon(Icons.arrow_upward, color: Colors.white),
-                ),
-                const SizedBox(height: 16),
-                // Rodar
-                FloatingActionButton(
-                  heroTag: 'rotate',
-                  mini: false,
-                  backgroundColor: Colors.white,
-                  onPressed: () => _controller.rotateUser(45), // +45 graus
-                  child: const Icon(
-                    Icons.rotate_right,
-                    color: Color(0xFF5B6FE8),
-                  ),
-                ),
-              ],
             ),
           ),
 

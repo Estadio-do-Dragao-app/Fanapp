@@ -15,6 +15,8 @@ class NavigationController extends ChangeNotifier {
   final RouteModel initialRoute;
   final POIModel destination;
   final List<NodeModel> allNodes;
+  final double? initialX;
+  final double? initialY;
 
   late RouteModel route;
   late RouteTracker _tracker;
@@ -35,6 +37,8 @@ class NavigationController extends ChangeNotifier {
     required RouteModel route,
     required this.destination,
     required this.allNodes,
+    this.initialX,
+    this.initialY,
   }) : initialRoute = route {
     this.route = route;
     _tracker = RouteTracker(route: route, allNodes: allNodes);
@@ -79,17 +83,119 @@ class NavigationController extends ChangeNotifier {
   double get heading => _heading;
 
   /// Inicializa o tracking e instruções
-  void _initialize() {
-    // Posição inicial do utilizador: usar N1 (mesma posição da Home)
-    // Procurar N1 nos nós disponíveis
-    final userNode = allNodes.firstWhere(
-      (n) => n.id == 'N1',
-      orElse: () => allNodes.first,
-    );
+  /// Usa posição fornecida, ou carrega do UserPositionService, ou fallback para N1
+  void _initialize() async {
+    double startX;
+    double startY;
 
-    // Usar coordenadas do nó N1 do Map Service
-    _tracker.updateUserPosition(userNode.x, userNode.y);
+    if (initialX != null && initialY != null) {
+      // Usar posição passada como parâmetro
+      startX = initialX!;
+      startY = initialY!;
+      print(
+        '[NavigationController] 📍 Usando posição fornecida: ($startX, $startY)',
+      );
+    } else {
+      // Carregar posição do UserPositionService
+      final savedPosition = await UserPositionService.getPosition();
+      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+        startX = savedPosition.x;
+        startY = savedPosition.y;
+        print(
+          '[NavigationController] 📍 Posição carregada do serviço: ($startX, $startY)',
+        );
+      } else {
+        // Fallback: usar N1
+        final userNode = allNodes.firstWhere(
+          (n) => n.id == 'N1',
+          orElse: () => allNodes.first,
+        );
+        startX = userNode.x;
+        startY = userNode.y;
+        print(
+          '[NavigationController] 📍 Fallback para nó ${userNode.id}: ($startX, $startY)',
+        );
+      }
+    }
+
+    _tracker.updateUserPosition(startX, startY);
     _updateInstruction();
+    notifyListeners();
+
+    // Iniciar navegação automática
+    _startAutoNavigation();
+  }
+
+  // Timer para navegação automática
+  Timer? _autoNavTimer;
+  int _targetWaypointIndex = 0;
+
+  /// Inicia navegação automática ao longo da rota
+  void _startAutoNavigation() {
+    if (route.waypoints.isEmpty) return;
+
+    _targetWaypointIndex = 0;
+
+    // Mover a cada 100ms para movimento suave
+    _autoNavTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (!_isNavigating || _tracker.hasArrived) {
+        timer.cancel();
+        return;
+      }
+
+      _moveTowardsNextWaypoint();
+    });
+  }
+
+  /// Move o utilizador gradualmente em direção ao próximo waypoint
+  void _moveTowardsNextWaypoint() {
+    if (route.waypoints.isEmpty) return;
+
+    // Obter coordenadas corretas do waypoint alvo
+    final nodesMap = {for (var n in allNodes) n.id: n};
+
+    // Encontrar o próximo waypoint que ainda não foi atingido
+    while (_targetWaypointIndex < route.waypoints.length) {
+      final targetWp = route.waypoints[_targetWaypointIndex];
+      final node = nodesMap[targetWp.nodeId];
+      final targetX = node?.x ?? targetWp.x;
+      final targetY = node?.y ?? targetWp.y;
+
+      final currentX = _tracker.currentX;
+      final currentY = _tracker.currentY;
+
+      final dx = targetX - currentX;
+      final dy = targetY - currentY;
+      final distance = math.sqrt(dx * dx + dy * dy);
+
+      // Se chegou ao waypoint atual (menos de 1.5 unidades), passar para o próximo
+      if (distance < 1.5) {
+        _targetWaypointIndex++;
+        continue;
+      }
+
+      // Velocidade de caminhada: ~2 unidades por tick (mais lento e natural)
+      const speed = 2.0;
+
+      // Calcular movimento normalizado
+      final moveX = (dx / distance) * math.min(speed, distance);
+      final moveY = (dy / distance) * math.min(speed, distance);
+
+      // Calcular heading para a direção do movimento
+      // atan2(dy, dx) retorna ângulo em radianos onde 0 = direita
+      // Convertemos para sistema onde 0 = cima (norte)
+      // O ícone Icons.navigation aponta para CIMA por defeito
+      _heading = math.atan2(dx, -dy) * (180.0 / math.pi);
+      // Normalizar para 0-360
+      if (_heading < 0) _heading += 360;
+
+      // Mover utilizador
+      moveUser(moveX, moveY);
+      return;
+    }
+
+    // Chegou ao destino
+    _autoNavTimer?.cancel();
   }
 
   /// Roda o utilizador em graus (positivo = horário)
@@ -204,9 +310,24 @@ class NavigationController extends ChangeNotifier {
   }
 
   /// Termina a navegação manualmente
-  void endNavigation() {
+  void endNavigation() async {
     _isNavigating = false;
     _updateTimer?.cancel();
+
+    // Guardar posição atual antes de sair
+    final finalX = _tracker.currentX;
+    final finalY = _tracker.currentY;
+    final finalNode = _findNearestNode(finalX, finalY);
+
+    await UserPositionService.savePosition(
+      x: finalX,
+      y: finalY,
+      nodeId: finalNode.id,
+    );
+    print(
+      '[NavigationController] 💾 Posição guardada ao terminar: x=$finalX, y=$finalY, node=${finalNode.id}',
+    );
+
     notifyListeners();
   }
 

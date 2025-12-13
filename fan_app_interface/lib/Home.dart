@@ -55,8 +55,8 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _checkCongestionHealth() async {
-    final isHealthy = await _congestionService.isServiceHealthy();
-    _updateHealthStatus(isHealthy);
+    final isConnected = await _congestionService.connect();
+    _updateHealthStatus(isConnected);
   }
 
   /// Atualiza estado de disponibilidade (chamado pelo timer ou pelo MapPage)

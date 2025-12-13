@@ -98,6 +98,20 @@ class _NavbarState extends State<Navbar> {
     TicketModel ticket,
     AppLocalizations localizations,
   ) async {
+    // Verificar se o bilhete tem ID do seat no Map-Service
+    if (ticket.seatNodeId == null || ticket.seatNodeId!.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'O bilhete não tem lugar associado. Contacte o suporte.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Mostrar loading
     showDialog(
       context: context,
@@ -107,20 +121,33 @@ class _NavbarState extends State<Navbar> {
     );
 
     try {
-      // Buscar todos os nós do mapa
+      // Buscar coordenadas do seat no Map-Service
+      final seatNode = await _mapService.getSeatById(ticket.seatNodeId!);
+
+      if (seatNode == null) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lugar ${ticket.seatNodeId} não encontrado no mapa.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Buscar todos os nós do mapa para calcular rota
       final allNodes = await _mapService.getAllNodes();
 
-      // Criar um POI virtual para o lugar do utilizador
-      // Assumimos que o lugar está numa posição fixa baseada no sector
-      // TODO: Implementar lógica real de mapeamento de lugares para coordenadas
+      // Criar POI com coordenadas reais do seat
       final seatPOI = POIModel(
-        id: 'seat_${ticket.sectorId}_${ticket.rowId}_${ticket.seatId}',
+        id: ticket.seatNodeId!,
         name:
             '${ticket.sectorId} - Fila ${ticket.rowId} - Lugar ${ticket.seatId}',
         category: 'seat',
-        x: 50.0, // TODO: Calcular posição real baseada no sector/fila/lugar
-        y: 50.0,
-        level: 0,
+        x: seatNode.x,
+        y: seatNode.y,
+        level: seatNode.level,
       );
 
       // Encontrar o nó mais próximo do lugar
@@ -137,7 +164,7 @@ class _NavbarState extends State<Navbar> {
         orElse: () => allNodes.first,
       );
 
-      // Calcular rota usando nova API com coordenadas
+      // Calcular rota
       final route = await _routingService.getRouteToNode(
         startX: userNode.x,
         startY: userNode.y,
@@ -154,7 +181,6 @@ class _NavbarState extends State<Navbar> {
         poi: seatPOI,
         route: route,
         onNavigate: () {
-          // Feedback de navegação
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('A navegar para ${seatPOI.name}'),

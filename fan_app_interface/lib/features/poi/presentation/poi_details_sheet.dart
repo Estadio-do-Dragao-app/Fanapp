@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
+import '../../map/data/services/saved_places_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
 
 /// Bottom sheet que mostra detalhes de um POI
-class POIDetailsSheet extends StatelessWidget {
+class POIDetailsSheet extends StatefulWidget {
   final POIModel poi;
   final RouteModel? route;
   final List<NodeModel>? allNodes;
@@ -43,6 +44,43 @@ class POIDetailsSheet extends StatelessWidget {
   }
 
   @override
+  State<POIDetailsSheet> createState() => _POIDetailsSheetState();
+}
+
+class _POIDetailsSheetState extends State<POIDetailsSheet> {
+  bool _isSaved = false;
+  bool _isCheckingSaved = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfSaved();
+  }
+
+  Future<void> _checkIfSaved() async {
+    final isSaved = await SavedPlacesService.isSaved(widget.poi.id);
+    if (mounted) {
+      setState(() {
+        _isSaved = isSaved;
+        _isCheckingSaved = false;
+      });
+    }
+  }
+
+  Future<void> _toggleSaved() async {
+    if (_isSaved) {
+      await SavedPlacesService.removePlace(widget.poi.id);
+    } else {
+      await SavedPlacesService.savePlace(widget.poi);
+    }
+    if (mounted) {
+      setState(() {
+        _isSaved = !_isSaved;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -50,13 +88,13 @@ class POIDetailsSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cabeçalho com nome e distância
+          // Cabeçalho com nome, distância e botão guardar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Text(
-                  poi.name,
+                  widget.poi.name,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 24,
@@ -65,9 +103,20 @@ class POIDetailsSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              if (route != null)
+              // Botão de guardar/remover lugar
+              if (!_isCheckingSaved)
+                IconButton(
+                  onPressed: _toggleSaved,
+                  icon: Icon(
+                    _isSaved ? Icons.star : Icons.star_border,
+                    color: _isSaved ? Colors.amber : Colors.white70,
+                    size: 28,
+                  ),
+                  tooltip: _isSaved ? 'Remover dos guardados' : 'Guardar lugar',
+                ),
+              if (widget.route != null)
                 Text(
-                  '${route!.distance.toStringAsFixed(0)} m',
+                  '${widget.route!.distance.toStringAsFixed(0)} m',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -77,58 +126,69 @@ class POIDetailsSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          
-          // Descrição do POI (placeholder)
+
+          // Descrição do POI
           Text(
-            _getPOIDescription(poi.category),
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-            ),
+            _getPOIDescription(widget.poi.category),
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+
+          // Piso do POI
+          Row(
+            children: [
+              const Icon(Icons.layers, color: Colors.white54, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                'Piso ${widget.poi.level}',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
-          
+
           // Informações de tempo
           Row(
             children: [
               // Tempo de caminhada
               _buildTimeInfo(
                 icon: Icons.directions_walk,
-                label: route != null 
-                  ? '${(route!.etaSeconds / 60).round()} min'
-                  : '3 min',
+                label: widget.route != null
+                    ? '${(widget.route!.etaSeconds / 60).round()} min'
+                    : '3 min',
               ),
               const SizedBox(width: 24),
-              
+
               // Tempo de fila (fixo por enquanto)
-              _buildTimeInfo(
-                icon: Icons.group,
-                label: '15 min',
-              ),
+              _buildTimeInfo(icon: Icons.group, label: '15 min'),
             ],
           ),
           const SizedBox(height: 24),
-          
+
           // Botão de navegação
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                
+
                 // Se callback fornecido, chamar
-                if (onNavigate != null) {
-                  onNavigate!();
+                if (widget.onNavigate != null) {
+                  widget.onNavigate!();
                 }
                 // Senão, abrir página de navegação
-                else if (route != null && allNodes != null) {
+                else if (widget.route != null && widget.allNodes != null) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => NavigationPage(
-                        route: route!,
-                        destination: poi,
-                        nodes: allNodes!,
+                        route: widget.route!,
+                        destination: widget.poi,
+                        nodes: widget.allNodes!,
                       ),
                     ),
                   );

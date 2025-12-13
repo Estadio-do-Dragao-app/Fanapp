@@ -96,7 +96,7 @@ class _EmergencyNavigationPageState extends State<EmergencyNavigationPage>
     final userLng = _mapOrigin.longitude + (centeredX * _unitsToLngDegrees);
 
     // Move câmara suavemente para a posição do utilizador
-    _mapController.move(LatLng(userLat, userLng), 19.0);
+    _mapController.move(LatLng(userLat, userLng), 25.0);
   }
 
   void _endNavigation() {

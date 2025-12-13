@@ -1,15 +1,34 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'dart:async';
+import '../../../../core/services/mqtt_service.dart';
 
-/// Model for section congestion data
-class SectionCongestion {
-  final String sectionId;
+/// Model for cell congestion data from MQTT
+class CellCongestionData {
+  final String cellId;
   final double congestionLevel;
+  final int peopleCount;
+  final int capacity;
+  final String timestamp;
 
-  SectionCongestion({required this.sectionId, required this.congestionLevel});
+  CellCongestionData({
+    required this.cellId,
+    required this.congestionLevel,
+    required this.peopleCount,
+    required this.capacity,
+    required this.timestamp,
+  });
+
+  factory CellCongestionData.fromJson(Map<String, dynamic> json) {
+    return CellCongestionData(
+      cellId: json['cell_id'] ?? '',
+      congestionLevel: (json['congestion_level'] ?? 0.0).toDouble(),
+      peopleCount: json['people_count'] ?? 0,
+      capacity: json['capacity'] ?? 50,
+      timestamp: json['timestamp'] ?? '',
+    );
+  }
 }
 
-/// Response from the stadium heatmap endpoint
+/// Response data for stadium heatmap
 class StadiumHeatmapData {
   final Map<String, double> sections;
   final int totalSections;
@@ -24,77 +43,90 @@ class StadiumHeatmapData {
     this.mostCongested,
     this.leastCongested,
   });
-
-  factory StadiumHeatmapData.fromJson(Map<String, dynamic> json) {
-    final sectionsMap = <String, double>{};
-    if (json['sections'] != null) {
-      (json['sections'] as Map<String, dynamic>).forEach((key, value) {
-        sectionsMap[key] = (value as num).toDouble();
-      });
-    }
-
-    return StadiumHeatmapData(
-      sections: sectionsMap,
-      totalSections: json['total_sections'] ?? 0,
-      averageCongestion: (json['average_congestion'] ?? 0.0).toDouble(),
-      mostCongested: json['most_congested'],
-      leastCongested: json['least_congested'],
-    );
-  }
 }
 
-/// Service to communicate with the Congestion-Service API
+/// Service for real-time congestion data via MQTT broker
+/// All data comes from Service-to-Client-Broker (port 1884)
 class CongestionService {
-  // URL base do Congestion-Service (alterar para produção)
-  static const String baseUrl = 'http://localhost:8003';
+  final MqttService _mqttService = MqttService();
 
-  /// GET /heatmap/stadium/sections - Get heatmap data for entire stadium
-  Future<StadiumHeatmapData> getStadiumHeatmap() async {
-    final response = await http
-        .get(
-          Uri.parse('$baseUrl/heatmap/stadium/sections'),
-          headers: {'Content-Type': 'application/json'},
-        )
-        .timeout(const Duration(seconds: 10));
+  // Local store for MQTT updates
+  final Map<String, CellCongestionData> _cellData = {};
+  StreamSubscription? _mqttSubscription;
+  bool _isConnected = false;
 
-    if (response.statusCode == 200) {
-      return StadiumHeatmapData.fromJson(json.decode(response.body));
-    } else if (response.statusCode == 404) {
-      // No data available - return empty
+  /// Check if connected to MQTT broker
+  bool get isConnected => _isConnected;
+
+  /// Initialize connection to MQTT broker
+  Future<bool> connect() async {
+    if (_isConnected) return true;
+
+    final connected = await _mqttService.connect();
+    if (connected) {
+      _isConnected = true;
+      _mqttSubscription = _mqttService.congestionStream.listen(
+        _onCongestionUpdate,
+      );
+      print('[CongestionService] Connected to MQTT broker');
+    }
+    return connected;
+  }
+
+  /// Handle incoming MQTT congestion updates
+  void _onCongestionUpdate(Map<String, dynamic> data) {
+    final cellData = CellCongestionData.fromJson(data);
+    _cellData[cellData.cellId] = cellData;
+  }
+
+  /// Get current heatmap data from MQTT cache
+  StadiumHeatmapData getStadiumHeatmap() {
+    if (_cellData.isEmpty) {
       return StadiumHeatmapData(
         sections: {},
         totalSections: 0,
         averageCongestion: 0,
       );
-    } else {
-      throw CongestionServiceException(
-        'Failed to get heatmap: ${response.statusCode}',
-      );
     }
+
+    final sections = <String, double>{};
+    double total = 0;
+
+    for (var entry in _cellData.entries) {
+      sections[entry.key] = entry.value.congestionLevel;
+      total += entry.value.congestionLevel;
+    }
+
+    final avg = total / _cellData.length;
+
+    String? mostCongested;
+    String? leastCongested;
+    double maxLevel = 0;
+    double minLevel = 1.0;
+
+    for (var entry in _cellData.entries) {
+      if (entry.value.congestionLevel > maxLevel) {
+        maxLevel = entry.value.congestionLevel;
+        mostCongested = entry.key;
+      }
+      if (entry.value.congestionLevel < minLevel) {
+        minLevel = entry.value.congestionLevel;
+        leastCongested = entry.key;
+      }
+    }
+
+    return StadiumHeatmapData(
+      sections: sections,
+      totalSections: _cellData.length,
+      averageCongestion: avg,
+      mostCongested: mostCongested,
+      leastCongested: leastCongested,
+    );
   }
 
-  /// GET /health - Check if service is online
-  Future<bool> isServiceHealthy() async {
-    try {
-      final response = await http
-          .get(
-            Uri.parse('$baseUrl/health'),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 5));
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
+  /// Dispose resources
+  void dispose() {
+    _mqttSubscription?.cancel();
+    _isConnected = false;
   }
-}
-
-/// Exception for congestion service errors
-class CongestionServiceException implements Exception {
-  final String message;
-  CongestionServiceException(this.message);
-
-  @override
-  String toString() => message;
 }

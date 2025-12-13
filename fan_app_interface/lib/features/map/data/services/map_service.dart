@@ -4,6 +4,7 @@ import '../models/node_model.dart';
 import '../models/edge_model.dart';
 import '../models/poi_model.dart';
 import '../models/gate_model.dart';
+import '../models/tile_model.dart';
 import 'local_map_cache.dart';
 
 /// Service para comunicar com o Map-Service
@@ -187,6 +188,51 @@ class MapService {
       }
     } catch (e) {
       print('Erro ao carregar seats: $e');
+      return [];
+    }
+  }
+
+  /// GET /seats/{seat_id} - Buscar um seat específico por ID
+  /// Usado para obter coordenadas do lugar do utilizador
+  Future<NodeModel?> getSeatById(String seatId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/seats/$seatId'));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return NodeModel.fromJson(data);
+      } else {
+        print(
+          '[MapService] Seat $seatId não encontrado: ${response.statusCode}',
+        );
+        return null;
+      }
+    } catch (e) {
+      print('[MapService] Erro ao buscar seat $seatId: $e');
+      return null;
+    }
+  }
+
+  /// GET /maps/grid/tiles - Buscar todos os tiles do grid
+  /// Usado para verificar se uma posição é walkable
+  Future<List<TileModel>> getAllTiles({int? level}) async {
+    try {
+      final url = level != null
+          ? '$baseUrl/maps/grid/tiles?level=$level'
+          : '$baseUrl/maps/grid/tiles';
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> tiles = data['tiles'] ?? [];
+        print('[MapService] ${tiles.length} tiles carregados');
+        return tiles.map((json) => TileModel.fromJson(json)).toList();
+      } else {
+        print('[MapService] Erro ao carregar tiles: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('[MapService] Erro ao carregar tiles: $e');
       return [];
     }
   }

@@ -11,6 +11,8 @@ class TicketModel {
   final String sectorId;
   final String ticketType;
   final bool state;
+  // ID do seat no Map-Service (ex: Seat-Norte-T0-R05-12)
+  final String? seatNodeId;
 
   const TicketModel({
     required this.id,
@@ -22,6 +24,7 @@ class TicketModel {
     required this.sectorId,
     required this.ticketType,
     required this.state,
+    this.seatNodeId,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -35,6 +38,7 @@ class TicketModel {
       sectorId: json['sector_id'] as String,
       ticketType: json['ticket_type'] as String,
       state: json['state'] as bool,
+      seatNodeId: json['seat_node_id'] as String?,
     );
   }
 
@@ -49,6 +53,7 @@ class TicketModel {
       'sector_id': sectorId,
       'ticket_type': ticketType,
       'state': state,
+      'seat_node_id': seatNodeId,
     };
   }
 

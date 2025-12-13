@@ -9,6 +9,7 @@ import '../../map/data/models/route_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
+import '../../navigation/data/services/user_position_service.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 
 /// POI com rota calculada
@@ -88,6 +89,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
   RouteModel? _selectedRoute;
   bool _isCalculatingSelectedRoute = false;
 
+  // Posição do utilizador
+  double _userX = 0.0;
+  double _userY = 0.0;
+  int _userLevel = 0;
+
   @override
   void initState() {
     super.initState();
@@ -124,6 +130,20 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
   }
 
+  /// Encontra o nó mais próximo de uma posição
+  NodeModel _findNearestNode(List<NodeModel> nodes, double x, double y) {
+    NodeModel? nearest;
+    double minDist = double.infinity;
+    for (final node in nodes) {
+      final dist = _euclideanDistance(node.x, node.y, x, y);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = node;
+      }
+    }
+    return nearest ?? nodes.first;
+  }
+
   /// Carrega POIs e inicia cálculo de rotas em background
   Future<void> _loadPOIs() async {
     setState(() {
@@ -137,6 +157,29 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       final allPois = await _mapService.getAllPOIs();
       final allNodes = await _mapService.getAllNodes();
 
+      // Carregar posição do utilizador do serviço
+      final savedPosition = await UserPositionService.getPosition();
+      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+        _userX = savedPosition.x;
+        _userY = savedPosition.y;
+        // Encontrar nível do nó mais próximo
+        final nearestNode = _findNearestNode(allNodes, _userX, _userY);
+        _userLevel = nearestNode.level;
+        print(
+          '[DestinationSelection] 📍 Usando posição guardada: ($_userX, $_userY)',
+        );
+      } else {
+        // Fallback para N1
+        final userNode = allNodes.firstWhere(
+          (n) => n.id == userNodeId,
+          orElse: () => allNodes.first,
+        );
+        _userX = userNode.x;
+        _userY = userNode.y;
+        _userLevel = userNode.level;
+        print('[DestinationSelection] 📍 Fallback para N1: ($_userX, $_userY)');
+      }
+
       _allNodes = allNodes;
       _userNode = allNodes.firstWhere(
         (n) => n.id == userNodeId,
@@ -149,14 +192,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
             widget.categoryId.toLowerCase();
       }).toList();
 
-      // Criar lista com distâncias estimadas
+      // Criar lista com distâncias estimadas (usando posição real do utilizador)
       List<POIWithRoute> poisWithRoutes = categoryPois.map((poi) {
-        final distance = _euclideanDistance(
-          _userNode!.x,
-          _userNode!.y,
-          poi.x,
-          poi.y,
-        );
+        final distance = _euclideanDistance(_userX, _userY, poi.x, poi.y);
         return POIWithRoute(poi: poi, estimatedDistance: distance);
       }).toList();
 
@@ -191,7 +229,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
 
   /// Calcula todas as rotas em paralelo no background
   Future<void> _calculateAllRoutesInBackground() async {
-    if (_poisWithRoutes.isEmpty || _userNode == null) return;
+    if (_poisWithRoutes.isEmpty) return;
 
     setState(() {
       _isCalculatingAllRoutes = true;
@@ -202,9 +240,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       final futures = _poisWithRoutes.map((item) async {
         try {
           final route = await _routingService.getRouteToCoordinates(
-            startX: _userNode!.x,
-            startY: _userNode!.y,
-            startLevel: _userNode!.level,
+            startX: _userX,
+            startY: _userY,
+            startLevel: _userLevel,
             endX: item.poi.x,
             endY: item.poi.y,
             endLevel: item.poi.level,
@@ -275,9 +313,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
 
     try {
       final route = await _routingService.getRouteToCoordinates(
-        startX: _userNode!.x,
-        startY: _userNode!.y,
-        startLevel: _userNode!.level,
+        startX: _userX,
+        startY: _userY,
+        startLevel: _userLevel,
         endX: item.poi.x,
         endY: item.poi.y,
         endLevel: item.poi.level,
@@ -291,7 +329,12 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
           _selectedRoute = route;
           _isCalculatingSelectedRoute = false;
         });
-        _zoomToRoute(route);
+        // Atrasar zoom para garantir que o mapa está pronto (especialmente na primeira vez)
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _zoomToRoute(route);
+          }
+        });
       }
     } catch (e) {
       print('[DestinationSelection] Erro ao calcular rota: $e');
@@ -323,10 +366,10 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
 
   /// Faz zoom para mostrar o início e fim da rota
   void _zoomToRoute(RouteModel route) {
-    if (route.path.isEmpty || _userNode == null) return;
+    if (route.path.isEmpty) return;
 
-    // Obter posição do utilizador e do destino
-    final startLatLng = _convertToLatLng(_userNode!.x, _userNode!.y);
+    // Obter posição do utilizador (real) e do destino
+    final startLatLng = _convertToLatLng(_userX, _userY);
     final endLatLng = _convertToLatLng(route.path.last.x, route.path.last.y);
 
     // Calcular bounds para incluir início e fim
