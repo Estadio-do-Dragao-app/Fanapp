@@ -55,5 +55,40 @@
   "cancel": "Cancelar",
   "firstAid": "Primeiros Socorros",
   "information": "Informação",
-  "merchandising": "Loja"
+  "merchandising": "Loja",
+  "filter": "Filtro",
+  "floor": "Piso",
+  "heatmap": "Mapa de calor",
+  "accessibility": "Acessibilidade",
+  "connectionFailed": "Falha de conexão",
+  "newDestinationFound": "NOVO DESTINO ENCONTRADO",
+  "lessQueue": "{place} tem menos fila",
+  "@lessQueue": {
+    "placeholders": {
+      "place": {
+        "type": "String",
+        "example": "WC 2"
+      }
+    }
+  },
+  "change": "Trocar",
+  "no": "Não",
+  "durationMin": "{time}",
+  "@durationMin": {
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "0:05"
+      }
+    }
+  },
+  "distanceM": "{dist} m",
+  "@distanceM": {
+    "placeholders": {
+      "dist": {
+        "type": "int",
+        "example": "50"
+      }
+    }
+  }
 }

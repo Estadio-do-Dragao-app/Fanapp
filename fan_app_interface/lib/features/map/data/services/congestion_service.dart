@@ -8,6 +8,7 @@ class CellCongestionData {
   final int peopleCount;
   final int capacity;
   final String timestamp;
+  final int level;
 
   CellCongestionData({
     required this.cellId,
@@ -15,6 +16,7 @@ class CellCongestionData {
     required this.peopleCount,
     required this.capacity,
     required this.timestamp,
+    this.level = 0,
   });
 
   factory CellCongestionData.fromJson(Map<String, dynamic> json) {
@@ -24,13 +26,15 @@ class CellCongestionData {
       peopleCount: json['people_count'] ?? 0,
       capacity: json['capacity'] ?? 50,
       timestamp: json['timestamp'] ?? '',
+      level: json['level'] ?? 0,
     );
   }
 }
 
 /// Response data for stadium heatmap
 class StadiumHeatmapData {
-  final Map<String, double> sections;
+  // Alterado para guardar o objeto completo, para termos acesso ao nível
+  final Map<String, CellCongestionData> sections;
   final int totalSections;
   final double averageCongestion;
   final String? mostCongested;
@@ -52,7 +56,7 @@ class CongestionService {
   static final CongestionService _instance = CongestionService._internal();
   factory CongestionService() => _instance;
   CongestionService._internal();
-  
+
   final MqttService _mqttService = MqttService();
 
   // Local store for MQTT updates
@@ -82,7 +86,9 @@ class CongestionService {
   void _onCongestionUpdate(Map<String, dynamic> data) {
     final cellData = CellCongestionData.fromJson(data);
     _cellData[cellData.cellId] = cellData;
-    print('[CongestionService] Stored cell ${cellData.cellId} with level ${cellData.congestionLevel}. Total cells: ${_cellData.length}');
+    print(
+      '[CongestionService] Stored cell ${cellData.cellId} with level ${cellData.congestionLevel}. Total cells: ${_cellData.length}',
+    );
   }
 
   /// Get current heatmap data from MQTT cache
@@ -95,11 +101,12 @@ class CongestionService {
       );
     }
 
-    final sections = <String, double>{};
+    // Agora retornamos o objeto completo
+    final sections = <String, CellCongestionData>{};
     double total = 0;
 
     for (var entry in _cellData.entries) {
-      sections[entry.key] = entry.value.congestionLevel;
+      sections[entry.key] = entry.value;
       total += entry.value.congestionLevel;
     }
 

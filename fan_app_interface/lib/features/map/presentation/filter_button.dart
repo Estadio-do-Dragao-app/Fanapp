@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../l10n/app_localizations.dart';
 
 /// Filter button with expandable menu for map options
 class FilterButton extends StatefulWidget {
@@ -8,6 +9,8 @@ class FilterButton extends StatefulWidget {
   final int currentFloor;
   final ValueChanged<int> onFloorChanged;
   final List<int> availableFloors;
+  final bool avoidStairs;
+  final ValueChanged<bool> onAvoidStairsChanged;
 
   const FilterButton({
     Key? key,
@@ -17,6 +20,8 @@ class FilterButton extends StatefulWidget {
     this.currentFloor = 0,
     required this.onFloorChanged,
     this.availableFloors = const [0, 1],
+    this.avoidStairs = false,
+    required this.onAvoidStairsChanged,
   }) : super(key: key);
 
   @override
@@ -120,9 +125,9 @@ class _FilterButtonState extends State<FilterButton>
                         size: 18,
                       ),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Filter',
-                        style: TextStyle(
+                      Text(
+                        AppLocalizations.of(context)!.filter,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontFamily: 'Gabarito',
                           fontSize: 14,
@@ -136,13 +141,20 @@ class _FilterButtonState extends State<FilterButton>
                   const SizedBox(height: 12),
 
                   // Floor selector
-                  _buildFloorSelector(),
+                  _buildFloorSelector(context),
+                  const SizedBox(height: 12),
+                  const Divider(color: Colors.white24, height: 1),
+
+                  // Accessibility toggle
+                  const SizedBox(height: 12),
+                  _buildAccessibilityToggle(context),
+
                   const SizedBox(height: 12),
                   const Divider(color: Colors.white24, height: 1),
                   const SizedBox(height: 12),
 
                   // Heat map toggle
-                  _buildHeatmapToggle(),
+                  _buildHeatmapToggle(context),
                 ],
               ),
             ),
@@ -151,21 +163,23 @@ class _FilterButtonState extends State<FilterButton>
     );
   }
 
-  Widget _buildFloorSelector() {
+  Widget _buildFloorSelector(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(Icons.layers, color: Colors.white, size: 20),
         const SizedBox(width: 10),
-        const Text(
-          'Piso',
-          style: TextStyle(
-            color: Colors.white,
-            fontFamily: 'Gabarito',
-            fontSize: 14,
+        SizedBox(
+          width: 120,
+          child: Text(
+            AppLocalizations.of(context)!.floor,
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: 'Gabarito',
+              fontSize: 14,
+            ),
           ),
         ),
-        const SizedBox(width: 16),
         // Floor buttons
         ...widget.availableFloors.map((floor) {
           final isSelected = floor == widget.currentFloor;
@@ -208,7 +222,7 @@ class _FilterButtonState extends State<FilterButton>
     );
   }
 
-  Widget _buildHeatmapToggle() {
+  Widget _buildHeatmapToggle(BuildContext context) {
     final bool isAvailable = widget.isHeatmapAvailable;
 
     return Column(
@@ -223,15 +237,17 @@ class _FilterButtonState extends State<FilterButton>
               size: 20,
             ),
             const SizedBox(width: 10),
-            Text(
-              'Heat map',
-              style: TextStyle(
-                color: isAvailable ? Colors.white : Colors.grey[600],
-                fontFamily: 'Gabarito',
-                fontSize: 14,
+            SizedBox(
+              width: 120,
+              child: Text(
+                AppLocalizations.of(context)!.heatmap,
+                style: TextStyle(
+                  color: isAvailable ? Colors.white : Colors.grey[600],
+                  fontFamily: 'Gabarito',
+                  fontSize: 14,
+                ),
               ),
             ),
-            const SizedBox(width: 16),
             SizedBox(
               height: 24,
               child: Switch(
@@ -264,7 +280,7 @@ class _FilterButtonState extends State<FilterButton>
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'Falha de conexão',
+                  AppLocalizations.of(context)!.connectionFailed,
                   style: TextStyle(
                     color: Colors.orange[300],
                     fontFamily: 'Gabarito',
@@ -274,6 +290,39 @@ class _FilterButtonState extends State<FilterButton>
               ],
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildAccessibilityToggle(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.accessible, color: Colors.white, size: 20),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 120,
+          child: Text(
+            AppLocalizations.of(context)!.accessibility,
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: 'Gabarito',
+              fontSize: 14,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 24,
+          child: Switch(
+            value: widget.avoidStairs,
+            onChanged: widget.onAvoidStairsChanged,
+            activeColor: const Color(0xFF929AD4),
+            activeTrackColor: const Color(0xFF929AD4).withOpacity(0.5),
+            inactiveThumbColor: Colors.grey[400],
+            inactiveTrackColor: Colors.grey[600],
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
       ],
     );
   }

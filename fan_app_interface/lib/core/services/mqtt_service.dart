@@ -24,7 +24,7 @@ class MqttService {
   static const String topicQueues = 'stadium/waittime/#';
   static const String topicMaintenance = 'stadium/events/maintenance';
   static const String topicSecurity = 'stadium/events/security';
-  static const String topicAlerts = 'stadium/events/alerts';
+  static const String topicAlerts = 'alerts/broadcast';
 
   MqttServerClient? _client;
   bool _isConnected = false;
@@ -53,8 +53,7 @@ class MqttService {
       _maintenanceController.stream;
   Stream<Map<String, dynamic>> get allEventsStream =>
       _allEventsController.stream;
-  Stream<Map<String, dynamic>> get waittimeStream =>
-      _waittimeController.stream;
+  Stream<Map<String, dynamic>> get waittimeStream => _waittimeController.stream;
 
   /// Check if connected to broker
   bool get isConnected => _isConnected;
@@ -62,10 +61,12 @@ class MqttService {
   /// Connect to the MQTT broker
   Future<bool> connect() async {
     if (_isConnected) return true;
-    
+
     // MQTT TCP is not available on Web platform
     if (kIsWeb) {
-      print('[MqttService] MQTT not supported on web platform. Use HTTP fallback.');
+      print(
+        '[MqttService] MQTT not supported on web platform. Use HTTP fallback.',
+      );
       return false;
     }
 

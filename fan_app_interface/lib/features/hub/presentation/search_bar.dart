@@ -10,8 +10,13 @@ import '../../navigation/data/services/user_position_service.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
+  final bool avoidStairs;
 
-  const SearchBarBottomSheet({Key? key, this.onPOISelected}) : super(key: key);
+  const SearchBarBottomSheet({
+    Key? key,
+    this.onPOISelected,
+    this.avoidStairs = false,
+  }) : super(key: key);
 
   @override
   State<SearchBarBottomSheet> createState() => _SearchBarBottomSheetState();
@@ -100,6 +105,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         startY: startY,
         startLevel: startLevel,
         poiId: poi.id,
+        avoidStairs: widget.avoidStairs,
       );
     } catch (e) {
       print('[SearchBar] Erro ao calcular rota: $e');

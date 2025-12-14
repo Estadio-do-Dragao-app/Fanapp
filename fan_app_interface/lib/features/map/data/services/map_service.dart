@@ -15,7 +15,9 @@ class MapService {
 
   /// GET /map - Retorna mapa completo (nodes, edges, closures)
   Future<Map<String, dynamic>> getCompleteMap() async {
-    final response = await http.get(Uri.parse('$baseUrl/map'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/map'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -33,7 +35,9 @@ class MapService {
     }
 
     try {
-      final response = await http.get(Uri.parse('$baseUrl/nodes'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/nodes'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -71,7 +75,9 @@ class MapService {
     }
 
     try {
-      final response = await http.get(Uri.parse('$baseUrl/edges'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/edges'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -112,7 +118,9 @@ class MapService {
       'shop',
     ];
 
-    final response = await http.get(Uri.parse('$baseUrl/nodes'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/nodes'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
@@ -138,7 +146,9 @@ class MapService {
 
   /// GET /gates - Todos os portões/entradas
   Future<List<GateModel>> getAllGates() async {
-    final response = await http.get(Uri.parse('$baseUrl/gates'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/gates'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
@@ -150,7 +160,9 @@ class MapService {
 
   /// GET /closures - Corredores fechados (para emergências)
   Future<List<Map<String, dynamic>>> getClosures() async {
-    final response = await http.get(Uri.parse('$baseUrl/closures'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/closures'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {
       return List<Map<String, dynamic>>.from(json.decode(response.body));
@@ -179,7 +191,9 @@ class MapService {
   Future<List<dynamic>> getAllSeats() async {
     try {
       // Nota: Endpoint é /seats diretamente, não /api/seats
-      final response = await http.get(Uri.parse('$baseUrl/seats'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/seats'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         // Formato esperado: {"seats": [...]} ou [...]
@@ -204,7 +218,9 @@ class MapService {
   /// Usado para obter coordenadas do lugar do utilizador
   Future<NodeModel?> getSeatById(String seatId) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/seats/$seatId'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/seats/$seatId'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -228,7 +244,9 @@ class MapService {
       final url = level != null
           ? '$baseUrl/maps/grid/tiles?level=$level'
           : '$baseUrl/maps/grid/tiles';
-      final response = await http.get(Uri.parse(url));
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

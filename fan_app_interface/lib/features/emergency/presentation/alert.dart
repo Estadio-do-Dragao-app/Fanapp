@@ -4,7 +4,7 @@ import '../../map/data/models/poi_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
-import '../../navigation/presentation/emergency_navigation_page.dart';
+import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'dart:math';
@@ -119,10 +119,14 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => EmergencyNavigationPage(
-              route: route,
+            builder: (context) => NavigationPage(
+              route: route!,
               destination: nearestExit!,
               nodes: nodes,
+              isEmergency: true,
+              initialX: startX,
+              initialY: startY,
+              initialLevel: startLevel,
             ),
           ),
         );

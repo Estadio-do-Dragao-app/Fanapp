@@ -128,4 +128,43 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get merchandising => 'Loja';
+
+  @override
+  String get filter => 'Filtro';
+
+  @override
+  String get floor => 'Piso';
+
+  @override
+  String get heatmap => 'Mapa de calor';
+
+  @override
+  String get accessibility => 'Acessibilidade';
+
+  @override
+  String get connectionFailed => 'Falha de conexão';
+
+  @override
+  String get newDestinationFound => 'NOVO DESTINO ENCONTRADO';
+
+  @override
+  String lessQueue(String place) {
+    return '$place tem menos fila';
+  }
+
+  @override
+  String get change => 'Trocar';
+
+  @override
+  String get no => 'Não';
+
+  @override
+  String durationMin(String time) {
+    return '$time';
+  }
+
+  @override
+  String distanceM(int dist) {
+    return '$dist m';
+  }
 }

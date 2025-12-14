@@ -55,5 +55,40 @@
   "cancel": "Cancel",
   "firstAid": "First Aid",
   "information": "Information",
-  "merchandising": "Merchandising"
+  "merchandising": "Merchandising",
+  "filter": "Filter",
+  "floor": "Floor",
+  "heatmap": "Heat map",
+  "accessibility": "Accessibility",
+  "connectionFailed": "Connection failed",
+  "newDestinationFound": "NEW DESTINATION FOUND",
+  "lessQueue": "{place} has less queue",
+  "@lessQueue": {
+    "placeholders": {
+      "place": {
+        "type": "String",
+        "example": "WC 2"
+      }
+    }
+  },
+  "change": "Change",
+  "no": "No",
+  "durationMin": "{time}",
+  "@durationMin": {
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "0:05"
+      }
+    }
+  },
+  "distanceM": "{dist} m",
+  "@distanceM": {
+    "placeholders": {
+      "dist": {
+        "type": "int",
+        "example": "50"
+      }
+    }
+  }
 }

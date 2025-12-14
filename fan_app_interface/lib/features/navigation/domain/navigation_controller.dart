@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../../core/services/mqtt_service.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
 import '../data/models/navigation_instruction.dart';
 import '../data/services/user_position_service.dart';
+import 'models/reroute_event.dart';
 import 'route_tracker.dart';
 import 'dynamic_route_manager.dart';
 
@@ -27,6 +29,11 @@ class NavigationController extends ChangeNotifier {
   // Stream para monitorizar posição
   final StreamController<({double x, double y})> _positionStream =
       StreamController.broadcast();
+
+  // Stream para eventos de reroute (ex: melhor rota encontrada)
+  final StreamController<RerouteEvent> _rerouteStream =
+      StreamController.broadcast();
+  Stream<RerouteEvent> get rerouteStream => _rerouteStream.stream;
 
   bool _isNavigating = true;
   NavigationInstruction? _currentInstruction;
@@ -74,6 +81,9 @@ class NavigationController extends ChangeNotifier {
 
     // Iniciar monitorização
     _routeManager.startMonitoring(_positionStream.stream);
+
+    // Escutar eventos MQTT (Reroute)
+    MqttService().allEventsStream.listen(_onMqttEvent);
 
     _initialize();
   }
@@ -370,10 +380,54 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Simula um evento de reroute (para testes e demonstrações)
+  void simulateRerouteEvent() {
+    print('[NavigationController] 🚦 Simulating Reroute Event...');
+    _rerouteStream.add(
+      RerouteEvent(
+        arrivalTime: "20:00",
+        duration: "0:05",
+        distance: 50,
+        locationName: "WC 2",
+        newDestinationId: "WC_2", // Exemplo
+        reason: "Less queue",
+      ),
+    );
+  }
+
+  /// Processa eventos recebidos via MQTT
+  void _onMqttEvent(Map<String, dynamic> event) {
+    // Verificar se é um evento de reroute
+    // Espera formato: { "type": "reroute", "data": { ... } }
+    if (event['type'] == 'reroute' && event['data'] != null) {
+      print(
+        '[NavigationController] 📩 MQTT Reroute Event received: ${event['data']}',
+      );
+      try {
+        final data = event['data'];
+        final rerouteEvent = RerouteEvent(
+          arrivalTime: data['arrivalTime'] ?? '--:--',
+          duration: data['duration'] ?? '0 min',
+          distance: data['distance'] is int
+              ? data['distance']
+              : int.tryParse(data['distance'].toString()) ?? 0,
+          locationName: data['locationName'] ?? 'New Route',
+          newDestinationId: data['newDestinationId'] ?? '',
+          reason: data['reason'] ?? 'Better route found',
+        );
+        _rerouteStream.add(rerouteEvent);
+      } catch (e) {
+        print('[NavigationController] ❌ Error parsing reroute event: $e');
+      }
+    }
+  }
+
   @override
   void dispose() {
     _updateTimer?.cancel();
+    _autoNavTimer?.cancel();
     _positionStream.close();
+    _rerouteStream.close();
     _routeManager.dispose();
     super.dispose();
   }

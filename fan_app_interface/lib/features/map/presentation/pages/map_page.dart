@@ -10,6 +10,7 @@ class MapPage extends StatefulWidget {
   final ValueChanged<int>? onFloorChanged;
   final MapController? mapController;
   final int currentFloor;
+  final bool avoidStairs;
 
   const MapPage({
     super.key,
@@ -19,6 +20,7 @@ class MapPage extends StatefulWidget {
     this.onHeatmapConnectionSuccess,
     this.onFloorChanged,
     this.currentFloor = 0,
+    this.avoidStairs = false,
   });
 
   @override
@@ -47,6 +49,7 @@ class MapPageState extends State<MapPage> {
       onHeatmapConnectionSuccess: widget.onHeatmapConnectionSuccess,
       onFloorChanged: widget.onFloorChanged,
       initialFloor: widget.currentFloor,
+      avoidStairs: widget.avoidStairs,
     );
   }
 }

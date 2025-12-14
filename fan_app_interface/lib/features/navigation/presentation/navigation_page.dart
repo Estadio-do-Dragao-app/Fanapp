@@ -6,8 +6,11 @@ import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/presentation/stadium_map_page.dart';
 import '../domain/navigation_controller.dart';
+import '../domain/models/reroute_event.dart';
 import 'widgets/navigation_header.dart';
 import 'widgets/navigation_bottom_sheet.dart';
+import 'widgets/reroute_popup.dart';
+import '../../../Home.dart';
 
 /// Página principal de navegação (modo normal - azul)
 class NavigationPage extends StatefulWidget {
@@ -26,7 +29,10 @@ class NavigationPage extends StatefulWidget {
     this.initialX,
     this.initialY,
     this.initialLevel,
+    this.isEmergency = false,
   });
+
+  final bool isEmergency;
 
   @override
   State<NavigationPage> createState() => _NavigationPageState();
@@ -43,17 +49,35 @@ class _NavigationPageState extends State<NavigationPage>
   Animation<double>? _lngAnimation;
   Animation<double>? _rotAnimation;
 
+  // Animation controller for blinking border (emergency mode)
+  late AnimationController _blinkController;
+
   // Escala para corresponder ao StadiumMapPage
   bool _showHeatmap = false; // Estado local para toggle do heatmap
+
+  // State for reroute popup
+  bool _showReroutePopup = false;
+  RerouteEvent? _rerouteEvent;
 
   @override
   void initState() {
     super.initState();
+    // ... rest of initState
+
     // Duração curta para corresponder à frequência de updates (100ms) mas suavizar snaps
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
+
+    // Initialize blinking controller
+    _blinkController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    if (widget.isEmergency) {
+      _blinkController.repeat(reverse: true);
+    }
 
     _controller = NavigationController(
       route: widget.route,
@@ -77,11 +101,22 @@ class _NavigationPageState extends State<NavigationPage>
         );
       }
     });
+
+    // Escutar eventos de reroute
+    _controller.rerouteStream.listen((event) {
+      if (!mounted) return;
+      print("[NavigationPage] 🔔 Reroute event received!");
+      setState(() {
+        _rerouteEvent = event;
+        _showReroutePopup = true;
+      });
+    });
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _blinkController.dispose();
     _controller.removeListener(_onNavigationUpdate);
     _controller.dispose();
     super.dispose();
@@ -98,10 +133,22 @@ class _NavigationPageState extends State<NavigationPage>
     if (_controller.hasArrived) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
-          // Voltar à Home (root) independentemente de onde veio
-          Navigator.of(context).popUntil((route) => route.isFirst);
+          _exitNavigation();
         }
       });
+    }
+  }
+
+  void _exitNavigation() {
+    if (widget.isEmergency) {
+      // Modo de emergência: Home foi removida da stack, temos de navegar para lá explicitamente
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const Home()),
+        (route) => false,
+      );
+    } else {
+      // Modo normal: Voltar à Home (root) independentemente de onde veio
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
@@ -167,7 +214,7 @@ class _NavigationPageState extends State<NavigationPage>
   Future<void> _endNavigation() async {
     await _controller.endNavigation();
     if (mounted) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      _exitNavigation();
     }
   }
 
@@ -213,7 +260,35 @@ class _NavigationPageState extends State<NavigationPage>
             routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
             initialFloor: _controller.currentLevel,
             showHeatmap: _showHeatmap, // Passar estado do toggle
+            isEmergency: widget.isEmergency,
           ),
+
+          // Emergency Blinking Border
+          if (widget.isEmergency)
+            Positioned(
+              top: -20,
+              bottom: -20,
+              left: -20,
+              right: -20,
+              child: AnimatedBuilder(
+                animation: _blinkController,
+                builder: (context, child) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        MediaQuery.of(context).viewPadding.top > 0 ? 70.0 : 0.0,
+                      ),
+                      border: Border.all(
+                        color: const Color(
+                          0xFFBD453D,
+                        ).withValues(alpha: _blinkController.value),
+                        width: 35,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
 
           // Header com instrução de navegação (topo)
           Positioned(
@@ -222,24 +297,58 @@ class _NavigationPageState extends State<NavigationPage>
             right: 0,
             child: NavigationHeader(
               instruction: _controller.currentInstruction,
-              isEmergency: false,
+              isEmergency: widget.isEmergency,
             ),
           ),
 
-          // Bottom sheet com informações
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 24,
-            child: NavigationBottomSheet(
-              arrivalTime: _getArrivalTime(),
-              remainingTime: _controller.formattedRemainingTime,
-              remainingDistance: _controller.formattedRemainingDistance,
-              destination: widget.destination,
-              onEndRoute: _endNavigation,
-              isEmergency: false,
+          // Bottom sheet com informações (Hide when popup is visible)
+          if (!_showReroutePopup)
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 24,
+              child: NavigationBottomSheet(
+                arrivalTime: _getArrivalTime(),
+                remainingTime: _controller.formattedRemainingTime,
+                remainingDistance: _controller.formattedRemainingDistance,
+                destination: widget.destination,
+                onEndRoute: _endNavigation,
+                isEmergency: widget.isEmergency,
+              ),
             ),
-          ),
+
+          // Reroute Popup
+          if (_showReroutePopup && _rerouteEvent != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: ReroutePopup(
+                arrivalTime: _rerouteEvent!.arrivalTime,
+                duration: _rerouteEvent!.duration,
+                distance: _rerouteEvent!.distance,
+                locationName: _rerouteEvent!.locationName,
+                onAccept: () {
+                  setState(() {
+                    _showReroutePopup = false;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        "Rerouting to ${_rerouteEvent!.locationName}...",
+                      ),
+                    ),
+                  );
+                  // TODO: Implement actual reroute logic using _rerouteEvent!.newDestinationId
+                  // Example: _controller.recalculateRoute(_rerouteEvent!.newDestinationId);
+                },
+                onDecline: () {
+                  setState(() {
+                    _showReroutePopup = false;
+                  });
+                },
+              ),
+            ),
 
           // Botão de centrar e Toggle Heatmap
           Positioned(

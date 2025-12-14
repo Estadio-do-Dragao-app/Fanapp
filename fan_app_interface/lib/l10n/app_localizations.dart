@@ -328,6 +328,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Merchandising'**
   String get merchandising;
+
+  /// No description provided for @filter.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter'**
+  String get filter;
+
+  /// No description provided for @floor.
+  ///
+  /// In en, this message translates to:
+  /// **'Floor'**
+  String get floor;
+
+  /// No description provided for @heatmap.
+  ///
+  /// In en, this message translates to:
+  /// **'Heat map'**
+  String get heatmap;
+
+  /// No description provided for @accessibility.
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility'**
+  String get accessibility;
+
+  /// No description provided for @connectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed'**
+  String get connectionFailed;
+
+  /// No description provided for @newDestinationFound.
+  ///
+  /// In en, this message translates to:
+  /// **'NEW DESTINATION FOUND'**
+  String get newDestinationFound;
+
+  /// No description provided for @lessQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'{place} has less queue'**
+  String lessQueue(String place);
+
+  /// No description provided for @change.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get change;
+
+  /// No description provided for @no.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get no;
+
+  /// No description provided for @durationMin.
+  ///
+  /// In en, this message translates to:
+  /// **'{time}'**
+  String durationMin(String time);
+
+  /// No description provided for @distanceM.
+  ///
+  /// In en, this message translates to:
+  /// **'{dist} m'**
+  String distanceM(int dist);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

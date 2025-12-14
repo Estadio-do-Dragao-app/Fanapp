@@ -17,8 +17,10 @@ import 'dart:math';
 /// horizontal row of category buttons overlayed at the top.
 class Navbar extends StatefulWidget {
   final VoidCallback? onNavigationEnd;
+  final bool avoidStairs;
 
-  const Navbar({Key? key, this.onNavigationEnd}) : super(key: key);
+  const Navbar({Key? key, this.onNavigationEnd, this.avoidStairs = false})
+    : super(key: key);
 
   @override
   State<Navbar> createState() => _NavbarState();
@@ -63,7 +65,10 @@ class _NavbarState extends State<Navbar> {
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            DestinationSelectionPage(categoryId: categoryIds[i]),
+            DestinationSelectionPage(
+              categoryId: categoryIds[i],
+              avoidStairs: widget.avoidStairs,
+            ),
         transitionsBuilder: _buildSlideTransition,
       ),
     ).then((_) {
@@ -191,6 +196,7 @@ class _NavbarState extends State<Navbar> {
         startY: startY,
         startLevel: startLevel,
         nodeId: nearestNodeId,
+        avoidStairs: widget.avoidStairs,
       );
 
       if (!mounted) return;

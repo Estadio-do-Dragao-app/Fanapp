@@ -128,4 +128,43 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get merchandising => 'Merchandising';
+
+  @override
+  String get filter => 'Filter';
+
+  @override
+  String get floor => 'Floor';
+
+  @override
+  String get heatmap => 'Heat map';
+
+  @override
+  String get accessibility => 'Accessibility';
+
+  @override
+  String get connectionFailed => 'Connection failed';
+
+  @override
+  String get newDestinationFound => 'NEW DESTINATION FOUND';
+
+  @override
+  String lessQueue(String place) {
+    return '$place has less queue';
+  }
+
+  @override
+  String get change => 'Change';
+
+  @override
+  String get no => 'No';
+
+  @override
+  String durationMin(String time) {
+    return '$time';
+  }
+
+  @override
+  String distanceM(int dist) {
+    return '$dist m';
+  }
 }

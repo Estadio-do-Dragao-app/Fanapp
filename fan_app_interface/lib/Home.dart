@@ -9,6 +9,7 @@ import 'features/map/presentation/filter_button.dart';
 import 'features/ticket/presentation/ticket_menu.dart';
 import 'features/map/data/services/congestion_service.dart';
 import 'features/navigation/data/services/user_position_service.dart';
+import 'core/services/mqtt_service.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -26,9 +27,13 @@ class _HomeState extends State<Home> {
   bool _showHeatmap = false;
   bool _isHeatmapAvailable = true;
   Timer? _healthCheckTimer;
+  StreamSubscription? _alertSubscription;
 
   // Estado do piso
   int _currentFloor = 0;
+
+  // Estado de acessibilidade
+  bool _avoidStairs = false;
 
   @override
   void initState() {
@@ -37,6 +42,18 @@ class _HomeState extends State<Home> {
     _checkCongestionHealth();
     // Iniciar timer de 30s (só verifica quando heatmap está desligado)
     _startHealthCheckTimer();
+    _initAlertListener();
+  }
+
+  void _initAlertListener() {
+    _alertSubscription = MqttService().alertsStream.listen((data) {
+      if (!mounted) return;
+      print('[Home] Received alert: $data');
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/emergency-alert',
+        (route) => false, // Remove todas as rotas anteriores da stack
+      );
+    });
   }
 
   Future<void> _loadInitialFilter() async {
@@ -51,6 +68,7 @@ class _HomeState extends State<Home> {
   @override
   void dispose() {
     _healthCheckTimer?.cancel();
+    _alertSubscription?.cancel();
     super.dispose();
   }
 
@@ -114,6 +132,7 @@ class _HomeState extends State<Home> {
               }
             },
             currentFloor: _currentFloor,
+            avoidStairs: _avoidStairs,
           ),
           Positioned(
             top: 0,
@@ -123,6 +142,7 @@ class _HomeState extends State<Home> {
               height: 240,
               color: Colors.transparent,
               child: Navbar(
+                avoidStairs: _avoidStairs,
                 onNavigationEnd: () {
                   _mapPageKey.currentState?.reloadUserPosition();
                 },
@@ -151,6 +171,12 @@ class _HomeState extends State<Home> {
                   _checkCongestionHealth();
                 }
               },
+              avoidStairs: _avoidStairs,
+              onAvoidStairsChanged: (value) {
+                setState(() {
+                  _avoidStairs = value;
+                });
+              },
             ),
           ),
           Positioned(
@@ -173,6 +199,7 @@ class _HomeState extends State<Home> {
                   ),
                   builder: (context) {
                     return SearchBarBottomSheet(
+                      avoidStairs: _avoidStairs,
                       onPOISelected: (poi) {
                         // Fazer zoom no POI após fechar a barra de pesquisa
                         _mapPageKey.currentState?.zoomToPOI(poi);

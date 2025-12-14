@@ -36,6 +36,7 @@ class StadiumMapPage extends StatefulWidget {
   final int routeStartWaypointIndex; // Índice onde começa a linha da rota
   final Function(POIModel)? onTapPOI;
   final ValueChanged<int>? onFloorChanged;
+  final bool avoidStairs;
 
   const StadiumMapPage({
     super.key,
@@ -55,14 +56,20 @@ class StadiumMapPage extends StatefulWidget {
     this.userHeading,
     this.simplifiedMode = false,
     this.routeStartWaypointIndex = 0,
+    this.avoidStairs = false,
+    this.isEmergency = false,
   });
+
+  final bool isEmergency;
 
   @override
   State<StadiumMapPage> createState() => StadiumMapPageState();
 }
 
-class StadiumMapPageState extends State<StadiumMapPage> {
+class StadiumMapPageState extends State<StadiumMapPage>
+    with SingleTickerProviderStateMixin {
   late final MapController _mapController;
+  late final AnimationController _blinkController;
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
   final CongestionService _congestionService = CongestionService();
@@ -105,8 +112,22 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     _userPositionY = 0.0;
     _userLevel = 0;
     _userPositionLoaded = false;
+
+    // Initialize blink animation for emergency mode
+    _blinkController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    )..repeat(reverse: true);
+
     loadUserPosition(); // Carregar posição guardada
     _loadMapData();
+  }
+
+  @override
+  void dispose() {
+    _blinkController.dispose();
+    _stopHeatmapUpdates();
+    super.dispose();
   }
 
   /// Carrega a posição guardada do utilizador
@@ -171,12 +192,6 @@ class StadiumMapPageState extends State<StadiumMapPage> {
   void _stopHeatmapUpdates() {
     _heatmapTimer?.cancel();
     _heatmapTimer = null;
-  }
-
-  @override
-  void dispose() {
-    _stopHeatmapUpdates();
-    super.dispose();
   }
 
   /// Carrega dados de congestão para o heatmap
@@ -351,6 +366,7 @@ class StadiumMapPageState extends State<StadiumMapPage> {
         startY: startY,
         startLevel: startLevel,
         poiId: poi.id,
+        avoidStairs: widget.avoidStairs,
       );
     } catch (e) {}
 
@@ -621,27 +637,52 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     }
 
     final polygons = <Polygon>[];
-    const cellSize = 50; // Tamanho da célula do grid (50x50 unidades, igual ao simulator)
+    const cellSize =
+        50; // Tamanho da célula do grid (50x50 unidades, igual ao simulator)
 
-    _heatmapData!.sections.forEach((cellId, congestionLevel) {
-      // Ignorar congestão muito baixa (< 1%)
-      // if (congestionLevel < 0.01) return;
+    _heatmapData!.sections.forEach((cellId, cellData) {
+      // Filtrar pelo piso atual
+      if (cellData.level != _currentFloor) return;
 
-      // Extrair coordenadas do cellId (cell_X_Y)
+      // Extrair coordenadas do cellId
+      // Suporta formato antigo (cell_X_Y) e novo (cell_L_X_Y)
       final parts = cellId.split('_');
-      if (parts.length != 3 || parts[0] != 'cell') return;
-      final x = int.tryParse(parts[1]);
-      final y = int.tryParse(parts[2]);
+      int? x, y;
+
+      if (parts.length == 3 && parts[0] == 'cell') {
+        // Formato antigo: cell_X_Y
+        x = int.tryParse(parts[1]);
+        y = int.tryParse(parts[2]);
+      } else if (parts.length == 4 && parts[0] == 'cell') {
+        // Novo formato: cell_L_X_Y
+        x = int.tryParse(parts[2]);
+        y = int.tryParse(parts[3]);
+      } else {
+        return;
+      }
+
       if (x == null || y == null) return;
 
       // Cor baseada no nível de congestão
-      final color = _getCongestionColor(congestionLevel);
+      final color = _getCongestionColor(cellData.congestionLevel);
 
       // Criar retângulo para a célula (cantos do quadrado)
-      final topLeft = _convertToLatLng(x.toDouble() - cellSize/2, y.toDouble() - cellSize/2);
-      final topRight = _convertToLatLng(x.toDouble() + cellSize/2, y.toDouble() - cellSize/2);
-      final bottomRight = _convertToLatLng(x.toDouble() + cellSize/2, y.toDouble() + cellSize/2);
-      final bottomLeft = _convertToLatLng(x.toDouble() - cellSize/2, y.toDouble() + cellSize/2);
+      final topLeft = _convertToLatLng(
+        x.toDouble() - cellSize / 2,
+        y.toDouble() - cellSize / 2,
+      );
+      final topRight = _convertToLatLng(
+        x.toDouble() + cellSize / 2,
+        y.toDouble() - cellSize / 2,
+      );
+      final bottomRight = _convertToLatLng(
+        x.toDouble() + cellSize / 2,
+        y.toDouble() + cellSize / 2,
+      );
+      final bottomLeft = _convertToLatLng(
+        x.toDouble() - cellSize / 2,
+        y.toDouble() + cellSize / 2,
+      );
 
       polygons.add(
         Polygon(
@@ -656,14 +697,22 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     return PolygonLayer(polygons: polygons);
   }
 
-  /// Converte ID de célula (cell_X_Y) para coordenadas LatLng
+  /// Converte ID de célula (cell_X_Y ou cell_L_X_Y) para coordenadas LatLng
   LatLng? _cellIdToLatLng(String cellId) {
-    // Formato esperado: cell_X_Y
+    // Formato esperado: cell_X_Y ou cell_L_X_Y
     final parts = cellId.split('_');
-    if (parts.length != 3 || parts[0] != 'cell') return null;
+    int? x, y;
 
-    final x = int.tryParse(parts[1]);
-    final y = int.tryParse(parts[2]);
+    if (parts.length == 3 && parts[0] == 'cell') {
+      x = int.tryParse(parts[1]);
+      y = int.tryParse(parts[2]);
+    } else if (parts.length == 4 && parts[0] == 'cell') {
+      x = int.tryParse(parts[2]);
+      y = int.tryParse(parts[3]);
+    } else {
+      return null;
+    }
+
     if (x == null || y == null) return null;
 
     // As coordenadas X,Y já são absolutas (ex: 125, 425)
@@ -763,16 +812,27 @@ class StadiumMapPageState extends State<StadiumMapPage> {
       segments.add(currentSegment);
     }
 
-    return PolylineLayer(
-      polylines: segments.map((points) {
-        return Polyline(
-          points: points,
-          strokeWidth: 4.0,
-          color: Colors.blue,
-          borderColor: Colors.white,
-          borderStrokeWidth: 1.0,
+    return AnimatedBuilder(
+      animation: _blinkController,
+      builder: (context, child) {
+        final double opacity = widget.isEmergency
+            ? 0.5 + (_blinkController.value * 0.5)
+            : 1.0;
+
+        return PolylineLayer(
+          polylines: segments.map((points) {
+            return Polyline(
+              points: points,
+              strokeWidth: 4.0,
+              color: widget.isEmergency
+                  ? const Color(0xFFBD453D).withOpacity(opacity)
+                  : Colors.blue,
+              borderColor: Colors.white,
+              borderStrokeWidth: 1.0,
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 
@@ -832,31 +892,40 @@ class StadiumMapPageState extends State<StadiumMapPage> {
             point: widget.userPosition!,
             width: 60,
             height: 60,
-            // rotate: true (default) - o marker roda com o mapa
-            // Então usamos Transform.rotate para contra-rodar
-            child: Transform.rotate(
-              angle:
-                  -headingRadians +
-                  math.pi, // Contra-rodar + 180° para correção
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.blueAccent,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
+            child: AnimatedBuilder(
+              animation: _blinkController,
+              builder: (context, child) {
+                final double opacity = widget.isEmergency
+                    ? 0.7 + (_blinkController.value * 0.3)
+                    : 1.0;
+
+                return Transform.rotate(
+                  angle:
+                      -headingRadians +
+                      math.pi, // Contra-rodar + 180° para correção
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: widget.isEmergency
+                          ? const Color(0xFFBD453D).withOpacity(opacity)
+                          : Colors.blueAccent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.navigation,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
+                    child: const Icon(
+                      Icons.navigation,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         );

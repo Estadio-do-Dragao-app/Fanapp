@@ -60,11 +60,13 @@ class POIWithRoute {
 class DestinationSelectionPage extends StatefulWidget {
   final String categoryId;
   final String? preselectedSeatInfo;
+  final bool avoidStairs;
 
   const DestinationSelectionPage({
     Key? key,
     required this.categoryId,
     this.preselectedSeatInfo,
+    this.avoidStairs = false,
   }) : super(key: key);
 
   @override
@@ -232,6 +234,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
             startY: _userY,
             startLevel: _userLevel,
             poiId: item.poi.id,
+            avoidStairs: widget.avoidStairs,
           );
           item.route = route;
         } catch (e) {
@@ -308,6 +311,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
         startY: _userY,
         startLevel: _userLevel,
         poiId: item.poi.id,
+        avoidStairs: widget.avoidStairs,
       );
 
       item.route = route;
