@@ -345,15 +345,12 @@ class StadiumMapPageState extends State<StadiumMapPage> {
             : (startX != 0.0 ? _currentFloor : 1);
       }
 
-      // Usar rota por coordenadas para evitar 404 se o ID não existir no backend
-      route = await _routingService.getRouteToCoordinates(
+      // Usar rota por POI ID para obter wait_time do cache
+      route = await _routingService.getRouteToPOI(
         startX: startX,
         startY: startY,
         startLevel: startLevel,
-        endX: poi.x,
-        endY: poi.y,
-        endLevel: poi.level,
-        allNodes: _nodes,
+        poiId: poi.id,
       );
     } catch (e) {}
 
@@ -617,50 +614,46 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     );
   }
 
-  /// Camada de heatmap com círculos coloridos baseados na congestão
+  /// Camada de heatmap com retângulos coloridos baseados na congestão
   Widget _buildHeatmapLayer() {
     if (_heatmapData == null || _heatmapData!.sections.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final circles = <CircleMarker>[];
+    final polygons = <Polygon>[];
+    const cellSize = 50; // Tamanho da célula do grid (50x50 unidades, igual ao simulator)
 
     _heatmapData!.sections.forEach((cellId, congestionLevel) {
-      // Ignorar congestão abaixo de 20%
-      if (congestionLevel < 0.20) return;
+      // Ignorar congestão muito baixa (< 1%)
+      // if (congestionLevel < 0.01) return;
 
-      // Converter cell_X_Y para coordenadas do grid
-      final position = _cellIdToLatLng(cellId);
-      if (position == null) return;
+      // Extrair coordenadas do cellId (cell_X_Y)
+      final parts = cellId.split('_');
+      if (parts.length != 3 || parts[0] != 'cell') return;
+      final x = int.tryParse(parts[1]);
+      final y = int.tryParse(parts[2]);
+      if (x == null || y == null) return;
 
-      // Cor baseada no nível de congestão (verde→amarelo→laranja→vermelho)
+      // Cor baseada no nível de congestão
       final color = _getCongestionColor(congestionLevel);
 
-      // Círculos concêntricos para efeito de gradiente
-      // Círculo exterior (maior, mais transparente)
-      circles.add(
-        CircleMarker(
-          point: position,
-          radius: 20,
-          color: color.withValues(alpha: 0.3),
-          borderColor: Colors.transparent,
-          borderStrokeWidth: 0,
-        ),
-      );
+      // Criar retângulo para a célula (cantos do quadrado)
+      final topLeft = _convertToLatLng(x.toDouble() - cellSize/2, y.toDouble() - cellSize/2);
+      final topRight = _convertToLatLng(x.toDouble() + cellSize/2, y.toDouble() - cellSize/2);
+      final bottomRight = _convertToLatLng(x.toDouble() + cellSize/2, y.toDouble() + cellSize/2);
+      final bottomLeft = _convertToLatLng(x.toDouble() - cellSize/2, y.toDouble() + cellSize/2);
 
-      // Círculo interior (menor, mais intenso)
-      circles.add(
-        CircleMarker(
-          point: position,
-          radius: 10,
-          color: color.withValues(alpha: 0.6),
-          borderColor: Colors.transparent,
-          borderStrokeWidth: 0,
+      polygons.add(
+        Polygon(
+          points: [topLeft, topRight, bottomRight, bottomLeft],
+          color: color.withValues(alpha: 0.5),
+          borderColor: color.withValues(alpha: 0.7),
+          borderStrokeWidth: 1,
         ),
       );
     });
 
-    return CircleLayer(circles: circles);
+    return PolygonLayer(polygons: polygons);
   }
 
   /// Converte ID de célula (cell_X_Y) para coordenadas LatLng
@@ -673,39 +666,35 @@ class StadiumMapPageState extends State<StadiumMapPage> {
     final y = int.tryParse(parts[2]);
     if (x == null || y == null) return null;
 
-    // Converter coordenadas do grid para posição no mapa
-    // O grid parece ter células de ~10 unidades, mapeando para o estádio
-    // Ajustar escala para corresponder aos bounds do estádio
-    const gridSize = 20; // Tamanho de cada célula no grid
-    final mapX = (x * gridSize).toDouble();
-    final mapY = (y * gridSize).toDouble();
-
-    return _convertToLatLng(mapX, mapY);
+    // As coordenadas X,Y já são absolutas (ex: 125, 425)
+    // Não precisa multiplicar, usar diretamente
+    return _convertToLatLng(x.toDouble(), y.toDouble());
   }
 
-  /// Retorna cor baseada no nível de congestão (0.2-1.0)
-  /// Gradiente: verde → amarelo → laranja → vermelho → vermelho escuro
+  /// Retorna cor baseada no nível de congestão (0.0-1.0)
+  /// Gradiente ajustado para valores realistas (0-30%):
+  /// verde → amarelo → laranja → vermelho
   Color _getCongestionColor(double level) {
-    if (level <= 0.30) {
-      // 20-30%: Verde claro
+    if (level <= 0.05) {
+      // 0-5%: Verde claro
       return const Color(0xFF4CAF50);
-    } else if (level <= 0.40) {
-      // 30-40%: Verde amarelado
+    } else if (level <= 0.10) {
+      // 5-10%: Verde amarelado
       return const Color(0xFF8BC34A);
-    } else if (level <= 0.50) {
-      // 40-50%: Amarelo
+    } else if (level <= 0.15) {
+      // 10-15%: Amarelo
       return const Color(0xFFFFEB3B);
-    } else if (level <= 0.60) {
-      // 50-60%: Laranja claro
+    } else if (level <= 0.20) {
+      // 15-20%: Laranja claro
       return const Color(0xFFFF9800);
-    } else if (level <= 0.70) {
-      // 60-70%: Laranja escuro
+    } else if (level <= 0.25) {
+      // 20-25%: Laranja escuro
       return const Color(0xFFFF5722);
-    } else if (level <= 0.80) {
-      // 70-80%: Vermelho
+    } else if (level <= 0.30) {
+      // 25-30%: Vermelho
       return const Color(0xFFF44336);
     } else {
-      // 80-100%: Vermelho escuro
+      // >30%: Vermelho escuro
       return const Color(0xFFB71C1C);
     }
   }

@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/route_model.dart';
 import '../models/node_model.dart';
+import '../../../../core/config/api_config.dart';
 
 /// Service para comunicar com o Routing-Service
 /// Backend: https://github.com/Estadio-do-Dragao-app/Routing-Service
 ///
 /// Nova API usa POST com coordenadas em vez de GET com node IDs
 class RoutingService {
-  static const String baseUrl =
-      'http://localhost:8002'; // Alterar para produção
+  static const String baseUrl = ApiConfig.routingService;
 
   /// POST /api/route - Calcula rota entre posição inicial e destino
   ///

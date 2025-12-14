@@ -6,12 +6,12 @@ import '../models/poi_model.dart';
 import '../models/gate_model.dart';
 import '../models/tile_model.dart';
 import 'local_map_cache.dart';
+import '../../../../core/config/api_config.dart';
 
 /// Service para comunicar com o Map-Service
 /// Backend: https://github.com/Estadio-do-Dragao-app/Map-Service
 class MapService {
-  static const String baseUrl =
-      'http://localhost:8000'; // Alterar para produção
+  static const String baseUrl = ApiConfig.mapService;
 
   /// GET /map - Retorna mapa completo (nodes, edges, closures)
   Future<Map<String, dynamic>> getCompleteMap() async {
@@ -37,9 +37,17 @@ class MapService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        final nodes = data.map((json) => NodeModel.fromJson(json)).toList();
+        // PERFORMANCE: Filtrar seats - são ~6000+ nodes que não precisamos para navegação
+        // Seats são usados apenas para routing (endpoint /route), não para renderização/posição
+        final nodes = data
+            .map((json) => NodeModel.fromJson(json))
+            .where((node) => node.type != 'seat')
+            .toList();
 
-        // Salva no cache
+        // Meter Seats
+        // final nodes = data.map((json) => NodeModel.fromJson(json)).toList();
+
+        // Salva no cache (sem seats para performance)
         await LocalMapCache.saveNodes(nodes);
 
         return nodes;

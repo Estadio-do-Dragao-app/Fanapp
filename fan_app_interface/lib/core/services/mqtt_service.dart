@@ -1,25 +1,27 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
+import '../config/api_config.dart';
 
 /// Service for MQTT communication with the Service-to-Client-Broker
 /// Receives real-time data from all backend services
+/// NOTE: MQTT only works on mobile (TCP). Web uses HTTP fallback.
 class MqttService {
   static final MqttService _instance = MqttService._internal();
   factory MqttService() => _instance;
   MqttService._internal();
 
   // Broker configuration (Service-to-Client-Broker)
-  static const String _broker = 'localhost';
-  static const int _port =
-      1884; // MQTT port for client-mosquitto (service-to-client-broker)
+  static String get _broker => ApiConfig.mqttBroker;
+  static const int _port = ApiConfig.mqttPort;
   static const String _clientId = 'fanapp_flutter';
 
   // Topics from Stadium Event Generator / Services
   static const String topicAllEvents = 'stadium/events/all';
   static const String topicCongestion = 'stadium/services/congestion';
-  static const String topicQueues = 'stadium/events/queues';
+  static const String topicQueues = 'stadium/waittime/#';
   static const String topicMaintenance = 'stadium/events/maintenance';
   static const String topicSecurity = 'stadium/events/security';
   static const String topicAlerts = 'stadium/events/alerts';
@@ -38,6 +40,8 @@ class MqttService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _allEventsController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _waittimeController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   /// Streams for different event types
   Stream<Map<String, dynamic>> get congestionStream =>
@@ -49,6 +53,8 @@ class MqttService {
       _maintenanceController.stream;
   Stream<Map<String, dynamic>> get allEventsStream =>
       _allEventsController.stream;
+  Stream<Map<String, dynamic>> get waittimeStream =>
+      _waittimeController.stream;
 
   /// Check if connected to broker
   bool get isConnected => _isConnected;
@@ -56,11 +62,19 @@ class MqttService {
   /// Connect to the MQTT broker
   Future<bool> connect() async {
     if (_isConnected) return true;
+    
+    // MQTT TCP is not available on Web platform
+    if (kIsWeb) {
+      print('[MqttService] MQTT not supported on web platform. Use HTTP fallback.');
+      return false;
+    }
 
     try {
+      print('[MqttService] Connecting via TCP: $_broker:$_port');
       _client = MqttServerClient(_broker, _clientId);
       _client!.port = _port;
-      _client!.logging(on: false);
+
+      _client!.logging(on: true);
       _client!.keepAlivePeriod = 30;
       _client!.autoReconnect = true;
       _client!.onConnected = _onConnected;
@@ -73,7 +87,6 @@ class MqttService {
           .withWillQos(MqttQos.atLeastOnce);
       _client!.connectionMessage = connMessage;
 
-      print('[MqttService] Connecting to $_broker:$_port...');
       await _client!.connect();
 
       if (_client!.connectionStatus!.state == MqttConnectionState.connected) {
@@ -136,12 +149,14 @@ class MqttService {
         final jsonData = json.decode(data) as Map<String, dynamic>;
 
         // Route message to appropriate stream
+        // Handle wildcard topics first (waittime/queues)
+        if (topic.startsWith('stadium/waittime/')) {
+          _queuesController.add(jsonData);
+        }
+        // Then handle exact matches
         switch (topic) {
           case topicCongestion:
             _congestionController.add(jsonData);
-            break;
-          case topicQueues:
-            _queuesController.add(jsonData);
             break;
           case topicAlerts:
             _alertsController.add(jsonData);

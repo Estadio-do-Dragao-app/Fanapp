@@ -163,8 +163,13 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
               ),
               const SizedBox(width: 24),
 
-              // Tempo de fila (fixo por enquanto)
-              _buildTimeInfo(icon: Icons.group, label: '15 min'),
+              // Tempo de fila (do backend, ou 0 se não disponível)
+              _buildTimeInfo(
+                icon: Icons.group,
+                label: widget.route?.waitTime != null
+                    ? '${widget.route!.waitTime!.round()} min fila'
+                    : '0 min fila',
+              ),
             ],
           ),
           const SizedBox(height: 24),

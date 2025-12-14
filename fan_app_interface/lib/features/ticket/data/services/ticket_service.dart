@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/ticket_model.dart';
+import '../../../../core/config/api_config.dart';
 
 /// Serviço para comunicar com a API do Ticket-Service
 class TicketService {
-  // URL base do Ticket-Service (alterar para produção)
-  static const String baseUrl = 'http://localhost:8001';
+  static const String baseUrl = ApiConfig.ticketService;
 
   /// GET /ticket/{ticket_id} - Obtém informação de um bilhete
   Future<TicketModel> getTicket(int ticketId) async {

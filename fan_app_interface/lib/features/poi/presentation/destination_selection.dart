@@ -10,6 +10,7 @@ import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
+import '../../map/data/services/waittime_cache.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 
 /// POI com rota calculada
@@ -35,6 +36,12 @@ class POIWithRoute {
 
   /// Tempo de espera na fila em minutos (0 se não disponível)
   int get waitMinutes {
+    // First try MQTT cache (real-time)
+    final cachedWait = WaittimeCache().getWaitTime(poi.id);
+    if (cachedWait != null) {
+      return cachedWait.round();
+    }
+    // Fallback to API response
     if (route != null && route!.waitTime != null) {
       return route!.waitTime!.round();
     }
@@ -220,14 +227,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       // Calcular todas as rotas em paralelo
       final futures = _poisWithRoutes.map((item) async {
         try {
-          final route = await _routingService.getRouteToCoordinates(
+          final route = await _routingService.getRouteToPOI(
             startX: _userX,
             startY: _userY,
             startLevel: _userLevel,
-            endX: item.poi.x,
-            endY: item.poi.y,
-            endLevel: item.poi.level,
-            allNodes: _allNodes,
+            poiId: item.poi.id,
           );
           item.route = route;
         } catch (e) {
@@ -299,14 +303,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     });
 
     try {
-      final route = await _routingService.getRouteToCoordinates(
+      final route = await _routingService.getRouteToPOI(
         startX: _userX,
         startY: _userY,
         startLevel: _userLevel,
-        endX: item.poi.x,
-        endY: item.poi.y,
-        endLevel: item.poi.level,
-        allNodes: _allNodes,
+        poiId: item.poi.id,
       );
 
       item.route = route;
