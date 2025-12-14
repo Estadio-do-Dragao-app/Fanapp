@@ -44,6 +44,7 @@ class _NavigationPageState extends State<NavigationPage>
   Animation<double>? _rotAnimation;
 
   // Escala para corresponder ao StadiumMapPage
+  bool _showHeatmap = false; // Estado local para toggle do heatmap
 
   @override
   void initState() {
@@ -203,16 +204,15 @@ class _NavigationPageState extends State<NavigationPage>
         children: [
           // Mapa de fundo com rota destacada
           StadiumMapPage(
-            highlightedRoute: _controller
-                .route, // Usar rota atual (pode ter sido recalculada)
+            highlightedRoute: _controller.route,
             highlightedPOI: widget.destination,
             mapController: _mapController,
             isNavigating: true,
             userPosition: userPosition,
             userHeading: _controller.heading,
             routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
-            initialFloor:
-                _controller.currentLevel, // Piso dinâmico durante navegação
+            initialFloor: _controller.currentLevel,
+            showHeatmap: _showHeatmap, // Passar estado do toggle
           ),
 
           // Header com instrução de navegação (topo)
@@ -241,15 +241,34 @@ class _NavigationPageState extends State<NavigationPage>
             ),
           ),
 
-          // Botão de centrar (apenas na NavigationPage)
+          // Botão de centrar e Toggle Heatmap
           Positioned(
             left: 16,
             bottom: 200,
-            child: FloatingActionButton(
-              heroTag: 'center',
-              backgroundColor: Colors.white,
-              onPressed: _followUserPosition,
-              child: const Icon(Icons.my_location, color: Colors.blue),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton(
+                  heroTag: 'heatmap_toggle',
+                  backgroundColor: _showHeatmap ? Colors.orange : Colors.white,
+                  onPressed: () {
+                    setState(() {
+                      _showHeatmap = !_showHeatmap;
+                    });
+                  },
+                  child: Icon(
+                    _showHeatmap ? Icons.layers_clear : Icons.layers,
+                    color: _showHeatmap ? Colors.white : Colors.blue,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FloatingActionButton(
+                  heroTag: 'center',
+                  backgroundColor: Colors.white,
+                  onPressed: _followUserPosition,
+                  child: const Icon(Icons.my_location, color: Colors.blue),
+                ),
+              ],
             ),
           ),
         ],

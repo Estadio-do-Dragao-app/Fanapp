@@ -48,6 +48,11 @@ class StadiumHeatmapData {
 /// Service for real-time congestion data via MQTT broker
 /// All data comes from Service-to-Client-Broker (port 1884)
 class CongestionService {
+  // Singleton pattern
+  static final CongestionService _instance = CongestionService._internal();
+  factory CongestionService() => _instance;
+  CongestionService._internal();
+  
   final MqttService _mqttService = MqttService();
 
   // Local store for MQTT updates
@@ -77,6 +82,7 @@ class CongestionService {
   void _onCongestionUpdate(Map<String, dynamic> data) {
     final cellData = CellCongestionData.fromJson(data);
     _cellData[cellData.cellId] = cellData;
+    print('[CongestionService] Stored cell ${cellData.cellId} with level ${cellData.congestionLevel}. Total cells: ${_cellData.length}');
   }
 
   /// Get current heatmap data from MQTT cache
