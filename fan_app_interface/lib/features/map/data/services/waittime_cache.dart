@@ -16,20 +16,14 @@ class WaittimeCache {
   final Map<String, double> _cache = {};
 
   /// Start listening to MQTT wait time updates
-  Future<void> start() async {
+  /// Does not initiate connection - just subscribes to stream
+  void start() {
     if (_isListening) return;
-
-    print('[WaittimeCache] Attempting MQTT connection...');
-    final connected = await _mqttService.connect();
-    print('[WaittimeCache] MQTT connected: $connected');
     
-    if (connected) {
-      _subscription = _mqttService.queuesStream.listen(_onWaittimeUpdate);
-      _isListening = true;
-      print('[WaittimeCache] Started listening to waittime updates');
-    } else {
-      print('[WaittimeCache] MQTT connection failed - wait times from API only');
-    }
+    // Subscribe to stream - MqttService handles connection elsewhere
+    _subscription = _mqttService.queuesStream.listen(_onWaittimeUpdate);
+    _isListening = true;
+    print('[WaittimeCache] Listening to waittime stream');
   }
 
   void _onWaittimeUpdate(Map<String, dynamic> data) {
@@ -39,7 +33,7 @@ class WaittimeCache {
 
     if (poiId != null && minutes != null) {
       _cache[poiId] = (minutes is int) ? minutes.toDouble() : minutes as double;
-      print('[WaittimeCache] Updated $poiId: ${_cache[poiId]} min');
+      // Only log occasionally to reduce noise
     }
   }
 

@@ -24,9 +24,6 @@ class ApiConfig {
   // static const String _baseHost = 'http://localhost';
   static const String _baseHost = 'http://172.16.46.17';
 
-  // Desenvolvimento local (browser/web)
-  // static const String _baseHost = 'http://localhost';
-
   // ==================== SERVIÇOS ====================
 
   /// Map-Service - Mapa do estádio, POIs, gates

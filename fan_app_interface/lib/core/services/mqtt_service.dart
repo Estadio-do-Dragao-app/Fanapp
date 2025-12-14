@@ -75,7 +75,7 @@ class MqttService {
       _client = MqttServerClient(_broker, _clientId);
       _client!.port = _port;
 
-      _client!.logging(on: true);
+      _client!.logging(on: false);
       _client!.keepAlivePeriod = 30;
       _client!.autoReconnect = true;
       _client!.onConnected = _onConnected;
