@@ -34,6 +34,13 @@ class DynamicRouteManager {
 
   RouteModel? get currentRoute => _currentRoute;
 
+  /// Atualiza manualmente a rota atual (ex: por rerouting MQTT)
+  void updateRoute(RouteModel newRoute) {
+    _currentRoute = newRoute;
+    // Reiniciar timer para evitar conflitos imediatos
+    _recalculationTimer?.cancel();
+  }
+
   /// Inicia monitorização automática da posição
   void startMonitoring(Stream<({double x, double y})> positionStream) {
     positionStream.listen((position) {

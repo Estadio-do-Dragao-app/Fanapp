@@ -339,8 +339,10 @@ class _NavigationPageState extends State<NavigationPage>
                       ),
                     ),
                   );
-                  // TODO: Implement actual reroute logic using _rerouteEvent!.newDestinationId
-                  // Example: _controller.recalculateRoute(_rerouteEvent!.newDestinationId);
+
+                  if (_rerouteEvent!.newRouteIds != null) {
+                    _controller.applyNewRoute(_rerouteEvent!.newRouteIds!);
+                  }
                 },
                 onDecline: () {
                   setState(() {

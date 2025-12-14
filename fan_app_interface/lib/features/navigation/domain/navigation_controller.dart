@@ -83,7 +83,7 @@ class NavigationController extends ChangeNotifier {
     _routeManager.startMonitoring(_positionStream.stream);
 
     // Escutar eventos MQTT (Reroute)
-    MqttService().allEventsStream.listen(_onMqttEvent);
+    MqttService().routingStream.listen(_onMqttEvent);
 
     _initialize();
   }
@@ -395,25 +395,93 @@ class NavigationController extends ChangeNotifier {
     );
   }
 
+  /// Utiliza IDs de nós para reconstruir rota completa
+  void applyNewRoute(List<String> nodeIds) {
+    if (nodeIds.isEmpty) return;
+
+    print(
+      '[NavigationController] 🛣️ Applying new route with ${nodeIds.length} nodes',
+    );
+
+    // Mapear IDs para NodeModels
+    final nodesMap = {for (var n in allNodes) n.id: n};
+    final newPath = <PathNode>[];
+    double cumulativeDist = 0;
+    double cumulativeTime = 0;
+
+    for (int i = 0; i < nodeIds.length; i++) {
+      final id = nodeIds[i];
+      final node = nodesMap[id];
+      if (node == null) continue;
+
+      if (i > 0) {
+        final prevNode = nodesMap[nodeIds[i - 1]]!;
+        final dist = math.sqrt(
+          math.pow(node.x - prevNode.x, 2) + math.pow(node.y - prevNode.y, 2),
+        );
+        cumulativeDist += dist;
+        cumulativeTime += dist / 1.4; // 1.4 m/s walking speed
+      }
+
+      newPath.add(
+        PathNode(
+          nodeId: id,
+          x: node.x,
+          y: node.y,
+          level: node.level,
+          distanceFromStart: cumulativeDist,
+          estimatedTime: cumulativeTime,
+        ),
+      );
+    }
+
+    // Criar novo RouteModel
+    final newRouteModel = RouteModel(
+      path: newPath,
+      totalDistance: cumulativeDist,
+      estimatedTime: cumulativeTime,
+      congestionLevel: 0, // Desconhecido nesta fase
+      warnings: [],
+    );
+
+    // Atualizar rota no manager e tracker
+    route = newRouteModel;
+    _routeManager.updateRoute(newRouteModel);
+
+    // Resetar tracker mas manter posição atual logicamente
+    final currentX = _tracker.currentX;
+    final currentY = _tracker.currentY;
+    _tracker = RouteTracker(route: newRouteModel, allNodes: allNodes);
+    _tracker.updateUserPosition(currentX, currentY);
+    _updateInstruction();
+
+    notifyListeners();
+  }
+
   /// Processa eventos recebidos via MQTT
   void _onMqttEvent(Map<String, dynamic> event) {
     // Verificar se é um evento de reroute
-    // Espera formato: { "type": "reroute", "data": { ... } }
-    if (event['type'] == 'reroute' && event['data'] != null) {
+    // Backend envia: { "type": "reroute_suggestion", ... }
+    if (event['type'] == 'reroute_suggestion') {
       print(
-        '[NavigationController] 📩 MQTT Reroute Event received: ${event['data']}',
+        '[NavigationController] 📩 MQTT Reroute Suggestion received: $event',
       );
       try {
-        final data = event['data'];
+        // Parse payload (flat structure from backend)
+        final improvement = event['improvement'] as Map<String, dynamic>?;
+        final newRoute = List<String>.from(event['new_route'] ?? []);
+
         final rerouteEvent = RerouteEvent(
-          arrivalTime: data['arrivalTime'] ?? '--:--',
-          duration: data['duration'] ?? '0 min',
-          distance: data['distance'] is int
-              ? data['distance']
-              : int.tryParse(data['distance'].toString()) ?? 0,
-          locationName: data['locationName'] ?? 'New Route',
-          newDestinationId: data['newDestinationId'] ?? '',
-          reason: data['reason'] ?? 'Better route found',
+          arrivalTime:
+              improvement?['time_saved_display'] ??
+              'Unknown', // This is technically duration saved, but OK for UI
+          duration: improvement?['time_saved_display'] ?? 'Unknown',
+          distance: 0, // Não vem no payload, não critico
+          locationName: "Better Route Found",
+          newDestinationId:
+              event['session_id'] ?? '', // ID da sessão apenas para referencia
+          reason: event['reason'] ?? 'Better route found',
+          newRouteIds: newRoute,
         );
         _rerouteStream.add(rerouteEvent);
       } catch (e) {

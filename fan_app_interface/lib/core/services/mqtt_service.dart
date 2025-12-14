@@ -25,6 +25,7 @@ class MqttService {
   static const String topicMaintenance = 'stadium/events/maintenance';
   static const String topicSecurity = 'stadium/events/security';
   static const String topicAlerts = 'alerts/broadcast';
+  static const String topicRouting = 'stadium/services/routing/#';
 
   MqttServerClient? _client;
   bool _isConnected = false;
@@ -40,6 +41,7 @@ class MqttService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _allEventsController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _routingController = StreamController<Map<String, dynamic>>.broadcast();
   final _waittimeController =
       StreamController<Map<String, dynamic>>.broadcast();
 
@@ -53,6 +55,7 @@ class MqttService {
       _maintenanceController.stream;
   Stream<Map<String, dynamic>> get allEventsStream =>
       _allEventsController.stream;
+  Stream<Map<String, dynamic>> get routingStream => _routingController.stream;
   Stream<Map<String, dynamic>> get waittimeStream => _waittimeController.stream;
 
   /// Check if connected to broker
@@ -125,7 +128,9 @@ class MqttService {
       topicAlerts,
       topicSecurity,
       topicMaintenance,
+      topicMaintenance,
       topicAllEvents,
+      topicRouting,
     ];
 
     for (var topic in topics) {
@@ -153,8 +158,11 @@ class MqttService {
         // Handle wildcard topics first (waittime/queues)
         if (topic.startsWith('stadium/waittime/')) {
           _queuesController.add(jsonData);
+        } else if (topic.startsWith('stadium/services/routing/')) {
+          _routingController.add(jsonData);
         }
         // Then handle exact matches
+
         switch (topic) {
           case topicCongestion:
             _congestionController.add(jsonData);
@@ -203,5 +211,6 @@ class MqttService {
     _securityController.close();
     _maintenanceController.close();
     _allEventsController.close();
+    _routingController.close();
   }
 }
