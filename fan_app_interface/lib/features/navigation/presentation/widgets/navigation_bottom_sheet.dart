@@ -10,6 +10,7 @@ class NavigationBottomSheet extends StatefulWidget {
   final String remainingDistance; // Ex: "40 m"
   final POIModel destination;
   final VoidCallback onEndRoute;
+  final ValueChanged<bool>? onExpansionChanged;
   final bool isEmergency;
 
   const NavigationBottomSheet({
@@ -19,6 +20,7 @@ class NavigationBottomSheet extends StatefulWidget {
     required this.remainingDistance,
     required this.destination,
     required this.onEndRoute,
+    this.onExpansionChanged,
     this.isEmergency = false,
   }) : super(key: key);
 
@@ -59,6 +61,8 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
         _animationController.reverse();
       }
     });
+    // Notify parent about expansion change
+    widget.onExpansionChanged?.call(_isExpanded);
   }
 
   @override
@@ -81,7 +85,7 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
           return Container(
             height: _heightAnimation.value,
             decoration: BoxDecoration(
-              color: widget.isEmergency 
+              color: widget.isEmergency
                   ? const Color(0xFF1E1E3F)
                   : const Color(0xFF1E1E3F),
               borderRadius: BorderRadius.circular(24),
@@ -163,7 +167,7 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 16),
-                          
+
                           // Botão End Route
                           SizedBox(
                             width: double.infinity,
@@ -208,9 +212,7 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
         Text(
           value,
           style: TextStyle(
-            color: isEmergency 
-                ? const Color(0xFFFF6B6B)
-                : Colors.white,
+            color: isEmergency ? const Color(0xFFFF6B6B) : Colors.white,
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
@@ -218,10 +220,7 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
         const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.6),
-            fontSize: 12,
-          ),
+          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
         ),
       ],
     );

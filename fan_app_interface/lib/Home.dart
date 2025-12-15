@@ -36,6 +36,11 @@ class _HomeState extends State<Home> {
   // Estado de acessibilidade
   bool _avoidStairs = false;
 
+  // GlobalKey para acessar o FilterButton e fechá-lo de fora
+  final GlobalKey<FilterButtonState> _filterButtonKey =
+      GlobalKey<FilterButtonState>();
+  bool _isFilterExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -141,6 +146,20 @@ class _HomeState extends State<Home> {
             currentFloor: _currentFloor,
             avoidStairs: _avoidStairs,
           ),
+          // Invisible tap detector to close filter when tapping elsewhere
+          if (_isFilterExpanded)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  _filterButtonKey.currentState?.closeMenu();
+                  setState(() {
+                    _isFilterExpanded = false;
+                  });
+                },
+                child: Container(color: Colors.transparent),
+              ),
+            ),
           Positioned(
             top: 0,
             left: 0,
@@ -161,6 +180,7 @@ class _HomeState extends State<Home> {
             top: MediaQuery.of(context).padding.top + 100,
             right: 16,
             child: FilterButton(
+              key: _filterButtonKey,
               showHeatmap: _showHeatmap,
               isHeatmapAvailable: _isHeatmapAvailable,
               currentFloor: _currentFloor,
@@ -182,6 +202,12 @@ class _HomeState extends State<Home> {
               onAvoidStairsChanged: (value) {
                 setState(() {
                   _avoidStairs = value;
+                });
+              },
+              onExpandedChanged: () {
+                setState(() {
+                  _isFilterExpanded =
+                      _filterButtonKey.currentState?.isExpanded ?? false;
                 });
               },
             ),
@@ -256,19 +282,19 @@ class _HomeState extends State<Home> {
               ),
             ),
           ),
-            Positioned(
-              bottom: 16,
-              right: 16,
-              child: MenuButton(
-                onTap: () async {
-                  await TicketMenu.show(context);
-                  // Recarregar os dados do mapa quando o menu fecha (pode ter mudado o bilhete)
-                  _mapPageKey.currentState?.reloadMapData();
-                },
-              ),
+          Positioned(
+            bottom: 16,
+            right: 16,
+            child: MenuButton(
+              onTap: () async {
+                await TicketMenu.show(context);
+                // Recarregar os dados do mapa quando o menu fecha (pode ter mudado o bilhete)
+                _mapPageKey.currentState?.reloadMapData();
+              },
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 }

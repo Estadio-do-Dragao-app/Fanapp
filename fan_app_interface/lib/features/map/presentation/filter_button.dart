@@ -11,6 +11,7 @@ class FilterButton extends StatefulWidget {
   final List<int> availableFloors;
   final bool avoidStairs;
   final ValueChanged<bool> onAvoidStairsChanged;
+  final VoidCallback? onExpandedChanged;
 
   const FilterButton({
     Key? key,
@@ -22,13 +23,14 @@ class FilterButton extends StatefulWidget {
     this.availableFloors = const [0, 1],
     this.avoidStairs = false,
     required this.onAvoidStairsChanged,
+    this.onExpandedChanged,
   }) : super(key: key);
 
   @override
-  State<FilterButton> createState() => _FilterButtonState();
+  State<FilterButton> createState() => FilterButtonState();
 }
 
-class _FilterButtonState extends State<FilterButton>
+class FilterButtonState extends State<FilterButton>
     with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
   late AnimationController _animationController;
@@ -61,7 +63,21 @@ class _FilterButtonState extends State<FilterButton>
         _animationController.reverse();
       }
     });
+    widget.onExpandedChanged?.call();
   }
+
+  /// Close the menu from outside (e.g., when tapping elsewhere)
+  void closeMenu() {
+    if (_isExpanded) {
+      setState(() {
+        _isExpanded = false;
+        _animationController.reverse();
+      });
+    }
+  }
+
+  /// Check if menu is currently expanded
+  bool get isExpanded => _isExpanded;
 
   @override
   Widget build(BuildContext context) {

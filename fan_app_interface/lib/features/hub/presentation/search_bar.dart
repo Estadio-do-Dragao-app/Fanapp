@@ -119,12 +119,7 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
 
     // Mostrar detalhes do POI - não passar onNavigate pois o context está inválido
     // POIDetailsSheet usará o fallback com route e allNodes que são válidos
-    POIDetailsSheet.show(
-      context,
-      poi: poi,
-      route: route,
-      allNodes: _allNodes,
-    );
+    POIDetailsSheet.show(context, poi: poi, route: route, allNodes: _allNodes);
   }
 
   @override
@@ -239,6 +234,8 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                                 fontSize: 16,
                                 color: textColor,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                             subtitle: Text(
                               _getCategoryName(context, poi.category),
@@ -246,6 +243,8 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                                 fontSize: 12,
                                 color: textColor.withOpacity(0.6),
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                             onTap: () {
                               _showPOIDetails(poi);

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../map/presentation/stadium_map_page.dart';
 import '../../map/data/models/poi_model.dart';
-import '../../map/data/models/node_model.dart';
+import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'dart:math';
+import 'dart:async';
 
 class EmergencyAlertPage extends StatefulWidget {
   const EmergencyAlertPage({Key? key}) : super(key: key);
@@ -19,10 +20,12 @@ class EmergencyAlertPage extends StatefulWidget {
 class _EmergencyAlertPageState extends State<EmergencyAlertPage>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
-  late Future<void> _autoRedirectFuture;
 
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
+
+  int _remainingSeconds = 3;
+  Timer? _redirectTimer;
 
   @override
   void initState() {
@@ -34,11 +37,25 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       vsync: this,
     )..repeat(reverse: true);
 
-    // Auto-redirect em 3 segundos
-    _autoRedirectFuture = Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        _goToEmergencyNavigation();
+    // Auto-redirect timer
+    _startedirectTimer();
+  }
+
+  void _startedirectTimer() {
+    _redirectTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
       }
+
+      setState(() {
+        if (_remainingSeconds > 0) {
+          _remainingSeconds--;
+        } else {
+          timer.cancel();
+          _goToEmergencyNavigation();
+        }
+      });
     });
   }
 
@@ -71,7 +88,9 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         startLevel = UserPositionService.defaultLevel;
       }
 
-      print('[EmergencyAlert] 📍 Posição do utilizador: ($startX, $startY, level=$startLevel)');
+      print(
+        '[EmergencyAlert] 📍 Posição do utilizador: ($startX, $startY, level=$startLevel)',
+      );
 
       // Encontrar saída de emergência mais próxima
       final exits = pois
@@ -97,13 +116,15 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         final dx = exit.x - startX;
         final dy = exit.y - startY;
         final distance = sqrt(dx * dx + dy * dy);
-        
+
         // Adicionar penalidade se saída está em nível diferente (escadas demoram mais)
         final levelPenalty = (exit.level - startLevel).abs() * 50.0;
         final totalDistance = distance + levelPenalty;
-        
-        print('[EmergencyAlert] 🚪 Saída ${exit.name} (${exit.id}): dist=$distance, level=${exit.level}, total=$totalDistance');
-        
+
+        print(
+          '[EmergencyAlert] 🚪 Saída ${exit.name} (${exit.id}): dist=$distance, level=${exit.level}, total=$totalDistance',
+        );
+
         if (totalDistance < minDistance) {
           minDistance = totalDistance;
           nearestExit = exit;
@@ -115,7 +136,9 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         return;
       }
 
-      print('[EmergencyAlert] ✅ Saída mais próxima: ${nearestExit.name} (${nearestExit.id})');
+      print(
+        '[EmergencyAlert] ✅ Saída mais próxima: ${nearestExit.name} (${nearestExit.id})',
+      );
 
       final route = await _routingService.getRouteToPOI(
         startX: startX,
@@ -153,9 +176,8 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
     final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
-      body: FutureBuilder<void>(
-        future: _autoRedirectFuture,
-        builder: (context, snapshot) {
+      body: Builder(
+        builder: (context) {
           final radius = MediaQuery.of(context).viewPadding.top > 0
               ? 70.0
               : 0.0; // curva do telemóvel
@@ -178,7 +200,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(radius),
                         border: Border.all(
-                          color: Color(
+                          color: const Color(
                             0xFFBD453D,
                           ).withOpacity((_animationController.value)),
                           width: 35,
@@ -204,7 +226,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
                             width: 220,
                             height: 220,
                             decoration: BoxDecoration(
-                              color: Color(0xFFBD453D),
+                              color: const Color(0xFFBD453D),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -257,9 +279,9 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
                                   ),
                                 ),
 
-                                const Text(
-                                  '3s',
-                                  style: TextStyle(
+                                Text(
+                                  '${_remainingSeconds}s',
+                                  style: const TextStyle(
                                     fontSize: 16,
                                     decoration: TextDecoration.underline,
                                     decorationColor: Colors.white70,

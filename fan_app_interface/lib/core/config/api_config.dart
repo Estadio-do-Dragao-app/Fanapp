@@ -22,7 +22,8 @@ class ApiConfig {
 
   // Desenvolvimento local (browser/web)
   // static const String _baseHost = 'http://172.16.46.6';
-  static const String _baseHost = 'http://172.16.46.6';
+  // Para dispositivo físico na mesma WiFi, usar IP do PC
+  static const String _baseHost = 'http://192.168.1.87';
 
   // ==================== SERVIÇOS ====================
 

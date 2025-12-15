@@ -687,7 +687,10 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                             fontFamily: 'Gabarito',
                           ),
                         ),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             // Piso
                             Container(
@@ -709,42 +712,50 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
                             // Tempo de caminhada
-                            const Icon(
-                              Icons.directions_walk,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              item.hasRoute
-                                  ? '${item.walkingMinutes} min'
-                                  : '~${item.walkingMinutes} min',
-                              style: TextStyle(
-                                color: item.hasRoute
-                                    ? Colors.white
-                                    : Colors.white70,
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.directions_walk,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  item.hasRoute
+                                      ? '${item.walkingMinutes} min'
+                                      : '~${item.walkingMinutes} min',
+                                  style: TextStyle(
+                                    color: item.hasRoute
+                                        ? Colors.white
+                                        : Colors.white70,
+                                  ),
+                                ),
+                              ],
                             ),
                             // Tempo de espera (se existir)
-                            if (item.waitMinutes > 0) ...[
-                              const SizedBox(width: 8),
-                              const Icon(
-                                Icons.hourglass_bottom,
-                                color: Colors.orange,
-                                size: 16,
+                            if (item.waitMinutes > 0)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.hourglass_bottom,
+                                    color: Colors.orange,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '+${item.waitMinutes} min',
+                                    style: const TextStyle(
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 2),
-                              Text(
-                                '+${item.waitMinutes} min',
-                                style: const TextStyle(color: Colors.orange),
-                              ),
-                            ],
                             // Badge "Mais rápido"
                             if (isFastest)
                               Container(
-                                margin: const EdgeInsets.only(left: 8),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 2,

@@ -61,6 +61,9 @@ class _NavigationPageState extends State<NavigationPage>
   bool _showReroutePopup = false;
   RerouteEvent? _rerouteEvent;
 
+  // Track bottom sheet expansion state
+  bool _isBottomSheetExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -126,7 +129,9 @@ class _NavigationPageState extends State<NavigationPage>
 
   void _onNavigationUpdate() {
     if (!mounted) return;
-    print('[NavigationPage] 🔄 Update: index=${_controller.tracker.currentWaypointIndex}');
+    print(
+      '[NavigationPage] 🔄 Update: index=${_controller.tracker.currentWaypointIndex}',
+    );
     setState(() {});
 
     // Câmara segue o utilizador (tipo Google Maps)
@@ -317,6 +322,11 @@ class _NavigationPageState extends State<NavigationPage>
                 destination: widget.destination,
                 onEndRoute: _endNavigation,
                 isEmergency: widget.isEmergency,
+                onExpansionChanged: (expanded) {
+                  setState(() {
+                    _isBottomSheetExpanded = expanded;
+                  });
+                },
               ),
             ),
 
@@ -333,44 +343,107 @@ class _NavigationPageState extends State<NavigationPage>
                 locationName: _rerouteEvent!.locationName,
                 onAccept: () async {
                   // Capture reroute event values BEFORE setState (which may trigger rebuild)
-                  final capturedNewDestinationId = _rerouteEvent?.newDestinationId ?? widget.destination.id;
+                  // Handle both null AND empty string cases
+                  String capturedNewDestinationId =
+                      _rerouteEvent?.newDestinationId ?? '';
+                  if (capturedNewDestinationId.isEmpty) {
+                    capturedNewDestinationId = widget.destination.id;
+                  }
                   final capturedNewRouteIds = _rerouteEvent?.newRouteIds;
-                  final capturedCategory = _rerouteEvent?.category; // POI category for nearest_category lookup
-                  
+
+                  // Get category from MQTT event, or extract from destination ID
+                  String? capturedCategory = _rerouteEvent?.category;
+                  final originalCategory = widget.destination.category;
+
+                  print('[NavigationPage] 🔍 Debug Reroute Values:');
+                  print(
+                    '  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"',
+                  );
+                  print('  - Captured Dest ID: "$capturedNewDestinationId"');
+                  print('  - Event Category: "${_rerouteEvent?.category}"');
+                  print('  - Widget Dest Category: "$originalCategory"');
+
+                  if ((capturedCategory == null || capturedCategory.isEmpty) &&
+                      originalCategory.isNotEmpty) {
+                    // Use original destination's category as fallback
+                    capturedCategory = originalCategory;
+                    print(
+                      '[NavigationPage] 📦 Using original destination category: $capturedCategory',
+                    );
+                  }
+
+                  // Ensure category is formatted correctly for backend (match POI ID prefix)
+                  // e.g. "wc" -> "WC", "food" -> "Food"
+                  if (capturedCategory != null && capturedCategory.isNotEmpty) {
+                    if (capturedCategory.toLowerCase() == 'wc') {
+                      capturedCategory = 'WC';
+                    } else if (capturedCategory.length > 1) {
+                      capturedCategory =
+                          capturedCategory[0].toUpperCase() +
+                          capturedCategory.substring(1).toLowerCase();
+                    }
+                  }
+
+                  print('  - Final Captured Category: "$capturedCategory"');
+
                   setState(() {
                     _showReroutePopup = false;
                   });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Recalculating route from current position..."),
-                    ),
-                  );
+
+                  // Show blocking loading dialog to prevent "moving before notification"
+                  if (mounted) {
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) =>
+                          const Center(child: CircularProgressIndicator()),
+                    );
+                  }
 
                   // Request new route from current position to NEW destination
                   try {
                     // Pause auto-navigation to freeze user position while calculating
                     _controller.pauseAutoNavigation();
-                    
+
                     final currentX = _controller.tracker.currentX;
                     final currentY = _controller.tracker.currentY;
                     final currentLevel = _controller.currentLevel;
-                    
+
                     RouteModel newRoute;
-                    
-                    // If category is available, use nearest_category to find FASTEST POI
-                    // (uses full pathfinding with congestion + wait + travel)
-                    if (capturedCategory != null && capturedCategory.isNotEmpty) {
-                      print('[NavigationPage] 🔄 Requesting nearest $capturedCategory from ($currentX, $currentY) level=$currentLevel');
-                      newRoute = await _routingService.getRouteToNearestCategory(
-                        startX: currentX,
-                        startY: currentY,
-                        startLevel: currentLevel,
-                        category: capturedCategory,
-                        avoidStairs: false,
+
+                    // Extract category from POI ID if category not explicitly provided
+                    // POI IDs follow format: "Category-Location-Number" (e.g., "Food-Norte-1", "WC-Norte-L0-1")
+                    String? effectiveCategory = capturedCategory;
+                    if ((effectiveCategory == null ||
+                            effectiveCategory.isEmpty) &&
+                        capturedNewDestinationId.contains('-')) {
+                      effectiveCategory = capturedNewDestinationId
+                          .split('-')
+                          .first;
+                      print(
+                        '[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory',
                       );
+                    }
+
+                    // Always prefer category-based routing (finds best POI considering wait times)
+                    if (effectiveCategory != null &&
+                        effectiveCategory.isNotEmpty) {
+                      print(
+                        '[NavigationPage] 🔄 Requesting nearest $effectiveCategory from ($currentX, $currentY) level=$currentLevel',
+                      );
+                      newRoute = await _routingService
+                          .getRouteToNearestCategory(
+                            startX: currentX,
+                            startY: currentY,
+                            startLevel: currentLevel,
+                            category: effectiveCategory,
+                            avoidStairs: false,
+                          );
                     } else {
-                      // Fallback to specific POI if no category
-                      print('[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId');
+                      // Fallback to specific POI if no category (rare edge case)
+                      print(
+                        '[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId',
+                      );
                       newRoute = await _routingService.getRouteToPOI(
                         startX: currentX,
                         startY: currentY,
@@ -379,12 +452,20 @@ class _NavigationPageState extends State<NavigationPage>
                         avoidStairs: false,
                       );
                     }
-                    
+
                     if (newRoute.path.isNotEmpty) {
-                      final nodeIds = newRoute.path.map((p) => p.nodeId).toList();
-                      print('[NavigationPage] ✅ New route received with ${nodeIds.length} nodes');
+                      final nodeIds = newRoute.path
+                          .map((p) => p.nodeId)
+                          .toList();
+                      print(
+                        '[NavigationPage] ✅ New route received with ${nodeIds.length} nodes',
+                      );
+                      if (mounted) {
+                        Navigator.pop(context); // Dismiss loading dialog
+                      }
+
                       _controller.applyNewRoute(nodeIds);
-                      
+
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -397,6 +478,8 @@ class _NavigationPageState extends State<NavigationPage>
                   } catch (e) {
                     print('[NavigationPage] ❌ Failed to get new route: $e');
                     if (mounted) {
+                      Navigator.pop(context); // Dismiss loading dialog
+
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text("Failed to recalculate route: $e"),
@@ -415,9 +498,11 @@ class _NavigationPageState extends State<NavigationPage>
             ),
 
           // Botão de centrar e Toggle Heatmap
-          Positioned(
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
             left: 16,
-            bottom: 200,
+            bottom: _isBottomSheetExpanded ? 360 : 200,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
