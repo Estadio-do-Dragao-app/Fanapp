@@ -57,7 +57,8 @@ class RouteTracker {
   /// Considera X, Y E nível - só chegou se estiver no piso certo!
   /// Para rotas de evacuação ou rotas simples, o nível é verificado com tolerância
   bool get hasArrived {
-    if (route.waypoints.isEmpty) return false;
+    // Se a rota está vazia, já chegamos (ou não há para onde ir)
+    if (route.waypoints.isEmpty) return true;
     final lastWaypoint = route.waypoints.last;
     final lastCoords = getCorrectWaypointCoords(lastWaypoint);
     final destinationLevel = _getWaypointLevel(lastWaypoint);
@@ -69,9 +70,9 @@ class RouteTracker {
       lastCoords.y,
     );
 
-    // Se muito perto (< 3m), consideramos chegada mesmo com diferença de nível
+    // Se muito perto (< 8m), consideramos chegada mesmo com diferença de nível
     // Isto resolve o bug de rotas de evacuação que terminam em exits no nível 0
-    if (distToLast < 3.0) {
+    if (distToLast < 8.0) {
       if (_userLevel != destinationLevel) {
         print(
           '[RouteTracker] 🎯 Chegou ao destino (distância OK, nível ignorado): user=$_userLevel, dest=$destinationLevel',
@@ -296,16 +297,29 @@ class RouteTracker {
 
   /// Atualiza o waypoint atual baseado na posição do utilizador
   void _updateCurrentWaypoint() {
-    for (int i = _currentWaypointIndex; i < route.waypoints.length; i++) {
+    // Search ahead up to 2 waypoints to catch up if we missed one
+    final searchEnd = min(_currentWaypointIndex + 3, route.waypoints.length);
+    
+    for (int i = _currentWaypointIndex; i < searchEnd; i++) {
       final waypoint = route.waypoints[i];
       final coords = getCorrectWaypointCoords(waypoint);
       final distance = _calculateDistance(_userX, _userY, coords.x, coords.y);
+      
+      // Debug
+      final node = _nodesMap[waypoint.nodeId];
+      if (i == _currentWaypointIndex) {
+         print('[RouteTracker] WP$i (${waypoint.nodeId}): Dist=${distance.toStringAsFixed(1)}m, NodeFound=${node != null}');
+      }
 
-      // Se está a menos de 5 metros do waypoint, avançar para o próximo
-      // (aumentado de 2m para evitar mudanças prematuras de instrução)
-      if (distance < 5.0 && i < route.waypoints.length - 1) {
+      // Se está a menos de 8 metros do waypoint, consideramos visitado
+      if (distance < 8.0) {
+        // Se encontrarmos um waypoint mais à frente, assumimos que passamos os anteriores
         _currentWaypointIndex = i + 1;
-      } else {
+        // Não fazemos break, continuamos a verificar se também já estamos perto do próximo
+        // (Ex: waypoints muito próximos)
+      } else if (i == _currentWaypointIndex) {
+        // Se não estamos perto do atual, não vale a pena ver os seguintes
+        // EXCETO se o atual tiver coordenadas erradas... mas assumimos que não.
         break;
       }
     }

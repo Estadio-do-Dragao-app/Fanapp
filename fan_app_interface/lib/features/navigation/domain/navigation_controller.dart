@@ -158,6 +158,15 @@ class NavigationController extends ChangeNotifier {
     _updateInstruction();
     notifyListeners();
 
+    print('[NavigationController] 🚦 Start check: RouteLen=${route.waypoints.length}, HasArrived=${_tracker.hasArrived}');
+
+    // Check for immediate arrival (e.g. route to current location)
+    if (_tracker.hasArrived) {
+       print('[NavigationController] 🏁 Immediate arrival detected at start.');
+       _onArrival();
+       return;
+    }
+
     // Iniciar navegação automática
     _startAutoNavigation();
     
@@ -240,8 +249,8 @@ class NavigationController extends ChangeNotifier {
       final dy = targetY - currentY;
       final distance = math.sqrt(dx * dx + dy * dy);
 
-      // Se chegou ao waypoint atual (menos de 1.5 unidades), passar para o próximo
-      if (distance < 1.5) {
+      // Se chegou ao waypoint atual (menos de 3.0 unidades), passar para o próximo
+      if (distance < 3.0) {
         // Verificar mudança de piso ao atingir waypoint de escadas/rampa
         if (targetLevel != _currentLevel) {
           print(
@@ -280,8 +289,14 @@ class NavigationController extends ChangeNotifier {
       return;
     }
 
-    // Chegou ao destino
+    // Chegou ao destino (fim da lista de waypoints)
     _autoNavTimer?.cancel();
+    if (!_tracker.hasArrived) {
+        print('[NavigationController] 🏁 Route traversal finished. Forcing arrival.');
+        // Force update to last waypoint to ensure arrival state
+        final lastWp = route.waypoints.last;
+        updateUserPosition(lastWp.x, lastWp.y);
+    }
   }
 
   /// Roda o utilizador em graus (positivo = horário)

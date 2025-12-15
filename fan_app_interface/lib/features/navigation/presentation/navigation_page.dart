@@ -126,6 +126,7 @@ class _NavigationPageState extends State<NavigationPage>
 
   void _onNavigationUpdate() {
     if (!mounted) return;
+    print('[NavigationPage] 🔄 Update: index=${_controller.tracker.currentWaypointIndex}');
     setState(() {});
 
     // Câmara segue o utilizador (tipo Google Maps)
