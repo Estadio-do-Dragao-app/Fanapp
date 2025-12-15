@@ -528,11 +528,33 @@ class NavigationController extends ChangeNotifier {
     // Reiniciar navegação automática
     _autoNavTimer?.cancel();
     _isNavigating = true;
+
+    // Find the nearest waypoint to the user's current position in the new route
+    // This ensures navigation continues from where the user is, not from the start
     _targetWaypointIndex = 0;
+    double minDistance = double.infinity;
+    for (int i = 0; i < newRouteModel.waypoints.length; i++) {
+      final wp = newRouteModel.waypoints[i];
+      final node = nodesMap[wp.nodeId];
+      final wpX = node?.x ?? wp.x;
+      final wpY = node?.y ?? wp.y;
+      final dx = wpX - currentX;
+      final dy = wpY - currentY;
+      final dist = math.sqrt(dx * dx + dy * dy);
+      if (dist < minDistance) {
+        minDistance = dist;
+        _targetWaypointIndex = i;
+      }
+    }
+
+    print(
+      '[NavigationController] 📍 Starting from waypoint $_targetWaypointIndex (nearest to current position)',
+    );
+
     _startAutoNavigation();
 
     print(
-      '[NavigationController] ✅ New route applied, auto-navigation restarted',
+      '[NavigationController] ✅ New route applied, auto-navigation restarted from waypoint $_targetWaypointIndex',
     );
 
     notifyListeners();

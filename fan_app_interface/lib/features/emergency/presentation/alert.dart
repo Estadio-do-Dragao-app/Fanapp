@@ -49,9 +49,8 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       }
 
       setState(() {
-        if (_remainingSeconds > 0) {
-          _remainingSeconds--;
-        } else {
+        _remainingSeconds--;
+        if (_remainingSeconds <= 0) {
           timer.cancel();
           _goToEmergencyNavigation();
         }

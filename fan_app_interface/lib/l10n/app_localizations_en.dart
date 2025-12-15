@@ -70,7 +70,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get arrival => 'arrival';
 
   @override
-  String get time => 'hrs';
+  String get time => 'min';
 
   @override
   String get distance => 'm';
@@ -106,13 +106,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteTicket => 'Delete Ticket';
 
   @override
-  String get deleteTicketConfirm => 'Are you sure you want to delete this ticket?';
+  String get deleteTicketConfirm =>
+      'Are you sure you want to delete this ticket?';
 
   @override
   String get noTicketScanned => 'No ticket scanned';
 
   @override
-  String get noTicketScannedMessage => 'Please scan your ticket QR code to navigate to your seat.';
+  String get noTicketScannedMessage =>
+      'Please scan your ticket QR code to navigate to your seat.';
 
   @override
   String get scanNow => 'Scan Now';

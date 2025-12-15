@@ -502,7 +502,9 @@ class _NavigationPageState extends State<NavigationPage>
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             left: 16,
-            bottom: _isBottomSheetExpanded ? 360 : 200,
+            bottom: _showReroutePopup
+                ? 360
+                : (_isBottomSheetExpanded ? 360 : 200),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
