@@ -7,6 +7,7 @@ import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
 import '../../navigation/data/services/user_position_service.dart';
+import '../../navigation/presentation/navigation_page.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
@@ -116,18 +117,13 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
     // Capturar o messenger antes de mostrar o sheet (evita usar context desmontado)
     final messenger = ScaffoldMessenger.of(context);
 
-    // Mostrar detalhes do POI (sem desenhar rota)
+    // Mostrar detalhes do POI - não passar onNavigate pois o context está inválido
+    // POIDetailsSheet usará o fallback com route e allNodes que são válidos
     POIDetailsSheet.show(
       context,
       poi: poi,
       route: route,
       allNodes: _allNodes,
-      onNavigate: () {
-        // Usa o messenger capturado (safe mesmo se widget desmontado)
-        messenger.showSnackBar(
-          SnackBar(content: Text('Navegação para ${poi.name}')),
-        );
-      },
     );
   }
 

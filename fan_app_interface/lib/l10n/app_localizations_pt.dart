@@ -167,4 +167,72 @@ class AppLocalizationsPt extends AppLocalizations {
   String distanceM(int dist) {
     return '$dist m';
   }
+
+  @override
+  String get yourSeat => 'O Seu Lugar';
+
+  @override
+  String ticketId(int id) {
+    return 'Bilhete: $id';
+  }
+
+  @override
+  String get navigate => 'Navegar';
+
+  @override
+  String floorLabel(int level) {
+    return 'Piso $level';
+  }
+
+  @override
+  String queueTime(int min) {
+    return '$min min fila';
+  }
+
+  @override
+  String walkTime(int min) {
+    return '$min min';
+  }
+
+  @override
+  String get removeSaved => 'Remover';
+
+  @override
+  String get savePlace => 'Guardar';
+
+  @override
+  String get ticketNotFound => 'Bilhete não encontrado';
+
+  @override
+  String get seatDescription => 'O seu lugar reservado';
+
+  @override
+  String get foodDescription => 'Comida e snacks';
+
+  @override
+  String get barDescription => 'Bebidas disponíveis';
+
+  @override
+  String get restroomDescription => 'Casas de banho';
+
+  @override
+  String get exitDescription => 'Saída de emergência';
+
+  @override
+  String get firstAidDescription => 'Assistência médica';
+
+  @override
+  String get infoDescription => 'Balcão de informações';
+
+  @override
+  String get defaultPoiDescription => 'Ponto de interesse';
+
+  @override
+  String get invalidQRFormat => 'Formato de QR code inválido';
+
+  @override
+  String get invalidQRSignature => 'QR code inválido ou adulterado';
+
+  @override
+  String get connectionError => 'Erro de conexão. Verifique a sua internet.';
 }

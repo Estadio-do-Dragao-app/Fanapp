@@ -90,5 +90,57 @@
         "example": "50"
       }
     }
-  }
+  },
+  "yourSeat": "O Seu Lugar",
+  "ticketId": "Bilhete: {id}",
+  "@ticketId": {
+    "placeholders": {
+      "id": {
+        "type": "int",
+        "example": "123"
+      }
+    }
+  },
+  "navigate": "Navegar",
+  "floorLabel": "Piso {level}",
+  "@floorLabel": {
+    "placeholders": {
+      "level": {
+        "type": "int",
+        "example": "0"
+      }
+    }
+  },
+  "queueTime": "{min} min fila",
+  "@queueTime": {
+    "placeholders": {
+      "min": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "walkTime": "{min} min",
+  "@walkTime": {
+    "placeholders": {
+      "min": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "removeSaved": "Remover",
+  "savePlace": "Guardar",
+  "ticketNotFound": "Bilhete não encontrado",
+  "seatDescription": "O seu lugar reservado",
+  "foodDescription": "Comida e snacks",
+  "barDescription": "Bebidas disponíveis",
+  "restroomDescription": "Casas de banho",
+  "exitDescription": "Saída de emergência",
+  "firstAidDescription": "Assistência médica",
+  "infoDescription": "Balcão de informações",
+  "defaultPoiDescription": "Ponto de interesse",
+  "invalidQRFormat": "Formato de QR code inválido",
+  "invalidQRSignature": "QR code inválido ou adulterado",
+  "connectionError": "Erro de conexão. Verifique a sua internet."
 }

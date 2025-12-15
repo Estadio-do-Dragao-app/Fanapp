@@ -394,6 +394,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{dist} m'**
   String distanceM(int dist);
+
+  /// No description provided for @yourSeat.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Seat'**
+  String get yourSeat;
+
+  /// No description provided for @ticketId.
+  ///
+  /// In en, this message translates to:
+  /// **'Ticket: {id}'**
+  String ticketId(int id);
+
+  /// No description provided for @navigate.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigate'**
+  String get navigate;
+
+  /// No description provided for @floorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Floor {level}'**
+  String floorLabel(int level);
+
+  /// No description provided for @queueTime.
+  ///
+  /// In en, this message translates to:
+  /// **'{min} min queue'**
+  String queueTime(int min);
+
+  /// No description provided for @walkTime.
+  ///
+  /// In en, this message translates to:
+  /// **'{min} min'**
+  String walkTime(int min);
+
+  /// No description provided for @removeSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get removeSaved;
+
+  /// No description provided for @savePlace.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get savePlace;
+
+  /// No description provided for @ticketNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Ticket not found'**
+  String get ticketNotFound;
+
+  /// No description provided for @seatDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Your reserved seat'**
+  String get seatDescription;
+
+  /// No description provided for @foodDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Food and snacks'**
+  String get foodDescription;
+
+  /// No description provided for @barDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Drinks available'**
+  String get barDescription;
+
+  /// No description provided for @restroomDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Public restrooms'**
+  String get restroomDescription;
+
+  /// No description provided for @exitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency exit'**
+  String get exitDescription;
+
+  /// No description provided for @firstAidDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Medical assistance'**
+  String get firstAidDescription;
+
+  /// No description provided for @infoDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Information desk'**
+  String get infoDescription;
+
+  /// No description provided for @defaultPoiDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Point of interest'**
+  String get defaultPoiDescription;
+
+  /// No description provided for @invalidQRFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid QR code format'**
+  String get invalidQRFormat;
+
+  /// No description provided for @invalidQRSignature.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid or tampered QR code'**
+  String get invalidQRSignature;
+
+  /// No description provided for @connectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection error. Check your internet.'**
+  String get connectionError;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

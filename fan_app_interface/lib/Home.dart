@@ -45,10 +45,14 @@ class _HomeState extends State<Home> {
     WaittimeCache().start();
     // Iniciar timer de 30s (só verifica quando heatmap está desligado)
     _startHealthCheckTimer();
-    _initAlertListener();
+    // Conectar MQTT primeiro, depois configurar listeners
+    _initMqttAndAlerts();
   }
 
-  void _initAlertListener() {
+  Future<void> _initMqttAndAlerts() async {
+    // Conectar MQTT primeiro
+    await MqttService().connect();
+    // Depois configurar listener de alertas
     _alertSubscription = MqttService().alertsStream.listen((data) {
       if (!mounted) return;
       print('[Home] Received alert: $data');

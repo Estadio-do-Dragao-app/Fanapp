@@ -211,6 +211,13 @@ class NavigationController extends ChangeNotifier {
     });
   }
 
+  /// Pause auto-navigation (called before route recalculation)
+  void pauseAutoNavigation() {
+    _autoNavTimer?.cancel();
+    _autoNavTimer = null;
+    print('[NavigationController] ⏸️ Auto-navigation paused');
+  }
+
   /// Move o utilizador gradualmente em direção ao próximo waypoint
   void _moveTowardsNextWaypoint() {
     if (route.waypoints.isEmpty) return;
@@ -366,6 +373,8 @@ class NavigationController extends ChangeNotifier {
     }
   }
 
+
+
   /// Chamado quando utilizador chega ao destino
   void _onArrival() async {
     _isNavigating = false;
@@ -448,12 +457,14 @@ class NavigationController extends ChangeNotifier {
       if (node == null) continue;
 
       if (i > 0) {
-        final prevNode = nodesMap[nodeIds[i - 1]]!;
-        final dist = math.sqrt(
-          math.pow(node.x - prevNode.x, 2) + math.pow(node.y - prevNode.y, 2),
-        );
-        cumulativeDist += dist;
-        cumulativeTime += dist / 1.4; // 1.4 m/s walking speed
+        final prevNode = nodesMap[nodeIds[i - 1]];
+        if (prevNode != null) {
+          final dist = math.sqrt(
+            math.pow(node.x - prevNode.x, 2) + math.pow(node.y - prevNode.y, 2),
+          );
+          cumulativeDist += dist;
+          cumulativeTime += dist / 1.4; // 1.4 m/s walking speed
+        }
       }
 
       newPath.add(
@@ -549,6 +560,7 @@ class NavigationController extends ChangeNotifier {
           distance: 0, // Não vem no payload, não critico
           locationName: event['new_destination'] ?? "Better Route Found",
           newDestinationId: event['new_destination'] ?? '', // O novo POI de destino
+          category: event['category'] as String?, // POI category for nearest_category lookup
           reason: event['reason'] ?? 'Better route found',
           newRouteIds: newRoute,
         );

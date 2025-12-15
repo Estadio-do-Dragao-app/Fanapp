@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fan_app_interface/l10n/app_localizations.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
@@ -112,7 +113,7 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                     color: _isSaved ? Colors.amber : Colors.white70,
                     size: 28,
                   ),
-                  tooltip: _isSaved ? 'Remover dos guardados' : 'Guardar lugar',
+                  tooltip: _isSaved ? AppLocalizations.of(context)!.removeSaved : AppLocalizations.of(context)!.savePlace,
                 ),
               if (widget.route != null)
                 Text(
@@ -129,26 +130,26 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
 
           // Descrição do POI
           Text(
-            _getPOIDescription(widget.poi.category),
+            _getPOIDescription(widget.poi.category, context),
             style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 8),
 
           // Piso do POI
-          Row(
-            children: [
-              const Icon(Icons.layers, color: Colors.white54, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                'Piso ${widget.poi.level}',
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+            Row(
+              children: [
+                const Icon(Icons.layers, color: Colors.white54, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  AppLocalizations.of(context)!.floorLabel(widget.poi.level),
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           const SizedBox(height: 24),
 
           // Informações de tempo
@@ -158,8 +159,8 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
               _buildTimeInfo(
                 icon: Icons.directions_walk,
                 label: widget.route != null
-                    ? '${(widget.route!.etaSeconds / 60).round()} min'
-                    : '3 min',
+                    ? AppLocalizations.of(context)!.walkTime((widget.route!.etaSeconds / 60).round())
+                    : AppLocalizations.of(context)!.walkTime(3),
               ),
               const SizedBox(width: 24),
 
@@ -167,8 +168,8 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
               _buildTimeInfo(
                 icon: Icons.group,
                 label: widget.route?.waitTime != null
-                    ? '${widget.route!.waitTime!.round()} min fila'
-                    : '0 min fila',
+                    ? AppLocalizations.of(context)!.queueTime(widget.route!.waitTime!.round())
+                    : AppLocalizations.of(context)!.queueTime(0),
               ),
             ],
           ),
@@ -179,16 +180,19 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                // Capture navigator before closing sheet
+                final navigator = Navigator.of(context);
+                
+                // Close the sheet first
+                navigator.pop();
 
                 // Se callback fornecido, chamar
                 if (widget.onNavigate != null) {
                   widget.onNavigate!();
                 }
-                // Senão, abrir página de navegação
+                // Senão, abrir página de navegação usando o navigator capturado
                 else if (widget.route != null && widget.allNodes != null) {
-                  Navigator.push(
-                    context,
+                  navigator.push(
                     MaterialPageRoute(
                       builder: (context) => NavigationPage(
                         route: widget.route!,
@@ -206,13 +210,13 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                   borderRadius: BorderRadius.circular(50),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.navigation, color: Colors.white),
                   SizedBox(width: 8),
                   Text(
-                    'Navigate',
+                    AppLocalizations.of(context)!.navigate,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -245,22 +249,25 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
     );
   }
 
-  String _getPOIDescription(String category) {
+  String _getPOIDescription(String category, BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     switch (category.toLowerCase()) {
       case 'food':
-        return 'An hamburguer company...';
+        return l.foodDescription;
       case 'bar':
-        return 'Drinks and refreshments available...';
+        return l.barDescription;
       case 'restroom':
-        return 'Public restroom facilities...';
+        return l.restroomDescription;
       case 'emergency_exit':
-        return 'Emergency exit point...';
+        return l.exitDescription;
       case 'first_aid':
-        return 'First aid medical assistance...';
+        return l.firstAidDescription;
       case 'information':
-        return 'Information desk...';
+        return l.infoDescription;
+      case 'seat':
+        return l.seatDescription;
       default:
-        return 'Point of interest...';
+        return l.defaultPoiDescription;
     }
   }
 }

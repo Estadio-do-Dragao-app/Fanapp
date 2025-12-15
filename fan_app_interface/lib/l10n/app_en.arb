@@ -90,5 +90,57 @@
         "example": "50"
       }
     }
-  }
+  },
+  "yourSeat": "Your Seat",
+  "ticketId": "Ticket: {id}",
+  "@ticketId": {
+    "placeholders": {
+      "id": {
+        "type": "int",
+        "example": "123"
+      }
+    }
+  },
+  "navigate": "Navigate",
+  "floorLabel": "Floor {level}",
+  "@floorLabel": {
+    "placeholders": {
+      "level": {
+        "type": "int",
+        "example": "0"
+      }
+    }
+  },
+  "queueTime": "{min} min queue",
+  "@queueTime": {
+    "placeholders": {
+      "min": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "walkTime": "{min} min",
+  "@walkTime": {
+    "placeholders": {
+      "min": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "removeSaved": "Remove",
+  "savePlace": "Save",
+  "ticketNotFound": "Ticket not found",
+  "seatDescription": "Your reserved seat",
+  "foodDescription": "Food and snacks",
+  "barDescription": "Drinks available",
+  "restroomDescription": "Public restrooms",
+  "exitDescription": "Emergency exit",
+  "firstAidDescription": "Medical assistance",
+  "infoDescription": "Information desk",
+  "defaultPoiDescription": "Point of interest",
+  "invalidQRFormat": "Invalid QR code format",
+  "invalidQRSignature": "Invalid or tampered QR code",
+  "connectionError": "Connection error. Check your internet."
 }

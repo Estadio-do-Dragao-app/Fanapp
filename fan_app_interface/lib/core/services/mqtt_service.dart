@@ -29,6 +29,8 @@ class MqttService {
 
   MqttServerClient? _client;
   bool _isConnected = false;
+  bool _isSubscribed = false; // Guard to prevent multiple subscriptions
+  bool _isConnecting = false; // Guard to prevent multiple connection attempts
 
   // Stream controllers for different data types
   final _congestionController =
@@ -64,6 +66,7 @@ class MqttService {
   /// Connect to the MQTT broker
   Future<bool> connect() async {
     if (_isConnected) return true;
+    if (_isConnecting) return false; // Prevent multiple connection attempts
 
     // MQTT TCP is not available on Web platform
     if (kIsWeb) {
@@ -73,6 +76,8 @@ class MqttService {
       return false;
     }
 
+    _isConnecting = true;
+    
     try {
       print('[MqttService] Connecting via TCP: $_broker:$_port');
       _client = MqttServerClient(_broker, _clientId);
@@ -84,6 +89,7 @@ class MqttService {
       _client!.onConnected = _onConnected;
       _client!.onDisconnected = _onDisconnected;
       _client!.onAutoReconnect = _onAutoReconnect;
+      _client!.onAutoReconnected = _onAutoReconnected;
 
       final connMessage = MqttConnectMessage()
           .withClientIdentifier(_clientId)
@@ -96,14 +102,17 @@ class MqttService {
       if (_client!.connectionStatus!.state == MqttConnectionState.connected) {
         print('[MqttService] Connected successfully');
         _isConnected = true;
+        _isConnecting = false;
         _subscribeToTopics();
         return true;
       } else {
         print('[MqttService] Connection failed: ${_client!.connectionStatus}');
+        _isConnecting = false;
         return false;
       }
     } catch (e) {
       print('[MqttService] Connection error: $e');
+      _isConnecting = false;
       return false;
     }
   }
@@ -113,6 +122,7 @@ class MqttService {
     if (_client != null && _isConnected) {
       _client!.disconnect();
       _isConnected = false;
+      _isSubscribed = false;
       print('[MqttService] Disconnected');
     }
   }
@@ -120,6 +130,7 @@ class MqttService {
   /// Subscribe to all relevant topics
   void _subscribeToTopics() {
     if (_client == null || !_isConnected) return;
+    if (_isSubscribed) return; // Already subscribed, don't re-subscribe
 
     // Subscribe to all available topics
     final topics = [
@@ -140,6 +151,7 @@ class MqttService {
 
     // Listen for incoming messages
     _client!.updates!.listen(_onMessage);
+    _isSubscribed = true;
   }
 
   /// Handle incoming MQTT messages
@@ -201,6 +213,14 @@ class MqttService {
 
   void _onAutoReconnect() {
     print('[MqttService] Auto-reconnecting...');
+    _isConnected = false;
+    _isSubscribed = false; // Reset subscription flag so we re-subscribe after reconnect
+  }
+
+  void _onAutoReconnected() {
+    print('[MqttService] Auto-reconnected successfully');
+    _isConnected = true;
+    _subscribeToTopics(); // Re-subscribe to topics after auto-reconnection
   }
 
   /// Dispose resources

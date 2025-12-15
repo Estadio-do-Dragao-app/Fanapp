@@ -331,6 +331,11 @@ class _NavigationPageState extends State<NavigationPage>
                 distance: _rerouteEvent!.distance,
                 locationName: _rerouteEvent!.locationName,
                 onAccept: () async {
+                  // Capture reroute event values BEFORE setState (which may trigger rebuild)
+                  final capturedNewDestinationId = _rerouteEvent?.newDestinationId ?? widget.destination.id;
+                  final capturedNewRouteIds = _rerouteEvent?.newRouteIds;
+                  final capturedCategory = _rerouteEvent?.category; // POI category for nearest_category lookup
+                  
                   setState(() {
                     _showReroutePopup = false;
                   });
@@ -342,21 +347,37 @@ class _NavigationPageState extends State<NavigationPage>
 
                   // Request new route from current position to NEW destination
                   try {
+                    // Pause auto-navigation to freeze user position while calculating
+                    _controller.pauseAutoNavigation();
+                    
                     final currentX = _controller.tracker.currentX;
                     final currentY = _controller.tracker.currentY;
                     final currentLevel = _controller.currentLevel;
                     
-                    // Use the new destination from the reroute suggestion
-                    final newDestinationId = _rerouteEvent?.newDestinationId ?? widget.destination.id;
-                    print('[NavigationPage] 🔄 Requesting new route from ($currentX, $currentY) level=$currentLevel to $newDestinationId');
+                    RouteModel newRoute;
                     
-                    final newRoute = await _routingService.getRouteToPOI(
-                      startX: currentX,
-                      startY: currentY,
-                      startLevel: currentLevel,
-                      poiId: newDestinationId,
-                      avoidStairs: false,
-                    );
+                    // If category is available, use nearest_category to find FASTEST POI
+                    // (uses full pathfinding with congestion + wait + travel)
+                    if (capturedCategory != null && capturedCategory.isNotEmpty) {
+                      print('[NavigationPage] 🔄 Requesting nearest $capturedCategory from ($currentX, $currentY) level=$currentLevel');
+                      newRoute = await _routingService.getRouteToNearestCategory(
+                        startX: currentX,
+                        startY: currentY,
+                        startLevel: currentLevel,
+                        category: capturedCategory,
+                        avoidStairs: false,
+                      );
+                    } else {
+                      // Fallback to specific POI if no category
+                      print('[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId');
+                      newRoute = await _routingService.getRouteToPOI(
+                        startX: currentX,
+                        startY: currentY,
+                        startLevel: currentLevel,
+                        poiId: capturedNewDestinationId,
+                        avoidStairs: false,
+                      );
+                    }
                     
                     if (newRoute.path.isNotEmpty) {
                       final nodeIds = newRoute.path.map((p) => p.nodeId).toList();

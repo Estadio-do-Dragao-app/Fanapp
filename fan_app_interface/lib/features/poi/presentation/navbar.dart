@@ -11,6 +11,7 @@ import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
 import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
 import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
 import 'package:fan_app_interface/features/navigation/data/services/user_position_service.dart';
+import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
 import 'dart:math';
 
 /// Simple MapPage implementation that shows a placeholder 'map' area and a
@@ -207,11 +208,16 @@ class _NavbarState extends State<Navbar> {
         context,
         poi: seatPOI,
         route: route,
+        allNodes: allNodes,
         onNavigate: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('A navegar para ${seatPOI.name}'),
-              backgroundColor: const Color(0xFF161A3E),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NavigationPage(
+                route: route,
+                destination: seatPOI,
+                nodes: allNodes,
+              ),
             ),
           );
         },

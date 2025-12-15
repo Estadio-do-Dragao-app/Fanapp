@@ -72,6 +72,25 @@ class RoutingService {
     );
   }
 
+  /// Calcular rota para o POI mais RÁPIDO de uma categoria
+  /// Usa o pathfinding real para encontrar a melhor opção (congestion + wait + travel)
+  Future<RouteModel> getRouteToNearestCategory({
+    required double startX,
+    required double startY,
+    int startLevel = 0,
+    required String category, // e.g., "WC", "Food"
+    bool avoidStairs = false,
+  }) {
+    return getRoute(
+      startX: startX,
+      startY: startY,
+      startLevel: startLevel,
+      destinationType: 'nearest_category',
+      destinationId: category,
+      avoidStairs: avoidStairs,
+    );
+  }
+
   /// Calcular rota para um nó específico
   /// Convenience method para navegação direta a nós
   Future<RouteModel> getRouteToNode({

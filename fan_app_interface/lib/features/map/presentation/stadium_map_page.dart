@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'dart:math' as math;
 import '../data/models/poi_model.dart';
 import '../data/models/node_model.dart';
@@ -253,14 +254,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
           child: GestureDetector(
             onTap: () {
                // Create a temporary POI for the seat to allow navigation
+               final l = AppLocalizations.of(context)!;
                final seatPOI = POIModel(
                  id: seatNode.id,
-                 name: "O Seu Lugar",
+                 name: l.yourSeat,
                  x: seatNode.x,
                  y: seatNode.y,
                  level: seatNode.level,
                  category: 'seat',
-                 description: "Bilhete: ${_userTicket!.id}",
+                 description: l.ticketId(_userTicket!.id),
                );
                _showPOIDetails(seatPOI);
             },
