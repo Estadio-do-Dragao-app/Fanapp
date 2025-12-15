@@ -34,6 +34,10 @@ class NavigationController extends ChangeNotifier {
   final StreamController<RerouteEvent> _rerouteStream =
       StreamController.broadcast();
   Stream<RerouteEvent> get rerouteStream => _rerouteStream.stream;
+  bool _isDisposed = false;
+  
+  // Subscription para MQTT routing stream
+  StreamSubscription<Map<String, dynamic>>? _mqttSubscription;
 
   bool _isNavigating = true;
   NavigationInstruction? _currentInstruction;
@@ -82,8 +86,8 @@ class NavigationController extends ChangeNotifier {
     // Iniciar monitorização
     _routeManager.startMonitoring(_positionStream.stream);
 
-    // Escutar eventos MQTT (Reroute)
-    MqttService().routingStream.listen(_onMqttEvent);
+    // Escutar eventos MQTT (Reroute) e guardar subscription
+    _mqttSubscription = MqttService().routingStream.listen(_onMqttEvent);
 
     _initialize();
   }
@@ -156,11 +160,39 @@ class NavigationController extends ChangeNotifier {
 
     // Iniciar navegação automática
     _startAutoNavigation();
+    
+    // Iniciar timer para guardar posição periodicamente (para emergências)
+    _startPositionSaveTimer();
   }
 
   // Timer para navegação automática
   Timer? _autoNavTimer;
+  // Timer para guardar posição periodicamente
+  Timer? _positionSaveTimer;
   int _targetWaypointIndex = 0;
+
+  /// Inicia timer para guardar posição periodicamente durante navegação
+  void _startPositionSaveTimer() {
+    _positionSaveTimer?.cancel();
+    _positionSaveTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (!_isNavigating) {
+        timer.cancel();
+        return;
+      }
+      
+      // Guardar posição atual para uso em caso de emergência
+      final currentX = _tracker.currentX;
+      final currentY = _tracker.currentY;
+      final nearestNode = _findNearestNode(currentX, currentY);
+      
+      await UserPositionService.savePosition(
+        x: currentX,
+        y: currentY,
+        nodeId: nearestNode.id,
+        level: _currentLevel,
+      );
+    });
+  }
 
   /// Inicia navegação automática ao longo da rota
   void _startAutoNavigation() {
@@ -382,6 +414,7 @@ class NavigationController extends ChangeNotifier {
 
   /// Simula um evento de reroute (para testes e demonstrações)
   void simulateRerouteEvent() {
+    if (_isDisposed) return;
     print('[NavigationController] 🚦 Simulating Reroute Event...');
     _rerouteStream.add(
       RerouteEvent(
@@ -455,35 +488,75 @@ class NavigationController extends ChangeNotifier {
     _tracker.updateUserPosition(currentX, currentY);
     _updateInstruction();
 
+    // Reiniciar navegação automática
+    _autoNavTimer?.cancel();
+    _isNavigating = true;
+    _targetWaypointIndex = 0;
+    _startAutoNavigation();
+    
+    print('[NavigationController] ✅ New route applied, auto-navigation restarted');
+
     notifyListeners();
   }
 
   /// Processa eventos recebidos via MQTT
   void _onMqttEvent(Map<String, dynamic> event) {
-    // Verificar se é um evento de reroute
-    // Backend envia: { "type": "reroute_suggestion", ... }
-    if (event['type'] == 'reroute_suggestion') {
-      print(
-        '[NavigationController] 📩 MQTT Reroute Suggestion received: $event',
-      );
+    if (_isDisposed) {
+      // Controller disposed, ignore any incoming MQTT events
+      print('[NavigationController] ⚠️ Ignoring MQTT event after dispose');
+      return;
+    }
+
+    final eventType = event['type'] as String?;
+
+    // Handle evacuation routes (emergency)
+    if (eventType == 'evacuation') {
+      print('[NavigationController] 🚨 EVACUATION route received!');
+      try {
+        final routeIds = List<String>.from(event['route'] ?? []);
+        if (routeIds.isNotEmpty) {
+          print('[NavigationController] 🚨 Applying evacuation route with  24{routeIds.length} nodes');
+          print('[NavigationController] 🚨 Keeping user at current position: ( 24{_tracker.currentX},  24{_tracker.currentY})');
+
+          // STOP existing auto-navigation completely
+          _autoNavTimer?.cancel();
+          _autoNavTimer = null;
+          _isNavigating = false;  // This stops the timer callback from moving user
+
+          // applyNewRoute preserves current position (X, Y coordinates)
+          applyNewRoute(routeIds);
+
+          // DO NOT restart auto-navigation - user keeps current position
+          // The route is now displayed and user can follow it manually
+        }
+      } catch (e) {
+        print('[NavigationController] ❌ Error applying evacuation route: $e');
+      }
+      return;
+    }
+
+    // Handle reroute suggestions
+    if (eventType == 'reroute_suggestion') {
+      print('[NavigationController] 📩 MQTT Reroute Suggestion received: $event');
       try {
         // Parse payload (flat structure from backend)
         final improvement = event['improvement'] as Map<String, dynamic>?;
         final newRoute = List<String>.from(event['new_route'] ?? []);
 
         final rerouteEvent = RerouteEvent(
-          arrivalTime:
-              improvement?['time_saved_display'] ??
-              'Unknown', // This is technically duration saved, but OK for UI
+          arrivalTime: improvement?['time_saved_display'] ?? 'Unknown',
           duration: improvement?['time_saved_display'] ?? 'Unknown',
           distance: 0, // Não vem no payload, não critico
-          locationName: "Better Route Found",
-          newDestinationId:
-              event['session_id'] ?? '', // ID da sessão apenas para referencia
+          locationName: event['new_destination'] ?? "Better Route Found",
+          newDestinationId: event['new_destination'] ?? '', // O novo POI de destino
           reason: event['reason'] ?? 'Better route found',
           newRouteIds: newRoute,
         );
-        _rerouteStream.add(rerouteEvent);
+        if (!_isDisposed) {
+          _rerouteStream.add(rerouteEvent);
+        } else {
+          print('[NavigationController] ⚠️ Tried to add reroute event after dispose');
+        }
       } catch (e) {
         print('[NavigationController] ❌ Error parsing reroute event: $e');
       }
@@ -492,11 +565,20 @@ class NavigationController extends ChangeNotifier {
 
   @override
   void dispose() {
+    print('[NavigationController] 🧹 Disposing controller...');
+    _isDisposed = true;
+    if (_mqttSubscription != null) {
+      print('[NavigationController] 🧹 Cancelling MQTT subscription');
+      _mqttSubscription?.cancel();
+      _mqttSubscription = null;
+    }
     _updateTimer?.cancel();
     _autoNavTimer?.cancel();
+    _positionSaveTimer?.cancel();
     _positionStream.close();
     _rerouteStream.close();
     _routeManager.dispose();
+    print('[NavigationController] 🧹 Dispose complete');
     super.dispose();
   }
 

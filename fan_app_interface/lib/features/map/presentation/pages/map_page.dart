@@ -40,6 +40,10 @@ class MapPageState extends State<MapPage> {
     _stadiumMapKey.currentState?.loadUserPosition();
   }
 
+  void reloadMapData() {
+    _stadiumMapKey.currentState?.reloadMapData();
+  }
+
   @override
   Widget build(BuildContext context) {
     return StadiumMapPage(

@@ -23,7 +23,6 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
 
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
-  static const String userNodeId = 'N1'; // Posição fixa do utilizador
 
   @override
   void initState() {
@@ -55,39 +54,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       final pois = await _mapService.getAllPOIs();
       final nodes = await _mapService.getAllNodes();
 
-      // Encontrar saída de emergência mais próxima
-      final exits = pois
-          .where(
-            (poi) =>
-                poi.category.toLowerCase() == 'emergency_exit' ||
-                poi.category.toLowerCase() == 'exit',
-          )
-          .toList();
-
-      if (exits.isEmpty) {
-        // Se não há saídas, voltar para o mapa
-        Navigator.of(context).pushReplacementNamed('/map');
-        return;
-      }
-
-      // Encontrar saída mais próxima
-      POIModel? nearestExit;
-      double minDistance = double.infinity;
-
-      for (final exit in exits) {
-        final distance = _calculateDistance(exit, nodes);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestExit = exit;
-        }
-      }
-
-      if (nearestExit == null) {
-        Navigator.of(context).pushReplacementNamed('/map');
-        return;
-      }
-
-      // Obter posição guardada do utilizador
+      // PRIMEIRO: Obter posição atual do utilizador
       final savedPosition = await UserPositionService.getPosition();
       double startX;
       double startY;
@@ -98,15 +65,57 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         startY = savedPosition.y;
         startLevel = savedPosition.level;
       } else {
-        // Fallback para N1
-        final userNode = nodes.firstWhere(
-          (n) => n.id == userNodeId,
-          orElse: () => nodes.first,
-        );
-        startX = userNode.x;
-        startY = userNode.y;
-        startLevel = userNode.level;
+        // Fallback para Gate-21 (posição padrão)
+        startX = UserPositionService.defaultX;
+        startY = UserPositionService.defaultY;
+        startLevel = UserPositionService.defaultLevel;
       }
+
+      print('[EmergencyAlert] 📍 Posição do utilizador: ($startX, $startY, level=$startLevel)');
+
+      // Encontrar saída de emergência mais próxima
+      final exits = pois
+          .where(
+            (poi) =>
+                poi.category.toLowerCase() == 'emergency_exit' ||
+                poi.category.toLowerCase() == 'exit',
+          )
+          .toList();
+
+      if (exits.isEmpty) {
+        print('[EmergencyAlert] ⚠️ Nenhuma saída encontrada!');
+        Navigator.of(context).pushReplacementNamed('/map');
+        return;
+      }
+
+      // Encontrar saída mais próxima usando a posição REAL do utilizador
+      POIModel? nearestExit;
+      double minDistance = double.infinity;
+
+      for (final exit in exits) {
+        // Calcular distância euclidiana usando coordenadas do utilizador
+        final dx = exit.x - startX;
+        final dy = exit.y - startY;
+        final distance = sqrt(dx * dx + dy * dy);
+        
+        // Adicionar penalidade se saída está em nível diferente (escadas demoram mais)
+        final levelPenalty = (exit.level - startLevel).abs() * 50.0;
+        final totalDistance = distance + levelPenalty;
+        
+        print('[EmergencyAlert] 🚪 Saída ${exit.name} (${exit.id}): dist=$distance, level=${exit.level}, total=$totalDistance');
+        
+        if (totalDistance < minDistance) {
+          minDistance = totalDistance;
+          nearestExit = exit;
+        }
+      }
+
+      if (nearestExit == null) {
+        Navigator.of(context).pushReplacementNamed('/map');
+        return;
+      }
+
+      print('[EmergencyAlert] ✅ Saída mais próxima: ${nearestExit.name} (${nearestExit.id})');
 
       final route = await _routingService.getRouteToPOI(
         startX: startX,
@@ -132,19 +141,11 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         );
       }
     } catch (e) {
-      print('[EmergencyAlert] Erro ao calcular rota: $e');
+      print('[EmergencyAlert] ❌ Erro ao calcular rota: $e');
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/map');
       }
     }
-  }
-
-  double _calculateDistance(POIModel poi, List<NodeModel> nodes) {
-    final userNode = nodes.firstWhere((n) => n.id == userNodeId);
-
-    final dx = poi.x - userNode.x;
-    final dy = poi.y - userNode.y;
-    return sqrt(dx * dx + dy * dy);
   }
 
   @override

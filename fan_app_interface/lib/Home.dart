@@ -8,6 +8,7 @@ import 'features/hub/presentation/menu_button.dart';
 import 'features/map/presentation/filter_button.dart';
 import 'features/ticket/presentation/ticket_menu.dart';
 import 'features/map/data/services/congestion_service.dart';
+import 'features/map/data/services/waittime_cache.dart';
 import 'features/navigation/data/services/user_position_service.dart';
 import 'core/services/mqtt_service.dart';
 
@@ -40,6 +41,8 @@ class _HomeState extends State<Home> {
     super.initState();
     _loadInitialFilter();
     _checkCongestionHealth();
+    // Iniciar cache de tempos de espera
+    WaittimeCache().start();
     // Iniciar timer de 30s (só verifica quando heatmap está desligado)
     _startHealthCheckTimer();
     _initAlertListener();
@@ -249,17 +252,19 @@ class _HomeState extends State<Home> {
               ),
             ),
           ),
-          Positioned(
-            bottom: 16,
-            right: 16,
-            child: MenuButton(
-              onTap: () {
-                TicketMenu.show(context);
-              },
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: MenuButton(
+                onTap: () async {
+                  await TicketMenu.show(context);
+                  // Recarregar os dados do mapa quando o menu fecha (pode ter mudado o bilhete)
+                  _mapPageKey.currentState?.reloadMapData();
+                },
+              ),
             ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
   }
 }

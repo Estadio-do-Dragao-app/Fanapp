@@ -10,11 +10,14 @@ import '../data/models/tile_model.dart';
 import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
-import '../data/services/saved_places_service.dart';
+// import '../data/services/saved_places_service.dart'; // Removed favorites
 import '../../poi/presentation/poi_details_sheet.dart';
 import 'layers/floor_plan_layer.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
+import '../../navigation/data/services/user_position_service.dart';
+import '../../ticket/data/models/ticket_model.dart'; // Import TicketModel
+import '../../ticket/data/services/ticket_storage_service.dart'; // Import Storage
 import 'dart:async';
 
 /// Página principal do mapa interativo do estádio
@@ -85,7 +88,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
   // Estado
   int _currentFloor = 0;
   List<POIModel> _pois = [];
-  List<POIModel> _savedPlaces = [];
+  // List<POIModel> _savedPlaces = []; // Removed favorites
   List<NodeModel> _nodes = [];
   List<EdgeModel> _edges = [];
   List<TileModel> _tiles = []; // Tiles para verificar walkable
@@ -96,6 +99,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
   // Heatmap data
   StadiumHeatmapData? _heatmapData;
   Timer? _heatmapTimer;
+
+  // Ticket data
+  TicketModel? _userTicket;
+  final TicketStorageService _ticketStorage = TicketStorageService();
 
   @override
   void initState() {
@@ -217,6 +224,73 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
   }
 
+
+
+
+  /// Public method to reload map data (called from parent)
+  void reloadMapData() {
+    print("🔁 Reloading map data requested...");
+    _loadMapData(); 
+  }
+
+  Iterable<Marker> _buildTicketMarkers() sync* {
+    print("🎫 Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}");
+    if (_userTicket == null || _userTicket!.seatNodeId == null) return;
+
+    try {
+      print("🔍 Searching for seat node: ${_userTicket!.seatNodeId}");
+      final seatNode = _nodes.firstWhere(
+        (n) => n.id == _userTicket!.seatNodeId,
+      );
+      print("✅ Seat node found: ${seatNode.id} at level ${seatNode.level} (Current floor: $_currentFloor)");
+      
+      if (seatNode.level == _currentFloor) {
+        final seatPos = _convertToLatLng(seatNode.x, seatNode.y);
+        yield Marker(
+          point: seatPos,
+          width: 50,
+          height: 50,
+          child: GestureDetector(
+            onTap: () {
+               // Create a temporary POI for the seat to allow navigation
+               final seatPOI = POIModel(
+                 id: seatNode.id,
+                 name: "O Seu Lugar",
+                 x: seatNode.x,
+                 y: seatNode.y,
+                 level: seatNode.level,
+                 category: 'seat',
+                 description: "Bilhete: ${_userTicket!.id}",
+               );
+               _showPOIDetails(seatPOI);
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                  color: Colors.green, // Destaque Verde
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    )
+                  ]),
+              child: const Icon(
+                Icons.event_seat,
+                color: Colors.white,
+                size: 28, // Ícone maior
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print("❌ Error building ticket marker: $e");
+      // Ignore
+    }
+  }
+
   // Coordenadas do Estádio do Dragão (Porto, Portugal)
   static const LatLng stadiumCenter = LatLng(41.161758, -8.583933);
 
@@ -240,12 +314,33 @@ class StadiumMapPageState extends State<StadiumMapPage>
       final nodes = await _mapService.getAllNodes();
       final edges = await _mapService.getAllEdges();
       final tiles = await _mapService.getAllTiles(level: floorToLoad);
-      final savedPlaces = await SavedPlacesService.getSavedPlaces();
+
+      // final savedPlaces = await SavedPlacesService.getSavedPlaces(); // Removed favorites
+      final ticket = await _ticketStorage.getTicket(); // Carregar bilhete
+      print("📥 Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}");
 
       if (!mounted) return;
-      // Race condition protection: Se o piso mudou enquanto carregávamos, descartar
       if (_currentFloor != floorToLoad) {
         return;
+      }
+
+      // Se temos bilhete, carregar o nó do lugar especificamente (pois getAllNodes filtra seats)
+      if (ticket != null && ticket.seatNodeId != null) {
+        try {
+          print("💺 Fetching specific seat node: ${ticket.seatNodeId}");
+          final seatNode = await _mapService.getSeatById(ticket.seatNodeId!);
+          if (seatNode != null) {
+             print("✅ Seat node fetched: ${seatNode.id}");
+             // Adicionar à lista de nós se ainda não existir
+             if (!nodes.any((n) => n.id == seatNode.id)) {
+               nodes.add(seatNode);
+             }
+          } else {
+             print("⚠️ Seat node not found in backend: ${ticket.seatNodeId}");
+          }
+        } catch (e) {
+          print("❌ Error fetching seat node: $e");
+        }
       }
 
       setState(() {
@@ -253,7 +348,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
         _nodes = nodes;
         _edges = edges;
         _tiles = tiles;
-        _savedPlaces = savedPlaces;
+        // _savedPlaces = savedPlaces; // Removed favorites
+        _userTicket = ticket;
         _isLoading = false;
       });
 
@@ -687,8 +783,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
       polygons.add(
         Polygon(
           points: [topLeft, topRight, bottomRight, bottomLeft],
-          color: color.withValues(alpha: 0.5),
-          borderColor: color.withValues(alpha: 0.7),
+          color: color.withOpacity(0.5),
+          borderColor: color.withOpacity(0.7),
           borderStrokeWidth: 1,
         ),
       );
@@ -912,7 +1008,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
                       border: Border.all(color: Colors.white, width: 3),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
+                          color: Colors.black.withOpacity(0.3),
                           blurRadius: 6,
                           offset: const Offset(0, 3),
                         ),
@@ -952,16 +1048,16 @@ class StadiumMapPageState extends State<StadiumMapPage>
       userMarkers.add(
         Marker(
           point: userLatLng,
-          width: 60,
-          height: 60,
+          width: 50,
+          height: 50,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.green,
+              color: Colors.blue,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 3),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: Colors.black.withOpacity(0.3),
                   blurRadius: 6,
                   offset: const Offset(0, 3),
                 ),
@@ -976,56 +1072,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
     return MarkerLayer(
       markers: [
         ...userMarkers,
-        // Lugares guardados com ícone de estrela
-        ..._savedPlaces.map<Marker>((POIModel place) {
-          final position = _convertToLatLng(place.x, place.y);
-          final isHighlighted = widget.highlightedPOI?.id == place.id;
+        ..._buildTicketMarkers(),
 
-          return Marker(
-            point: position,
-            width: isHighlighted ? 60 : 50,
-            height: isHighlighted ? 60 : 50,
-            child: GestureDetector(
-              onTap: () => _showPOIDetails(place),
-              child: Container(
-                padding: EdgeInsets.all(isHighlighted ? 10 : 8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade700, // Cor especial para guardados
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isHighlighted ? Colors.yellow : Colors.white,
-                    width: isHighlighted ? 3 : 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: isHighlighted ? 8 : 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.star, // Ícone de estrela para guardados
-                  color: Colors.white,
-                  size: isHighlighted ? 24 : 20,
-                ),
-              ),
-            ),
-          );
-        }),
+        // REMOVIDO: Lugares guardados com ícone de estrela
         // POIs normais
         ...poisToShow.map<Marker>((POIModel poi) {
           final position = _convertToLatLng(poi.x, poi.y);
           final isHighlighted = widget.highlightedPOI?.id == poi.id;
-          // Não mostrar se já está nos lugares guardados
-          if (_savedPlaces.any((p) => p.id == poi.id)) {
-            return Marker(
-              point: position,
-              width: 0,
-              height: 0,
-              child: const SizedBox.shrink(),
-            );
-          }
+          // REMOVED: Check for saved places
+          // if (_savedPlaces.any((p) => p.id == poi.id)) { ... }
 
           return Marker(
             point: position,
@@ -1119,6 +1174,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
         return Colors.amber.shade700;
       case 'entrance':
         return Colors.teal.shade700;
+      case 'seat':
+        return Colors.green.shade700;
       default:
         return Colors.grey.shade700;
     }
@@ -1149,6 +1206,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
         return Icons.accessible;
       case 'entrance':
         return Icons.login;
+      case 'seat':
+        return Icons.event_seat;
       default:
         return Icons.place;
     }

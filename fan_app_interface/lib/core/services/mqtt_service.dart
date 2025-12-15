@@ -21,7 +21,7 @@ class MqttService {
   // Topics from Stadium Event Generator / Services
   static const String topicAllEvents = 'stadium/events/all';
   static const String topicCongestion = 'stadium/services/congestion';
-  static const String topicQueues = 'stadium/waittime/#';
+  static const String topicQueues = 'stadium/services/waittime/#';
   static const String topicMaintenance = 'stadium/events/maintenance';
   static const String topicSecurity = 'stadium/events/security';
   static const String topicAlerts = 'alerts/broadcast';
@@ -156,7 +156,8 @@ class MqttService {
 
         // Route message to appropriate stream
         // Handle wildcard topics first (waittime/queues)
-        if (topic.startsWith('stadium/waittime/')) {
+        if (topic.startsWith('stadium/services/waittime/')) {
+          print('[MqttService] 📤 Emitting to queuesStream: ${jsonData['poi']} = ${jsonData['minutes']} min');
           _queuesController.add(jsonData);
         } else if (topic.startsWith('stadium/services/routing/')) {
           _routingController.add(jsonData);

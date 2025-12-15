@@ -9,20 +9,20 @@ class ApiConfig {
   // Descomentar a linha correspondente ao ambiente:
 
   // Desenvolvimento local (browser/web)
-  // static const String _baseHost = 'http://localhost';
+  // static const String _baseHost = 'http://172.16.46.6';
 
   // Emulador Android (aponta para o host via IP especial)
-  // static const String _baseHost = 'http://10.0.2.2';
+  // static const String _baseHost = 'http://172.16.46.6';
 
   // Dispositivo físico na mesma rede (usar IP do PC)
-  // static const String _baseHost = 'http://192.168.1.XXX';
+  // static const String _baseHost = 'http://172.16.46.6';
 
   // Produção (substituir pelo domínio real)
-  // static const String _baseHost = 'http://192.168.68.113';
+  // static const String _baseHost = 'http://172.16.46.6';
 
   // Desenvolvimento local (browser/web)
-  // static const String _baseHost = 'http://localhost';
-  static const String _baseHost = 'http://172.16.46.17';
+  // static const String _baseHost = 'http://172.16.46.6';
+  static const String _baseHost = 'http://172.16.46.6';
 
   // ==================== SERVIÇOS ====================
 

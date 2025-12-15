@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
 import 'Home.dart';
 import 'features/map/data/services/local_map_cache.dart';
-import 'features/map/data/services/waittime_cache.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalMapCache.init();
-  WaittimeCache().start(); // Start listening to MQTT wait time updates
   runApp(const MyApp());
 }
 

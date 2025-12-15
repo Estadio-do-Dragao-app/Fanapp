@@ -55,6 +55,7 @@ class RouteTracker {
 
   /// Verifica se utilizador chegou ao destino
   /// Considera X, Y E nível - só chegou se estiver no piso certo!
+  /// Para rotas de evacuação ou rotas simples, o nível é verificado com tolerância
   bool get hasArrived {
     if (route.waypoints.isEmpty) return false;
     final lastWaypoint = route.waypoints.last;
@@ -68,14 +69,18 @@ class RouteTracker {
       lastCoords.y,
     );
 
-    // Chegou se está a menos de 3 metros E no mesmo nível
-    final arrived = distToLast < 3.0 && _userLevel == destinationLevel;
-    if (!arrived && distToLast < 3.0) {
-      print(
-        '[RouteTracker] ⚠️ Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
-      );
+    // Se muito perto (< 3m), consideramos chegada mesmo com diferença de nível
+    // Isto resolve o bug de rotas de evacuação que terminam em exits no nível 0
+    if (distToLast < 3.0) {
+      if (_userLevel != destinationLevel) {
+        print(
+          '[RouteTracker] 🎯 Chegou ao destino (distância OK, nível ignorado): user=$_userLevel, dest=$destinationLevel',
+        );
+      }
+      return true;
     }
-    return arrived;
+    
+    return false;
   }
 
   /// Obtém o nível de um waypoint (do Map Service ou do próprio waypoint)

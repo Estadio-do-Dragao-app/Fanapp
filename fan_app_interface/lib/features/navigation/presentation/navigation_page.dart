@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
+import '../../map/data/services/routing_service.dart';
 import '../../map/presentation/stadium_map_page.dart';
 import '../domain/navigation_controller.dart';
 import '../domain/models/reroute_event.dart';
@@ -42,6 +43,7 @@ class _NavigationPageState extends State<NavigationPage>
     with TickerProviderStateMixin {
   late NavigationController _controller;
   final MapController _mapController = MapController();
+  final RoutingService _routingService = RoutingService();
 
   // Controlador de animação para movimento suave do mapa
   late AnimationController _animationController;
@@ -328,20 +330,58 @@ class _NavigationPageState extends State<NavigationPage>
                 duration: _rerouteEvent!.duration,
                 distance: _rerouteEvent!.distance,
                 locationName: _rerouteEvent!.locationName,
-                onAccept: () {
+                onAccept: () async {
                   setState(() {
                     _showReroutePopup = false;
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        "Rerouting to ${_rerouteEvent!.locationName}...",
-                      ),
+                    const SnackBar(
+                      content: Text("Recalculating route from current position..."),
                     ),
                   );
 
-                  if (_rerouteEvent!.newRouteIds != null) {
-                    _controller.applyNewRoute(_rerouteEvent!.newRouteIds!);
+                  // Request new route from current position to NEW destination
+                  try {
+                    final currentX = _controller.tracker.currentX;
+                    final currentY = _controller.tracker.currentY;
+                    final currentLevel = _controller.currentLevel;
+                    
+                    // Use the new destination from the reroute suggestion
+                    final newDestinationId = _rerouteEvent?.newDestinationId ?? widget.destination.id;
+                    print('[NavigationPage] 🔄 Requesting new route from ($currentX, $currentY) level=$currentLevel to $newDestinationId');
+                    
+                    final newRoute = await _routingService.getRouteToPOI(
+                      startX: currentX,
+                      startY: currentY,
+                      startLevel: currentLevel,
+                      poiId: newDestinationId,
+                      avoidStairs: false,
+                    );
+                    
+                    if (newRoute.path.isNotEmpty) {
+                      final nodeIds = newRoute.path.map((p) => p.nodeId).toList();
+                      print('[NavigationPage] ✅ New route received with ${nodeIds.length} nodes');
+                      _controller.applyNewRoute(nodeIds);
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Route updated successfully!"),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    print('[NavigationPage] ❌ Failed to get new route: $e');
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Failed to recalculate route: $e"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   }
                 },
                 onDecline: () {

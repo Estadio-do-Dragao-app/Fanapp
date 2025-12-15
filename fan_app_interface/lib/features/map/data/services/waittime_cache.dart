@@ -18,12 +18,20 @@ class WaittimeCache {
   /// Start listening to MQTT wait time updates
   /// Does not initiate connection - just subscribes to stream
   void start() {
-    if (_isListening) return;
+    print('[WaittimeCache] start() called. isListening=$_isListening');
+    if (_isListening) {
+      print('[WaittimeCache] Already listening, skipping');
+      return;
+    }
     
     // Subscribe to stream - MqttService handles connection elsewhere
-    _subscription = _mqttService.queuesStream.listen(_onWaittimeUpdate);
+    _subscription = _mqttService.queuesStream.listen(
+      _onWaittimeUpdate,
+      onError: (e) => print('[WaittimeCache] Stream error: $e'),
+      onDone: () => print('[WaittimeCache] Stream done'),
+    );
     _isListening = true;
-    print('[WaittimeCache] Listening to waittime stream');
+    print('[WaittimeCache] ✅ Now listening to waittime stream');
   }
 
   void _onWaittimeUpdate(Map<String, dynamic> data) {
@@ -33,7 +41,7 @@ class WaittimeCache {
 
     if (poiId != null && minutes != null) {
       _cache[poiId] = (minutes is int) ? minutes.toDouble() : minutes as double;
-      // Only log occasionally to reduce noise
+      print('[WaittimeCache] Updated $poiId: ${_cache[poiId]} min (total: ${_cache.length} POIs)');
     }
   }
 
