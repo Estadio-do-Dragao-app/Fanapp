@@ -78,7 +78,8 @@ class NavigationController extends ChangeNotifier {
       final currentX = _tracker.currentX;
       final currentY = _tracker.currentY;
       _tracker = RouteTracker(route: newRoute, allNodes: allNodes);
-      _tracker.updateUserPosition(currentX, currentY);
+      // CORREÇÃO: Passar o nível atual para não perder contexto
+      _tracker.updateUserPosition(currentX, currentY, level: _currentLevel);
       _updateInstruction();
       notifyListeners();
     };
@@ -611,10 +612,45 @@ class NavigationController extends ChangeNotifier {
         final improvement = event['improvement'] as Map<String, dynamic>?;
         final newRoute = List<String>.from(event['new_route'] ?? []);
 
+        // Calcular novos valores baseados na melhoria
+        final timeSavedSeconds =
+            (improvement?['time_saved_seconds'] as num?)?.toInt() ?? 0;
+        // Nova duração = Duração atual - Tempo poupado
+        final currentRemainingSeconds = remainingTimeSeconds;
+        final newDurationSeconds = (currentRemainingSeconds - timeSavedSeconds)
+            .clamp(60, 86400); // Mínimo 1 min
+
+        // Formatar nova duração
+        final newDurationMinutes = (newDurationSeconds / 60).ceil();
+        final newDurationDisplay = newDurationMinutes < 60
+            ? '$newDurationMinutes min'
+            : '${newDurationMinutes ~/ 60}h ${newDurationMinutes % 60}m';
+
+        // Calcular nova hora de chegada
+        final now = DateTime.now();
+        final newArrival = now.add(Duration(seconds: newDurationSeconds));
+        final newArrivalDisplay =
+            '${newArrival.hour}:${newArrival.minute.toString().padLeft(2, '0')}';
+
+        // Calcular distância da nova rota
+        double newRouteDistance = 0;
+        if (newRoute.isNotEmpty) {
+          final nodesMap = {for (var n in allNodes) n.id: n};
+          for (int i = 0; i < newRoute.length - 1; i++) {
+            final nodeA = nodesMap[newRoute[i]];
+            final nodeB = nodesMap[newRoute[i + 1]];
+            if (nodeA != null && nodeB != null) {
+              final dx = nodeA.x - nodeB.x;
+              final dy = nodeA.y - nodeB.y;
+              newRouteDistance += math.sqrt(dx * dx + dy * dy);
+            }
+          }
+        }
+
         final rerouteEvent = RerouteEvent(
-          arrivalTime: improvement?['time_saved_display'] ?? 'Unknown',
-          duration: improvement?['time_saved_display'] ?? 'Unknown',
-          distance: 0, // Não vem no payload, não critico
+          arrivalTime: newArrivalDisplay, // "14:30"
+          duration: newDurationDisplay, // "15 min"
+          distance: newRouteDistance.round(), // Distância real calculada
           locationName: event['new_destination'] ?? "Better Route Found",
           newDestinationId:
               event['new_destination'] ?? '', // O novo POI de destino

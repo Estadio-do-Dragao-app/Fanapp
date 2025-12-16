@@ -11,11 +11,13 @@ import '../../navigation/presentation/navigation_page.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
+  final VoidCallback? onNavigationEnd;
   final bool avoidStairs;
 
   const SearchBarBottomSheet({
     Key? key,
     this.onPOISelected,
+    this.onNavigationEnd,
     this.avoidStairs = false,
   }) : super(key: key);
 
@@ -119,7 +121,13 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
 
     // Mostrar detalhes do POI - não passar onNavigate pois o context está inválido
     // POIDetailsSheet usará o fallback com route e allNodes que são válidos
-    POIDetailsSheet.show(context, poi: poi, route: route, allNodes: _allNodes);
+    POIDetailsSheet.show(
+      context,
+      poi: poi,
+      route: route,
+      allNodes: _allNodes,
+      onNavigationEnd: widget.onNavigationEnd,
+    );
   }
 
   @override

@@ -70,17 +70,18 @@ class RouteTracker {
       lastCoords.y,
     );
 
-    // Se muito perto (< 8m), consideramos chegada mesmo com diferença de nível
-    // Isto resolve o bug de rotas de evacuação que terminam em exits no nível 0
+    // Se muito perto (< 8m), verificamos se estamos no mesmo piso
     if (distToLast < 8.0) {
-      if (_userLevel != destinationLevel) {
-        print(
-          '[RouteTracker] 🎯 Chegou ao destino (distância OK, nível ignorado): user=$_userLevel, dest=$destinationLevel',
-        );
+      if (_userLevel == destinationLevel) {
+        return true;
       }
-      return true;
+
+      // Se estamos perto mas no piso errado, NÃO chegamos ainda
+      // (a menos que seja um caso especial de saída de emergência que atravessa pisos,
+      // mas para navegação normal isso causa erros graves)
+      return false;
     }
-    
+
     return false;
   }
 
@@ -299,16 +300,18 @@ class RouteTracker {
   void _updateCurrentWaypoint() {
     // Search ahead up to 2 waypoints to catch up if we missed one
     final searchEnd = min(_currentWaypointIndex + 3, route.waypoints.length);
-    
+
     for (int i = _currentWaypointIndex; i < searchEnd; i++) {
       final waypoint = route.waypoints[i];
       final coords = getCorrectWaypointCoords(waypoint);
       final distance = _calculateDistance(_userX, _userY, coords.x, coords.y);
-      
+
       // Debug
       final node = _nodesMap[waypoint.nodeId];
       if (i == _currentWaypointIndex) {
-         print('[RouteTracker] WP$i (${waypoint.nodeId}): Dist=${distance.toStringAsFixed(1)}m, NodeFound=${node != null}');
+        print(
+          '[RouteTracker] WP$i (${waypoint.nodeId}): Dist=${distance.toStringAsFixed(1)}m, NodeFound=${node != null}',
+        );
       }
 
       // Se está a menos de 8 metros do waypoint, consideramos visitado

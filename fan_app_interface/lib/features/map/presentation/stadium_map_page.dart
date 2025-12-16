@@ -142,6 +142,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
   Future<void> loadUserPosition({bool updateFloor = true}) async {
     final position = await UserPositionService.getPosition();
     if (mounted) {
+      print(
+        "[StadiumMapPage] 📥 Loading user position from service: ${position.x}, ${position.y} (Level ${position.level})",
+      );
       setState(() {
         _userPositionX = position.x;
         _userPositionY = position.y;
@@ -225,17 +228,16 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
   }
 
-
-
-
   /// Public method to reload map data (called from parent)
   void reloadMapData() {
     print("🔁 Reloading map data requested...");
-    _loadMapData(); 
+    _loadMapData();
   }
 
   Iterable<Marker> _buildTicketMarkers() sync* {
-    print("🎫 Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}");
+    print(
+      "🎫 Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}",
+    );
     if (_userTicket == null || _userTicket!.seatNodeId == null) return;
 
     try {
@@ -243,8 +245,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
       final seatNode = _nodes.firstWhere(
         (n) => n.id == _userTicket!.seatNodeId,
       );
-      print("✅ Seat node found: ${seatNode.id} at level ${seatNode.level} (Current floor: $_currentFloor)");
-      
+      print(
+        "✅ Seat node found: ${seatNode.id} at level ${seatNode.level} (Current floor: $_currentFloor)",
+      );
+
       if (seatNode.level == _currentFloor) {
         final seatPos = _convertToLatLng(seatNode.x, seatNode.y);
         yield Marker(
@@ -253,31 +257,32 @@ class StadiumMapPageState extends State<StadiumMapPage>
           height: 50,
           child: GestureDetector(
             onTap: () {
-               // Create a temporary POI for the seat to allow navigation
-               final l = AppLocalizations.of(context)!;
-               final seatPOI = POIModel(
-                 id: seatNode.id,
-                 name: l.yourSeat,
-                 x: seatNode.x,
-                 y: seatNode.y,
-                 level: seatNode.level,
-                 category: 'seat',
-                 description: l.ticketId(_userTicket!.id),
-               );
-               _showPOIDetails(seatPOI);
+              // Create a temporary POI for the seat to allow navigation
+              final l = AppLocalizations.of(context)!;
+              final seatPOI = POIModel(
+                id: seatNode.id,
+                name: l.yourSeat,
+                x: seatNode.x,
+                y: seatNode.y,
+                level: seatNode.level,
+                category: 'seat',
+                description: l.ticketId(_userTicket!.id),
+              );
+              _showPOIDetails(seatPOI);
             },
             child: Container(
               decoration: BoxDecoration(
-                  color: Colors.green, // Destaque Verde
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    )
-                  ]),
+                color: Colors.green, // Destaque Verde
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
               child: const Icon(
                 Icons.event_seat,
                 color: Colors.white,
@@ -319,7 +324,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
       // final savedPlaces = await SavedPlacesService.getSavedPlaces(); // Removed favorites
       final ticket = await _ticketStorage.getTicket(); // Carregar bilhete
-      print("📥 Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}");
+      print(
+        "📥 Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
+      );
 
       if (!mounted) return;
       if (_currentFloor != floorToLoad) {
@@ -332,13 +339,13 @@ class StadiumMapPageState extends State<StadiumMapPage>
           print("💺 Fetching specific seat node: ${ticket.seatNodeId}");
           final seatNode = await _mapService.getSeatById(ticket.seatNodeId!);
           if (seatNode != null) {
-             print("✅ Seat node fetched: ${seatNode.id}");
-             // Adicionar à lista de nós se ainda não existir
-             if (!nodes.any((n) => n.id == seatNode.id)) {
-               nodes.add(seatNode);
-             }
+            print("✅ Seat node fetched: ${seatNode.id}");
+            // Adicionar à lista de nós se ainda não existir
+            if (!nodes.any((n) => n.id == seatNode.id)) {
+              nodes.add(seatNode);
+            }
           } else {
-             print("⚠️ Seat node not found in backend: ${ticket.seatNodeId}");
+            print("⚠️ Seat node not found in backend: ${ticket.seatNodeId}");
           }
         } catch (e) {
           print("❌ Error fetching seat node: $e");

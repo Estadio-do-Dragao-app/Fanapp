@@ -23,7 +23,9 @@ class ApiConfig {
   // Desenvolvimento local (browser/web)
   // static const String _baseHost = 'http://172.16.46.6';
   // Para dispositivo físico na mesma WiFi, usar IP do PC
-  static const String _baseHost = 'http://192.168.1.87';
+  // static const String _baseHost = 'http://192.168.0.23';
+  // USB Debugging (com adb reverse): usar localhost
+  static const String _baseHost = 'http://127.0.0.1';
 
   // ==================== SERVIÇOS ====================
 
@@ -50,7 +52,7 @@ class ApiConfig {
   // ==================== TIMEOUTS ====================
 
   /// Timeout para requests HTTP (em segundos)
-  static const int httpTimeout = 10;
+  static const int httpTimeout = 30;
 
   /// Timeout para conexão MQTT (em segundos)
   static const int mqttTimeout = 30;

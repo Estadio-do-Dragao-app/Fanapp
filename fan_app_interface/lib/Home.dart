@@ -237,6 +237,12 @@ class _HomeState extends State<Home> {
                         // Fazer zoom no POI após fechar a barra de pesquisa
                         _mapPageKey.currentState?.zoomToPOI(poi);
                       },
+                      onNavigationEnd: () {
+                        print(
+                          "[Home] Navigation from Search ended. Reloading position.",
+                        );
+                        _mapPageKey.currentState?.reloadUserPosition();
+                      },
                     );
                   },
                 );

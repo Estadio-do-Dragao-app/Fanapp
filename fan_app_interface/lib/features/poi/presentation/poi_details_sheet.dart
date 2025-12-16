@@ -12,6 +12,7 @@ class POIDetailsSheet extends StatefulWidget {
   final RouteModel? route;
   final List<NodeModel>? allNodes;
   final VoidCallback? onNavigate;
+  final VoidCallback? onNavigationEnd;
 
   const POIDetailsSheet({
     Key? key,
@@ -19,6 +20,7 @@ class POIDetailsSheet extends StatefulWidget {
     this.route,
     this.allNodes,
     this.onNavigate,
+    this.onNavigationEnd,
   }) : super(key: key);
 
   /// Mostra o bottom sheet com detalhes do POI
@@ -28,6 +30,7 @@ class POIDetailsSheet extends StatefulWidget {
     RouteModel? route,
     List<NodeModel>? allNodes,
     VoidCallback? onNavigate,
+    VoidCallback? onNavigationEnd,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -40,6 +43,7 @@ class POIDetailsSheet extends StatefulWidget {
         route: route,
         allNodes: allNodes,
         onNavigate: onNavigate,
+        onNavigationEnd: onNavigationEnd,
       ),
     ).then((_) {});
   }
@@ -113,7 +117,9 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                     color: _isSaved ? Colors.amber : Colors.white70,
                     size: 28,
                   ),
-                  tooltip: _isSaved ? AppLocalizations.of(context)!.removeSaved : AppLocalizations.of(context)!.savePlace,
+                  tooltip: _isSaved
+                      ? AppLocalizations.of(context)!.removeSaved
+                      : AppLocalizations.of(context)!.savePlace,
                 ),
               if (widget.route != null)
                 Text(
@@ -136,20 +142,20 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
           const SizedBox(height: 8),
 
           // Piso do POI
-            Row(
-              children: [
-                const Icon(Icons.layers, color: Colors.white54, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  AppLocalizations.of(context)!.floorLabel(widget.poi.level),
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+          Row(
+            children: [
+              const Icon(Icons.layers, color: Colors.white54, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                AppLocalizations.of(context)!.floorLabel(widget.poi.level),
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
           const SizedBox(height: 24),
 
           // Informações de tempo
@@ -159,7 +165,9 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
               _buildTimeInfo(
                 icon: Icons.directions_walk,
                 label: widget.route != null
-                    ? AppLocalizations.of(context)!.walkTime((widget.route!.etaSeconds / 60).round())
+                    ? AppLocalizations.of(
+                        context,
+                      )!.walkTime((widget.route!.etaSeconds / 60).round())
                     : AppLocalizations.of(context)!.walkTime(3),
               ),
               const SizedBox(width: 24),
@@ -168,7 +176,9 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
               _buildTimeInfo(
                 icon: Icons.group,
                 label: widget.route?.waitTime != null
-                    ? AppLocalizations.of(context)!.queueTime(widget.route!.waitTime!.round())
+                    ? AppLocalizations.of(
+                        context,
+                      )!.queueTime(widget.route!.waitTime!.round())
                     : AppLocalizations.of(context)!.queueTime(0),
               ),
             ],
@@ -179,10 +189,10 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 // Capture navigator before closing sheet
                 final navigator = Navigator.of(context);
-                
+
                 // Close the sheet first
                 navigator.pop();
 
@@ -192,7 +202,7 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                 }
                 // Senão, abrir página de navegação usando o navigator capturado
                 else if (widget.route != null && widget.allNodes != null) {
-                  navigator.push(
+                  await navigator.push(
                     MaterialPageRoute(
                       builder: (context) => NavigationPage(
                         route: widget.route!,
@@ -201,6 +211,10 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                       ),
                     ),
                   );
+                  // Notificar que a navegação terminou para salvar posição
+                  if (widget.onNavigationEnd != null) {
+                    widget.onNavigationEnd!();
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
