@@ -7,6 +7,7 @@ import '../models/gate_model.dart';
 import '../models/tile_model.dart';
 import 'local_map_cache.dart';
 import '../../../../core/config/api_config.dart';
+import '../../../../core/config/map_config.dart';
 
 /// Service para comunicar com o Map-Service
 /// Backend: https://github.com/Estadio-do-Dragao-app/Map-Service
@@ -116,25 +117,99 @@ class MapService {
       'poi', // Tipo genérico
       'entrance',
       'shop',
+      'wc',
+      'library',
+      'parking',
+      'cafe',
+      'restaurant',
     ];
 
     final response = await http
         .get(Uri.parse('$baseUrl/nodes'))
         .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
+    List<POIModel> staticPois = [];
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
-      // Filtrar apenas nós que são POIs
-      final pois = data
+      staticPois = data
           .where((node) => poiTypes.contains(node['type']))
           .map((json) => POIModel.fromJson(json))
           .toList();
       print(
-        '[MapService] ${pois.length} POIs carregados de ${data.length} nós',
+        '[MapService] ${staticPois.length} POIs estáticos carregados de ${data.length} nós',
       );
-      return pois;
+    }
+
+    // Merge com POIs dinâmicos do OSM (apenas em modo outdoor)
+    if (MapConfig.useOSMPOIs) {
+      try {
+        final osmPois = await getOSMPOIs();
+        final existingNames = staticPois.map((p) => p.name.toLowerCase()).toSet();
+        final newOsmPois = osmPois
+            .where((p) => !existingNames.contains(p.name.toLowerCase()))
+            .toList();
+        staticPois.addAll(newOsmPois);
+        print('[MapService] +${newOsmPois.length} POIs do OSM (${osmPois.length} total, ${osmPois.length - newOsmPois.length} duplicados)');
+      } catch (e) {
+        print('[MapService] ⚠️ Falha ao buscar POIs OSM: $e (usando apenas estáticos)');
+      }
+    }
+
+    return staticPois;
+  }
+
+  /// GET /pois/osm - Buscar POIs dinâmicos do OpenStreetMap
+  Future<List<POIModel>> getOSMPOIs() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/pois/osm'))
+        .timeout(const Duration(seconds: 35)); // Overpass pode demorar
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final List<dynamic> pois = data['pois'] ?? [];
+      return pois.map((json) => POIModel.fromJson(json)).toList();
     } else {
-      throw Exception('Failed to load POIs: ${response.statusCode}');
+      throw Exception('Failed to load OSM POIs: ${response.statusCode}');
+    }
+  }
+
+  /// POST /pois - Criar POI custom (evento, marcador temporário)
+  Future<POIModel> createPOI({
+    required String name,
+    required String type,
+    required double x,
+    required double y,
+    int level = 0,
+    String? description,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/pois'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'name': name,
+        'type': type,
+        'x': x,
+        'y': y,
+        'level': level,
+        'description': description ?? name,
+      }),
+    ).timeout(const Duration(seconds: ApiConfig.httpTimeout));
+
+    if (response.statusCode == 201) {
+      return POIModel.fromJson(json.decode(response.body));
+    } else {
+      throw Exception('Failed to create POI: ${response.statusCode}');
+    }
+  }
+
+  /// DELETE /pois/{id} - Remover POI custom
+  Future<void> deletePOI(String poiId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/pois/$poiId'),
+    ).timeout(const Duration(seconds: ApiConfig.httpTimeout));
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete POI: ${response.statusCode}');
     }
   }
 

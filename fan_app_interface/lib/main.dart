@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
 import 'Home.dart';
 import 'features/map/data/services/local_map_cache.dart';
+import 'features/navigation/data/services/user_position_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalMapCache.init();
+  await LocalMapCache.clear(); // Limpar cache antigo do estádio
+  await UserPositionService.resetToDefault(); // Reset posição para instituto
   runApp(const MyApp());
 }
 

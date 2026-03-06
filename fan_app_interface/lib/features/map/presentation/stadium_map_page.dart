@@ -20,6 +20,8 @@ import '../../navigation/data/services/user_position_service.dart';
 import '../../ticket/data/models/ticket_model.dart'; // Import TicketModel
 import '../../ticket/data/services/ticket_storage_service.dart'; // Import Storage
 import 'dart:async';
+import '../../../core/utils/geographic_utils.dart';
+import '../../../core/config/map_config.dart';
 
 /// Página principal do mapa interativo do estádio
 class StadiumMapPage extends StatefulWidget {
@@ -41,6 +43,7 @@ class StadiumMapPage extends StatefulWidget {
   final Function(POIModel)? onTapPOI;
   final ValueChanged<int>? onFloorChanged;
   final bool avoidStairs;
+  final void Function(MapCamera, bool)? onPositionChanged;
 
   const StadiumMapPage({
     super.key,
@@ -61,6 +64,7 @@ class StadiumMapPage extends StatefulWidget {
     this.simplifiedMode = false,
     this.routeStartWaypointIndex = 0,
     this.avoidStairs = false,
+    this.onPositionChanged,
     this.isEmergency = false,
   });
 
@@ -142,12 +146,29 @@ class StadiumMapPageState extends State<StadiumMapPage>
   Future<void> loadUserPosition({bool updateFloor = true}) async {
     final position = await UserPositionService.getPosition();
     if (mounted) {
+      double x = position.x;
+      double y = position.y;
+
+      // VALIDAÇÃO: Se a posição carregada estiver fora dos limites (ex: pixels do dragão), resetar para o centro
+      // Coordenadas válidas para UA devem estar perto de (40.6, -8.6)
+      final LatLng currentLatLng = _convertToLatLng(x, y);
+      if (!stadiumBounds.contains(currentLatLng)) {
+        // Ignorar se estiver em navegação (permitir movimento livre durante simulação)
+        if (widget.isNavigating) return;
+
+        print(
+          "[StadiumMapPage] ⚠️ Invalid position detected (${x}, ${y}). Resetting to center.",
+        );
+        x = stadiumCenter.longitude;
+        y = stadiumCenter.latitude;
+      }
+
       print(
-        "[StadiumMapPage] 📥 Loading user position from service: ${position.x}, ${position.y} (Level ${position.level})",
+        "[StadiumMapPage] 📥 Loading user position from service: $x, $y (Level ${position.level})",
       );
       setState(() {
-        _userPositionX = position.x;
-        _userPositionY = position.y;
+        _userPositionX = x;
+        _userPositionY = y;
         _userNodeId = position.nodeId;
         _userLevel = position.level; // Guardar nível real
 
@@ -298,13 +319,13 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
   }
 
-  // Coordenadas do Estádio do Dragão (Porto, Portugal)
-  static const LatLng stadiumCenter = LatLng(41.161758, -8.583933);
+  // Coordenadas da Universidade de Aveiro 
+  static const LatLng stadiumCenter = LatLng(40.6300, -8.6558);
 
-  // Bounding box do estádio (aproximado - ajustar com dados reais do backend)
+  // Bounding box da UA (aproximado)
   static final LatLngBounds stadiumBounds = LatLngBounds(
-    const LatLng(41.1600, -8.5850), // Southwest
-    const LatLng(41.1635, -8.5820), // Northeast
+    const LatLng(40.6250, -8.6600), // Southwest
+    const LatLng(40.6350, -8.6500), // Northeast
   );
 
   Future<void> _loadMapData() async {
@@ -362,8 +383,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
         _isLoading = false;
       });
 
-      // Fazer zoom na posição do utilizador após carregar dados
-      _zoomToUserPosition();
+      // Fazer zoom na posição do utilizador após carregar dados (apenas se não estiver em navegação)
+      if (!widget.isNavigating) {
+        _zoomToUserPosition();
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -383,11 +406,19 @@ class StadiumMapPageState extends State<StadiumMapPage>
       if (!mounted) return;
 
       try {
-        // Se tem posição guardada válida (não é 0,0), usar essa
+        // Se tem posição guardada válida (não é 0.0), usar essa
         if (_userPositionLoaded &&
             (_userPositionX != 0.0 || _userPositionY != 0.0)) {
           final userLatLng = _convertToLatLng(_userPositionX, _userPositionY);
-          _mapController.move(userLatLng, 20.0);
+          
+          // Verificar se a posição carregada faz sentido no contexto atual
+          // Se for uma coordenada legada (ex: x=219.7, y=112.3 do estádio), ignoramos
+          if (stadiumBounds.contains(userLatLng)) {
+            _mapController.move(userLatLng, 20.0);
+          } else {
+            // Posicao antiga era do outro mapa - resetamos para o centro da UA
+            _mapController.move(stadiumCenter, 17.5);
+          }
         } else if (_nodes.isNotEmpty) {
           // Fallback: usar nó N1 ou primeiro nó
           final userNode = _nodes.firstWhere(
@@ -401,28 +432,12 @@ class StadiumMapPageState extends State<StadiumMapPage>
     });
   }
 
-  /// Converte coordenadas do backend (x, y) para LatLng do mapa
-  /// O backend usa coordenadas em unidades arbitrárias:
-  /// X: 82 a 916 (centro ~499)
-  /// Y: 60 a 740 (centro ~400)
+  /// Agora que o backend e Frontend usam GPS real, esta função
+  /// apenas passa os valores `x` (Longitude) e `y` (Latitude).
+  /// Nota: O leaflet/flutter_map usa LatLng (Latitude=y, Longitude=x) padrão
   LatLng _convertToLatLng(double x, double y) {
-    // Centro das coordenadas do backend
-    const backendCenterX = 499.0; // (82 + 916) / 2
-    const backendCenterY = 400.0; // (60 + 740) / 2
-
-    // Aproximação: 1 unidade do backend ≈ graus
-    // Ajustado para que o estádio (~800 unidades largura) caiba nos bounds
-    const unitsToLatDegrees = 0.000004; // Ajustado para melhor escala
-    const unitsToLngDegrees = 0.000005; // Longitude ligeiramente diferente
-
-    // Centrar as coordenadas antes de converter
-    final centeredX = x - backendCenterX;
-    final centeredY = y - backendCenterY;
-
-    return LatLng(
-      stadiumCenter.latitude + (centeredY * unitsToLatDegrees),
-      stadiumCenter.longitude + (centeredX * unitsToLngDegrees),
-    );
+    // x = Longitude, y = Latitude no nosso novo modelo
+    return LatLng(y, x);
   }
 
   /// Método público para fazer zoom num POI (usado pela barra de pesquisa)
@@ -531,29 +546,58 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // Controlos de movimento (apenas na Home, não durante navegação)
         if (!widget.isNavigating && !_isLoading && _errorMessage == null)
           Positioned(
-            right: 16,
-            bottom: 100,
+            left: 16,
+            bottom: 110,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Botão de mover para frente
+                // Botão de mover para frente (Simulação)
                 FloatingActionButton(
                   heroTag: 'home_forward',
-                  mini: false,
                   backgroundColor: const Color(0xFF161A3E),
-                  onPressed: () => _moveForward(10),
-                  child: const Icon(Icons.arrow_upward, color: Colors.white),
+                  onPressed: () => _moveForward(3),
+                  tooltip: 'Mover para frente',
+                  child: const Icon(Icons.navigation, color: Colors.white),
                 ),
                 const SizedBox(height: 12),
-                // Botão de rodar
+                
+                // Botão de rodar (Simulação)
                 FloatingActionButton(
                   heroTag: 'home_rotate',
-                  mini: false,
+                  mini: true,
                   backgroundColor: Colors.white,
                   onPressed: () => _rotateUser(45),
+                  tooltip: 'Rodar 45°',
                   child: const Icon(
                     Icons.rotate_right,
                     color: Color(0xFF161A3E),
                   ),
+                ),
+                const SizedBox(height: 24),
+
+                // Recenter
+                FloatingActionButton(
+                  heroTag: 'recenter',
+                  backgroundColor: Colors.white,
+                  mini: true,
+                  onPressed: _zoomToUserPosition,
+                  tooltip: 'Ir para minha posição',
+                  child: const Icon(Icons.my_location, color: Colors.blue),
+                ),
+                const SizedBox(height: 12),
+
+                // Reset Pos
+                FloatingActionButton(
+                  heroTag: 'reset_pos',
+                  backgroundColor: Colors.white,
+                  mini: true,
+                  onPressed: () async {
+                    await UserPositionService.resetToDefault();
+                    await loadUserPosition();
+                    _zoomToUserPosition();
+                  },
+                  tooltip: 'Resetar Posição (Emergência)',
+                  child: const Icon(Icons.restore, color: Colors.orange),
                 ),
               ],
             ),
@@ -577,8 +621,12 @@ class StadiumMapPageState extends State<StadiumMapPage>
     if (_nodes.isEmpty) return;
 
     final rad = _userHeading * (math.pi / 180.0);
-    final deltaX = meters * math.sin(rad);
-    final deltaY = meters * -math.cos(rad);
+    final deltaMetersX = meters * math.sin(rad);
+    final deltaMetersY = meters * -math.cos(rad);
+
+    // Converter metros para graus (aproximação para o campus da UA)
+    final deltaX = GeographicUtils.metersToDegrees(deltaMetersX);
+    final deltaY = GeographicUtils.metersToDegrees(deltaMetersY);
 
     await _moveUser(deltaX, deltaY);
   }
@@ -615,9 +663,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
     NodeModel? nearestNode;
     double minDist = double.infinity;
     for (final node in _nodes) {
-      final d =
-          (node.x - targetX) * (node.x - targetX) +
-          (node.y - targetY) * (node.y - targetY);
+      final d = GeographicUtils.calculateDistance(node.x, node.y, targetX, targetY);
       if (d < minDist) {
         minDist = d;
         nearestNode = node;
@@ -635,6 +681,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
       _userPositionX = newX;
       _userPositionY = newY;
       _userNodeId = nearestNode!.id;
+      _userPositionLoaded = true; // Garantir que está marcado como carregado
     });
 
     // Guardar posição
@@ -653,64 +700,159 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   /// Verifica se uma posição está numa área walkable
+  /// Para outdoor OSM, verificamos apenas se está perto de um nó do grafo
   bool _isPositionWalkable(double x, double y) {
-    // Se não há tiles carregados, permitir movimento (fallback)
-    if (_tiles.isEmpty) {
-      return true;
-    }
+    if (_nodes.isEmpty) return true;
 
-    // Procurar tile que contém este ponto
-    for (var tile in _tiles) {
-      if (tile.containsPoint(x, y)) {
-        return tile.walkable;
+    // Encontrar nó mais próximo usando Haversine
+    double minDist = double.infinity;
+    for (final node in _nodes) {
+      final d = GeographicUtils.calculateDistance(node.x, node.y, x, y);
+      if (d < minDist) {
+        minDist = d;
       }
     }
 
-    // Se não encontrou nenhum tile, verificar se está perto de um nó walkable
-    // Isto permite movimento em áreas não cobertas por tiles mas com nós válidos
-    if (_nodes.isNotEmpty) {
-      // Encontrar nó mais próximo
-      double minDist = double.infinity;
-      NodeModel? nearestNode;
-      for (final node in _nodes) {
-        final d = (node.x - x) * (node.x - x) + (node.y - y) * (node.y - y);
-        if (d < minDist) {
-          minDist = d;
-          nearestNode = node;
-        }
-      }
+    // Permitir movimento até X metros do nó mais próximo
+    return minDist < MapConfig.walkableRadius;
+  }
 
-      // Se está a menos de 50 unidades de um nó, permitir movimento
-      if (nearestNode != null && minDist < 50 * 50) {
-        return true;
-      }
-    }
+  /// Handler para long-press no mapa — cria POI custom
+  void _onMapLongPress(TapPosition tapPosition, LatLng point) {
+    _showCreatePOIDialog(point);
+  }
 
-    // Fallback: permitir movimento mesmo fora dos tiles (para dev/testing)
-    // Comentar esta linha para comportamento mais restrito
-    // Fallback: permitir movimento mesmo fora dos tiles (para dev/testing)
-    // Comentar esta linha para comportamento mais restrito
-    return true;
+  /// Mostra diálogo para criar POI custom
+  void _showCreatePOIDialog(LatLng position) {
+    final nameController = TextEditingController();
+    String selectedType = 'poi';
+
+    final types = {
+      'poi': ('Ponto de Interesse', Icons.place),
+      'food': ('Comida', Icons.restaurant),
+      'bar': ('Bar', Icons.local_bar),
+      'information': ('Informação', Icons.info),
+      'entrance': ('Entrada', Icons.door_front_door),
+      'shop': ('Loja', Icons.shopping_bag),
+      'first_aid': ('Primeiro Socorro', Icons.medical_services),
+      'wc': ('WC', Icons.wc),
+    };
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Criar Ponto de Interesse'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nome',
+                  hintText: 'Ex: Stand de Comida, Palco Principal...',
+                  border: OutlineInputBorder(),
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedType,
+                decoration: const InputDecoration(
+                  labelText: 'Tipo',
+                  border: OutlineInputBorder(),
+                ),
+                items: types.entries.map((e) => DropdownMenuItem(
+                  value: e.key,
+                  child: Row(
+                    children: [
+                      Icon(e.value.$2, size: 20),
+                      const SizedBox(width: 8),
+                      Text(e.value.$1),
+                    ],
+                  ),
+                )).toList(),
+                onChanged: (v) => setDialogState(() => selectedType = v!),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '📍 ${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+                Navigator.pop(ctx);
+                try {
+                  await MapService().createPOI(
+                    name: name,
+                    type: selectedType,
+                    x: position.longitude,
+                    y: position.latitude,
+                    level: _currentFloor,
+                  );
+                  // Recarregar POIs
+                  final pois = await MapService().getAllPOIs();
+                  setState(() => _pois = pois);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('POI "$name" criado!')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Erro ao criar POI: $e')),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.add_location),
+              label: const Text('Criar'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildMap() {
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: stadiumCenter,
-        initialZoom: 20.0, // Zoom mais aproximado
-        minZoom: 16.0,
+        initialCenter: widget.isNavigating && widget.userPosition != null 
+          ? widget.userPosition! 
+          : stadiumCenter,
+        initialZoom: widget.isNavigating ? 20.0 : 17.0,
+        minZoom: 14.0,
         maxZoom: 20.0,
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
         ),
+        onPositionChanged: widget.onPositionChanged,
+        onLongPress: widget.isNavigating ? null : _onMapLongPress,
       ),
       children: [
+        // Base layer: OSM tiles (outdoor) ou fundo vazio (indoor)
+        if (MapConfig.useOSMTiles)
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.dragao.fanapp',
+          ),
+
         // Remove a atribuição padrão do flutter_map
         RichAttributionWidget(attributions: []),
 
-        // Camada do Mapa Gerado (Floor Plan) - Skip in simplified mode for performance
-        if (!widget.simplifiedMode)
+        // Camada do Floor Plan (indoor mode)
+        if (MapConfig.useFloorPlan && !widget.simplifiedMode)
           FloorPlanLayer(
             edges: _edges,
             nodes: _nodes,
@@ -772,21 +914,26 @@ class StadiumMapPageState extends State<StadiumMapPage>
       final color = _getCongestionColor(cellData.congestionLevel);
 
       // Criar retângulo para a célula (cantos do quadrado)
-      final topLeft = _convertToLatLng(
-        x.toDouble() - cellSize / 2,
-        y.toDouble() - cellSize / 2,
+      // Como agora x/y representam Lat/Lng
+      // cellsize deixa de ser 50(pixeis) -> 0.0005 graus (aprox ~50 metros)
+      const cellSizeLat = 0.0005; 
+      const cellSizeLng = 0.0005;
+
+      final topLeft = LatLng(
+        y.toDouble() + cellSizeLat / 2,
+        x.toDouble() - cellSizeLng / 2,
       );
-      final topRight = _convertToLatLng(
-        x.toDouble() + cellSize / 2,
-        y.toDouble() - cellSize / 2,
+      final topRight = LatLng(
+        y.toDouble() + cellSizeLat / 2,
+        x.toDouble() + cellSizeLng / 2,
       );
-      final bottomRight = _convertToLatLng(
-        x.toDouble() + cellSize / 2,
-        y.toDouble() + cellSize / 2,
+      final bottomRight = LatLng(
+        y.toDouble() - cellSizeLat / 2,
+        x.toDouble() + cellSizeLng / 2,
       );
-      final bottomLeft = _convertToLatLng(
-        x.toDouble() - cellSize / 2,
-        y.toDouble() + cellSize / 2,
+      final bottomLeft = LatLng(
+        y.toDouble() - cellSizeLat / 2,
+        x.toDouble() - cellSizeLng / 2,
       );
 
       polygons.add(
@@ -1078,26 +1225,43 @@ class StadiumMapPageState extends State<StadiumMapPage>
       );
     }
 
-    return MarkerLayer(
-      markers: [
-        ...userMarkers,
-        ..._buildTicketMarkers(),
+    // Calcular posição do utilizador para detetar sobreposição
+    LatLng? currentUserLatLng;
+    if (widget.isNavigating && widget.userPosition != null) {
+      currentUserLatLng = widget.userPosition;
+    } else if (_userPositionLoaded &&
+        (_userPositionX != 0.0 || _userPositionY != 0.0)) {
+      currentUserLatLng = _convertToLatLng(_userPositionX, _userPositionY);
+    }
 
-        // REMOVIDO: Lugares guardados com ícone de estrela
-        // POIs normais
-        ...poisToShow.map<Marker>((POIModel poi) {
-          final position = _convertToLatLng(poi.x, poi.y);
-          final isHighlighted = widget.highlightedPOI?.id == poi.id;
-          // REMOVED: Check for saved places
-          // if (_savedPlaces.any((p) => p.id == poi.id)) { ... }
+    final poiMarkers = poisToShow.map<Marker>((POIModel poi) {
+      final position = _convertToLatLng(poi.x, poi.y);
+      final isHighlighted = widget.highlightedPOI?.id == poi.id;
 
-          return Marker(
-            point: position,
-            width: isHighlighted ? 60 : 50,
-            height: isHighlighted ? 60 : 50,
-            child: GestureDetector(
-              onTap: () => _showPOIDetails(poi),
-              child: Container(
+      // Detetar sobreposição com o user (< 15m)
+      bool isNearUser = false;
+      if (currentUserLatLng != null) {
+        final dist = GeographicUtils.calculateDistance(
+          position.longitude, position.latitude,
+          currentUserLatLng.longitude, currentUserLatLng.latitude,
+        );
+        isNearUser = dist < 15.0;
+      }
+
+      return Marker(
+        point: position,
+        width: isHighlighted ? 60 : 50,
+        height: isNearUser ? 70 : (isHighlighted ? 60 : 50),
+        // Quando perto do user, desloca o POI para cima para não sobrepor
+        alignment: isNearUser
+            ? const Alignment(0.0, -1.5) // Sobe o marcador
+            : Alignment.center,
+        child: GestureDetector(
+          onTap: () => _showPOIDetails(poi),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
                 padding: EdgeInsets.all(isHighlighted ? 10 : 8),
                 decoration: BoxDecoration(
                   color: _getPOIColor(poi.category),
@@ -1120,9 +1284,36 @@ class StadiumMapPageState extends State<StadiumMapPage>
                   size: isHighlighted ? 24 : 20,
                 ),
               ),
-            ),
-          );
-        }),
+              // Quando perto do user, mostra uma setinha a indicar a posição real
+              if (isNearUser)
+                const Icon(
+                  Icons.arrow_drop_down,
+                  color: Colors.grey,
+                  size: 16,
+                ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+
+    // Dois MarkerLayers separados:
+    // 1) User markers — rodam com o mapa (seta de navegação)
+    // 2) POI markers — ficam sempre alinhados ao ecrã (rotate: false)
+    return Stack(
+      children: [
+        // POIs: sempre verticais, alinhados ao ecrã
+        MarkerLayer(
+          rotate: false,
+          markers: [
+            ..._buildTicketMarkers(),
+            ...poiMarkers,
+          ],
+        ),
+        // User: roda com o mapa (navegação), renderizado por cima dos POIs
+        MarkerLayer(
+          markers: userMarkers,
+        ),
       ],
     );
   }
@@ -1162,8 +1353,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
   Color _getPOIColor(String category) {
     switch (category.toLowerCase()) {
       case 'restroom':
+      case 'wc':
         return Colors.blue.shade700;
       case 'food':
+      case 'cafe':
+      case 'restaurant':
         return Colors.orange.shade700;
       case 'bar':
         return Colors.purple.shade700;
@@ -1185,6 +1379,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
         return Colors.teal.shade700;
       case 'seat':
         return Colors.green.shade700;
+      case 'library':
+        return Colors.brown.shade700;
+      case 'parking':
+        return Colors.blueGrey.shade700;
       default:
         return Colors.grey.shade700;
     }
@@ -1193,9 +1391,13 @@ class StadiumMapPageState extends State<StadiumMapPage>
   IconData _getPOIIcon(String category) {
     switch (category.toLowerCase()) {
       case 'restroom':
+      case 'wc':
         return Icons.wc;
       case 'food':
+      case 'restaurant':
         return Icons.restaurant;
+      case 'cafe':
+        return Icons.local_cafe;
       case 'bar':
         return Icons.local_bar;
       case 'emergency_exit':
@@ -1217,6 +1419,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
         return Icons.login;
       case 'seat':
         return Icons.event_seat;
+      case 'library':
+        return Icons.local_library;
+      case 'parking':
+        return Icons.local_parking;
       default:
         return Icons.place;
     }

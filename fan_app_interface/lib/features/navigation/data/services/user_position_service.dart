@@ -7,10 +7,10 @@ class UserPositionService {
   static const String _keyNodeId = 'user_node_id';
   static const String _keyLevel = 'user_position_level';
 
-  // Posição inicial padrão (Gate-21 - Porta 21, Entrada Norte)
-  static const double defaultX = 710.0;
-  static const double defaultY = 694.45;
-  static const String defaultNodeId = 'Gate-21';
+  // Posição inicial padrão (UA - Reitoria)
+  static const double defaultX = -8.65622;
+  static const double defaultY = 40.63032;
+  static const String defaultNodeId = 'POI-reitoria';
   static const int defaultLevel = 0;
 
   /// Salva a posição atual do utilizador

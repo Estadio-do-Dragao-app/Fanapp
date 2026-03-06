@@ -338,22 +338,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     }
   }
 
-  /// Converte coordenadas do backend para LatLng (mesmo método do StadiumMapPage)
   LatLng _convertToLatLng(double x, double y) {
-    const backendCenterX = 499.0;
-    const backendCenterY = 400.0;
-    const stadiumCenterLat = 41.161758;
-    const stadiumCenterLng = -8.583933;
-    const unitsToLatDegrees = 0.000004;
-    const unitsToLngDegrees = 0.000005;
-
-    final centeredX = x - backendCenterX;
-    final centeredY = y - backendCenterY;
-
-    return LatLng(
-      stadiumCenterLat + (centeredY * unitsToLatDegrees),
-      stadiumCenterLng + (centeredX * unitsToLngDegrees),
-    );
+    // x = Longitude, y = Latitude no nosso novo modelo
+    return LatLng(y, x);
   }
 
   /// Faz zoom para mostrar o início e fim da rota

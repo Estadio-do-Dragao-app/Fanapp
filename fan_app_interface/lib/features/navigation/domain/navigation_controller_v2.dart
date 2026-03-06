@@ -10,7 +10,6 @@ import '../data/services/user_position_service.dart';
 import 'models/reroute_event.dart';
 import 'route_tracker.dart';
 import 'dynamic_route_manager.dart';
-import '../../../core/utils/geographic_utils.dart';
 
 /// Controlador principal da navegação
 /// Gerencia o estado da navegação, tracking de posição e instruções
@@ -138,9 +137,9 @@ class NavigationController extends ChangeNotifier {
           '[NavigationController] 📍 Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
         );
       } else {
-        // Fallback: usar entrada do instituto
+        // Fallback: usar N1
         final userNode = allNodes.firstWhere(
-          (n) => n.id == 'POI-reitoria',
+          (n) => n.id == 'N1',
           orElse: () => allNodes.first,
         );
         startX = userNode.x;
@@ -260,12 +259,10 @@ class NavigationController extends ChangeNotifier {
 
       final dx = targetX - currentX;
       final dy = targetY - currentY;
+      final distance = math.sqrt(dx * dx + dy * dy);
 
-      // Calcular distância em metros
-      final distanceMeters = GeographicUtils.calculateDistance(currentX, currentY, targetX, targetY);
-
-      // Se chegou ao waypoint atual (4.0 metros)
-      if (distanceMeters < 4.0) {
+      // Se chegou ao waypoint atual (V2: threshold 3.0→10.0 para tolerar desvios laterais)
+      if (distance < 10.0) {
         // Verificar mudança de piso ao atingir waypoint de escadas/rampa
         if (targetLevel != _currentLevel) {
           print(
@@ -284,17 +281,19 @@ class NavigationController extends ChangeNotifier {
         continue;
       }
 
-      // Velocidade de caminhada: 1.4 m/s. Tic de 100ms -> 0.14m por tic
-      const speedPerTick = 0.14;
+      // Velocidade de caminhada: ~2 unidades por tick (mais lento e natural)
+      const speed = 2.0;
 
-      // Calcular fator de movimento (percentagem da distância total em graus que representa 0.14m)
-      final moveFactor = math.min(1.0, speedPerTick / distanceMeters);
-      
-      final moveX = dx * moveFactor;
-      final moveY = dy * moveFactor;
+      // Calcular movimento normalizado
+      final moveX = (dx / distance) * math.min(speed, distance);
+      final moveY = (dy / distance) * math.min(speed, distance);
 
       // Calcular heading para a direção do movimento
+      // atan2(dy, dx) retorna ângulo em radianos onde 0 = direita
+      // Convertemos para sistema onde 0 = cima (norte)
+      // O ícone Icons.navigation aponta para CIMA por defeito
       _heading = math.atan2(dx, -dy) * (180.0 / math.pi);
+      // Normalizar para 0-360
       if (_heading < 0) _heading += 360;
 
       // Mover utilizador
@@ -326,18 +325,23 @@ class NavigationController extends ChangeNotifier {
   /// Move para a frente na direção do heading atual
   void moveForward(double meters) {
     // Converter heading para radianos
-    // Bearing: 0° = Norte (lat+), 90° = Este (lng+)
+    // Sistema de Navegação (Bearing):
+    // 0 graus = Norte/Cima (Eixo Y negativo)
+    // 90 graus = Este/Direita (Eixo X positivo)
+    // 180 graus = Sul/Baixo (Eixo Y positivo)
     final rad = _heading * (math.pi / 180.0);
 
-    // Calcular deltas em metros
-    final deltaMetersX = meters * math.sin(rad);  // Este-Oeste (Longitude)
-    final deltaMetersY = meters * math.cos(rad);   // Norte-Sul (Latitude)
+    // Bearing formulas for screen coordinates (Y is Down):
+    // dX = meters * sin(theta)
+    // dY = meters * -cos(theta)
 
-    // Converter metros → graus GPS (1° ≈ 111,320m)
-    final deltaLng = GeographicUtils.metersToDegrees(deltaMetersX); // x = Longitude
-    final deltaLat = GeographicUtils.metersToDegrees(deltaMetersY); // y = Latitude
+    // Check: 0 deg -> sin(0)=0, -cos(0)=-1 -> (0, -1) -> Up. Correct.
+    // Check: 90 deg -> sin(90)=1, -cos(90)=0 -> (1, 0) -> Right. Correct.
 
-    moveUser(deltaLng, deltaLat);
+    final deltaX = meters * math.sin(rad);
+    final deltaY = meters * -math.cos(rad);
+
+    moveUser(deltaX, deltaY);
   }
 
   /// Atualiza a instrução atual
@@ -482,7 +486,9 @@ class NavigationController extends ChangeNotifier {
       if (i > 0) {
         final prevNode = nodesMap[nodeIds[i - 1]];
         if (prevNode != null) {
-          final dist = GeographicUtils.calculateDistance(prevNode.x, prevNode.y, node.x, node.y);
+          final dist = math.sqrt(
+            math.pow(node.x - prevNode.x, 2) + math.pow(node.y - prevNode.y, 2),
+          );
           cumulativeDist += dist;
           cumulativeTime += dist / 1.4; // 1.4 m/s walking speed
         }
@@ -535,7 +541,7 @@ class NavigationController extends ChangeNotifier {
       final wpY = node?.y ?? wp.y;
       final dx = wpX - currentX;
       final dy = wpY - currentY;
-      final dist = GeographicUtils.calculateDistance(currentX, currentY, wpX, wpY);
+      final dist = math.sqrt(dx * dx + dy * dy);
       if (dist < minDistance) {
         minDistance = dist;
         _targetWaypointIndex = i;
@@ -716,7 +722,9 @@ class NavigationController extends ChangeNotifier {
     double minDistance = double.infinity;
 
     for (final node in allNodes) {
-      final distance = GeographicUtils.calculateDistance(x, y, node.x, node.y);
+      final dx = node.x - x;
+      final dy = node.y - y;
+      final distance = (dx * dx + dy * dy);
 
       if (distance < minDistance) {
         minDistance = distance;

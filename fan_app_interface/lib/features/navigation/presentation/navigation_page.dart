@@ -21,6 +21,7 @@ class NavigationPage extends StatefulWidget {
   final double? initialX;
   final double? initialY;
   final int? initialLevel;
+  final bool isEmergency; // FIX 1: moved inside constructor params (was dangling field)
 
   const NavigationPage({
     super.key,
@@ -32,8 +33,6 @@ class NavigationPage extends StatefulWidget {
     this.initialLevel,
     this.isEmergency = false,
   });
-
-  final bool isEmergency;
 
   @override
   State<NavigationPage> createState() => _NavigationPageState();
@@ -54,8 +53,7 @@ class _NavigationPageState extends State<NavigationPage>
   // Animation controller for blinking border (emergency mode)
   late AnimationController _blinkController;
 
-  // Escala para corresponder ao StadiumMapPage
-  bool _showHeatmap = false; // Estado local para toggle do heatmap
+  bool _showHeatmap = false;
 
   // State for reroute popup
   bool _showReroutePopup = false;
@@ -64,18 +62,19 @@ class _NavigationPageState extends State<NavigationPage>
   // Track bottom sheet expansion state
   bool _isBottomSheetExpanded = false;
 
+  // Track if the map should follow the user position
+  bool _isFollowingUser = true;
+
   @override
   void initState() {
     super.initState();
-    // ... rest of initState
 
-    // Duração curta para corresponder à frequência de updates (100ms) mas suavizar snaps
+    // FIX 2: AnimationControllers initialized before _controller so vsync is ready
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 100),
       vsync: this,
     );
 
-    // Initialize blinking controller
     _blinkController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -84,6 +83,7 @@ class _NavigationPageState extends State<NavigationPage>
       _blinkController.repeat(reverse: true);
     }
 
+    // FIX 3: _controller initialized BEFORE addListener (was the other way around)
     _controller = NavigationController(
       route: widget.route,
       destination: widget.destination,
@@ -101,7 +101,7 @@ class _NavigationPageState extends State<NavigationPage>
           _rotAnimation != null) {
         _mapController.moveAndRotate(
           LatLng(_latAnimation!.value, _lngAnimation!.value),
-          20.0, // Zoom constante ou animado se necessário
+          20.0,
           _rotAnimation!.value,
         );
       }
@@ -120,10 +120,12 @@ class _NavigationPageState extends State<NavigationPage>
 
   @override
   void dispose() {
-    _animationController.dispose();
-    _blinkController.dispose();
+    // FIX 4: remove listener and dispose controller BEFORE disposing AnimationControllers
+    // to avoid callbacks firing on disposed vsync objects
     _controller.removeListener(_onNavigationUpdate);
     _controller.dispose();
+    _animationController.dispose();
+    _blinkController.dispose();
     super.dispose();
   }
 
@@ -134,10 +136,10 @@ class _NavigationPageState extends State<NavigationPage>
     );
     setState(() {});
 
-    // Câmara segue o utilizador (tipo Google Maps)
-    _followUserPosition();
+    if (_isFollowingUser) {
+      _followUserPosition();
+    }
 
-    // Chegada ao destino: voltar ao mapa automaticamente (com delay para evitar crash)
     if (_controller.hasArrived) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
@@ -147,38 +149,28 @@ class _NavigationPageState extends State<NavigationPage>
     }
   }
 
-  void _exitNavigation() {
+  void _exitNavigation() async {
+    if (_controller.isNavigating) {
+      await _controller.endNavigation();
+    }
+
+    if (!mounted) return;
+
     if (widget.isEmergency) {
-      // Modo de emergência: Home foi removida da stack, temos de navegar para lá explicitamente
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const Home()),
         (route) => false,
       );
     } else {
-      // Modo normal: Voltar à Home (root) independentemente de onde veio
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
   void _followUserPosition() {
     final tracker = _controller.tracker;
-    // Usar mesma lógica de projeção corrigida do StadiumMapPage
-    // Centro das coordenadas do backend
-    const backendCenterX = 499.0;
-    const backendCenterY = 400.0;
-    const unitsToLatDegrees = 0.000004;
-    const unitsToLngDegrees = 0.000005;
+    final userLat = tracker.currentY;
+    final userLng = tracker.currentX;
 
-    final center = StadiumMapPageState.stadiumCenter;
-
-    // Centrar as coordenadas antes de converter
-    final centeredX = tracker.currentX - backendCenterX;
-    final centeredY = tracker.currentY - backendCenterY;
-
-    final userLat = center.latitude + (centeredY * unitsToLatDegrees);
-    final userLng = center.longitude + (centeredX * unitsToLngDegrees);
-
-    // Mover e rodar câmara com animação
     try {
       final targetRot = _controller.heading - 180.0;
       _animateMapTo(LatLng(userLat, userLng), targetRot);
@@ -190,18 +182,13 @@ class _NavigationPageState extends State<NavigationPage>
   void _animateMapTo(LatLng destLocation, double destRotation) {
     if (!mounted) return;
 
-    // Obter valores atuais
     final startLat = _mapController.camera.center.latitude;
     final startLng = _mapController.camera.center.longitude;
     final startRot = _mapController.camera.rotation;
 
-    // Calcular rotação mais curta (evitar girar 360 graus desnecessariamente)
     double diff = (destRotation - startRot + 180) % 360 - 180;
-    // Ajustar destRotation para ser vizinha de startRot
     final adjustedDestRot = startRot + diff;
 
-    // Se a mudança for muito pequena, movemos instantaneamente (optimização)
-    // Mas para suavidade total, animamos tudo.
     _latAnimation = Tween<double>(begin: startLat, end: destLocation.latitude)
         .animate(
           CurvedAnimation(parent: _animationController, curve: Curves.linear),
@@ -226,312 +213,301 @@ class _NavigationPageState extends State<NavigationPage>
     }
   }
 
+  // FIX 5: consistent zero-padding for both hours and minutes
   String _getArrivalTime() {
     final now = DateTime.now();
     final arrivalTime = now.add(
       Duration(seconds: _controller.remainingTimeSeconds),
     );
-    return '${arrivalTime.hour}:${arrivalTime.minute.toString().padLeft(2, '0')}';
+    return '${arrivalTime.hour.toString().padLeft(2, '0')}:${arrivalTime.minute.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     final tracker = _controller.tracker;
 
-    // Calcular posição para o mapa (usando mesma projeção corrigida)
-    const backendCenterX = 499.0;
-    const backendCenterY = 400.0;
-    const unitsToLatDegrees = 0.000004;
-    const unitsToLngDegrees = 0.000005;
-    final center = StadiumMapPageState.stadiumCenter;
-
-    // Centrar as coordenadas antes de converter
-    final centeredX = tracker.currentX - backendCenterX;
-    final centeredY = tracker.currentY - backendCenterY;
-
     final userPosition = LatLng(
-      center.latitude + (centeredY * unitsToLatDegrees),
-      center.longitude + (centeredX * unitsToLngDegrees),
+      tracker.currentY,
+      tracker.currentX,
     );
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Mapa de fundo com rota destacada
-          StadiumMapPage(
-            highlightedRoute: _controller.route,
-            highlightedPOI: widget.destination,
-            mapController: _mapController,
-            isNavigating: true,
-            userPosition: userPosition,
-            userHeading: _controller.heading,
-            routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
-            initialFloor: _controller.currentLevel,
-            showHeatmap: _showHeatmap, // Passar estado do toggle
-            isEmergency: widget.isEmergency,
-          ),
-
-          // Emergency Blinking Border
-          if (widget.isEmergency)
-            Positioned(
-              top: -20,
-              bottom: -20,
-              left: -20,
-              right: -20,
-              child: AnimatedBuilder(
-                animation: _blinkController,
-                builder: (context, child) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(
-                        MediaQuery.of(context).viewPadding.top > 0 ? 70.0 : 0.0,
-                      ),
-                      border: Border.all(
-                        color: const Color(
-                          0xFFBD453D,
-                        ).withValues(alpha: _blinkController.value),
-                        width: 35,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          // Header com instrução de navegação (topo)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: NavigationHeader(
-              instruction: _controller.currentInstruction,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _endNavigation();
+      },
+      // FIX 6: corrected Scaffold/body structure (Stack was misaligned in original)
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Mapa de fundo com rota destacada
+            StadiumMapPage(
+              highlightedRoute: _controller.route,
+              highlightedPOI: widget.destination,
+              mapController: _mapController,
+              isNavigating: true,
+              userPosition: userPosition,
+              userHeading: _controller.heading,
+              routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
+              initialFloor: _controller.currentLevel,
+              showHeatmap: _showHeatmap,
               isEmergency: widget.isEmergency,
-            ),
-          ),
-
-          // Bottom sheet com informações (Hide when popup is visible)
-          if (!_showReroutePopup)
-            Positioned(
-              left: 24,
-              right: 24,
-              bottom: 24,
-              child: NavigationBottomSheet(
-                arrivalTime: _getArrivalTime(),
-                remainingTime: _controller.formattedRemainingTime,
-                remainingDistance: _controller.formattedRemainingDistance,
-                destination: widget.destination,
-                onEndRoute: _endNavigation,
-                isEmergency: widget.isEmergency,
-                onExpansionChanged: (expanded) {
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture && _isFollowingUser) {
+                  print("[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.");
                   setState(() {
-                    _isBottomSheetExpanded = expanded;
+                    _isFollowingUser = false;
                   });
-                },
-              ),
+                }
+              },
             ),
 
-          // Reroute Popup
-          if (_showReroutePopup && _rerouteEvent != null)
+            // Emergency Blinking Border
+            if (widget.isEmergency)
+              Positioned(
+                top: -20,
+                bottom: -20,
+                left: -20,
+                right: -20,
+                child: AnimatedBuilder(
+                  animation: _blinkController,
+                  builder: (context, child) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(
+                          MediaQuery.of(context).viewPadding.top > 0 ? 70.0 : 0.0,
+                        ),
+                        border: Border.all(
+                          color: const Color(0xFFBD453D)
+                              .withValues(alpha: _blinkController.value),
+                          width: 35,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+            // Header com instrução de navegação (topo)
             Positioned(
+              top: 0,
               left: 0,
               right: 0,
-              bottom: 0,
-              child: ReroutePopup(
-                arrivalTime: _rerouteEvent!.arrivalTime,
-                duration: _rerouteEvent!.duration,
-                distance: _rerouteEvent!.distance,
-                locationName: _rerouteEvent!.locationName,
-                onAccept: () async {
-                  // Capture reroute event values BEFORE setState (which may trigger rebuild)
-                  // Handle both null AND empty string cases
-                  String capturedNewDestinationId =
-                      _rerouteEvent?.newDestinationId ?? '';
-                  if (capturedNewDestinationId.isEmpty) {
-                    capturedNewDestinationId = widget.destination.id;
-                  }
-                  final capturedNewRouteIds = _rerouteEvent?.newRouteIds;
+              child: NavigationHeader(
+                instruction: _controller.currentInstruction,
+                isEmergency: widget.isEmergency,
+              ),
+            ),
 
-                  // Get category from MQTT event, or extract from destination ID
-                  String? capturedCategory = _rerouteEvent?.category;
-                  final originalCategory = widget.destination.category;
+            // Bottom sheet com informações (Hide when popup is visible)
+            if (!_showReroutePopup)
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: 24,
+                child: NavigationBottomSheet(
+                  arrivalTime: _getArrivalTime(),
+                  remainingTime: _controller.formattedRemainingTime,
+                  remainingDistance: _controller.formattedRemainingDistance,
+                  destination: widget.destination,
+                  onEndRoute: _endNavigation,
+                  isEmergency: widget.isEmergency,
+                  onExpansionChanged: (expanded) {
+                    setState(() {
+                      _isBottomSheetExpanded = expanded;
+                    });
+                  },
+                ),
+              ),
 
-                  print('[NavigationPage] 🔍 Debug Reroute Values:');
-                  print(
-                    '  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"',
-                  );
-                  print('  - Captured Dest ID: "$capturedNewDestinationId"');
-                  print('  - Event Category: "${_rerouteEvent?.category}"');
-                  print('  - Widget Dest Category: "$originalCategory"');
-
-                  if ((capturedCategory == null || capturedCategory.isEmpty) &&
-                      originalCategory.isNotEmpty) {
-                    // Use original destination's category as fallback
-                    capturedCategory = originalCategory;
-                    print(
-                      '[NavigationPage] 📦 Using original destination category: $capturedCategory',
-                    );
-                  }
-
-                  // Ensure category is formatted correctly for backend (match POI ID prefix)
-                  // e.g. "wc" -> "WC", "food" -> "Food"
-                  if (capturedCategory != null && capturedCategory.isNotEmpty) {
-                    if (capturedCategory.toLowerCase() == 'wc') {
-                      capturedCategory = 'WC';
-                    } else if (capturedCategory.length > 1) {
-                      capturedCategory =
-                          capturedCategory[0].toUpperCase() +
-                          capturedCategory.substring(1).toLowerCase();
+            // Reroute Popup
+            if (_showReroutePopup && _rerouteEvent != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ReroutePopup(
+                  arrivalTime: _rerouteEvent!.arrivalTime,
+                  duration: _rerouteEvent!.duration,
+                  distance: _rerouteEvent!.distance,
+                  locationName: _rerouteEvent!.locationName,
+                  onAccept: () async {
+                    String capturedNewDestinationId =
+                        _rerouteEvent?.newDestinationId ?? '';
+                    if (capturedNewDestinationId.isEmpty) {
+                      capturedNewDestinationId = widget.destination.id;
                     }
-                  }
 
-                  print('  - Final Captured Category: "$capturedCategory"');
+                    String? capturedCategory = _rerouteEvent?.category;
+                    final originalCategory = widget.destination.category;
 
-                  setState(() {
-                    _showReroutePopup = false;
-                  });
+                    print('[NavigationPage] 🔍 Debug Reroute Values:');
+                    print('  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"');
+                    print('  - Captured Dest ID: "$capturedNewDestinationId"');
+                    print('  - Event Category: "${_rerouteEvent?.category}"');
+                    print('  - Widget Dest Category: "$originalCategory"');
 
-                  // Show blocking loading dialog to prevent "moving before notification"
-                  if (mounted) {
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) =>
-                          const Center(child: CircularProgressIndicator()),
-                    );
-                  }
+                    if ((capturedCategory == null || capturedCategory.isEmpty) &&
+                        originalCategory.isNotEmpty) {
+                      capturedCategory = originalCategory;
+                      print('[NavigationPage] 📦 Using original destination category: $capturedCategory');
+                    }
 
-                  // Request new route from current position to NEW destination
-                  try {
-                    // Pause auto-navigation to freeze user position while calculating
-                    _controller.pauseAutoNavigation();
+                    // FIX 7: simplified and corrected category normalisation
+                    if (capturedCategory != null && capturedCategory.isNotEmpty) {
+                      if (capturedCategory.toLowerCase() == 'wc') {
+                        capturedCategory = 'WC';
+                      } else {
+                        capturedCategory =
+                            capturedCategory[0].toUpperCase() +
+                            capturedCategory.substring(1).toLowerCase();
+                      }
+                    }
 
-                    final currentX = _controller.tracker.currentX;
-                    final currentY = _controller.tracker.currentY;
-                    final currentLevel = _controller.currentLevel;
+                    print('  - Final Captured Category: "$capturedCategory"');
 
-                    RouteModel newRoute;
+                    setState(() {
+                      _showReroutePopup = false;
+                    });
 
-                    // Extract category from POI ID if category not explicitly provided
-                    // POI IDs follow format: "Category-Location-Number" (e.g., "Food-Norte-1", "WC-Norte-L0-1")
-                    String? effectiveCategory = capturedCategory;
-                    if ((effectiveCategory == null ||
-                            effectiveCategory.isEmpty) &&
-                        capturedNewDestinationId.contains('-')) {
-                      effectiveCategory = capturedNewDestinationId
-                          .split('-')
-                          .first;
-                      print(
-                        '[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory',
+                    if (mounted) {
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) =>
+                            const Center(child: CircularProgressIndicator()),
                       );
                     }
 
-                    // Always prefer category-based routing (finds best POI considering wait times)
-                    if (effectiveCategory != null &&
-                        effectiveCategory.isNotEmpty) {
-                      print(
-                        '[NavigationPage] 🔄 Requesting nearest $effectiveCategory from ($currentX, $currentY) level=$currentLevel',
-                      );
-                      newRoute = await _routingService
-                          .getRouteToNearestCategory(
-                            startX: currentX,
-                            startY: currentY,
-                            startLevel: currentLevel,
-                            category: effectiveCategory,
-                            avoidStairs: false,
-                          );
-                    } else {
-                      // Fallback to specific POI if no category (rare edge case)
-                      print(
-                        '[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId',
-                      );
-                      newRoute = await _routingService.getRouteToPOI(
-                        startX: currentX,
-                        startY: currentY,
-                        startLevel: currentLevel,
-                        poiId: capturedNewDestinationId,
-                        avoidStairs: false,
-                      );
-                    }
+                    try {
+                      _controller.pauseAutoNavigation();
 
-                    if (newRoute.path.isNotEmpty) {
-                      final nodeIds = newRoute.path
-                          .map((p) => p.nodeId)
-                          .toList();
-                      print(
-                        '[NavigationPage] ✅ New route received with ${nodeIds.length} nodes',
-                      );
-                      if (mounted) {
-                        Navigator.pop(context); // Dismiss loading dialog
+                      final currentX = _controller.tracker.currentX;
+                      final currentY = _controller.tracker.currentY;
+                      final currentLevel = _controller.currentLevel;
+
+                      RouteModel newRoute;
+
+                      String? effectiveCategory = capturedCategory;
+                      if ((effectiveCategory == null ||
+                              effectiveCategory.isEmpty) &&
+                          capturedNewDestinationId.contains('-')) {
+                        effectiveCategory =
+                            capturedNewDestinationId.split('-').first;
+                        print('[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory');
                       }
 
-                      _controller.applyNewRoute(nodeIds);
+                      if (effectiveCategory != null &&
+                          effectiveCategory.isNotEmpty) {
+                        print(
+                          '[NavigationPage] 🔄 Requesting nearest $effectiveCategory from ($currentX, $currentY) level=$currentLevel',
+                        );
+                        newRoute = await _routingService.getRouteToNearestCategory(
+                          startX: currentX,
+                          startY: currentY,
+                          startLevel: currentLevel,
+                          category: effectiveCategory,
+                          avoidStairs: false,
+                        );
+                      } else {
+                        print('[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId');
+                        newRoute = await _routingService.getRouteToPOI(
+                          startX: currentX,
+                          startY: currentY,
+                          startLevel: currentLevel,
+                          poiId: capturedNewDestinationId,
+                          avoidStairs: false,
+                        );
+                      }
 
+                      if (newRoute.path.isNotEmpty) {
+                        final nodeIds =
+                            newRoute.path.map((p) => p.nodeId).toList();
+                        print('[NavigationPage] ✅ New route received with ${nodeIds.length} nodes');
+                        if (mounted) {
+                          Navigator.pop(context); // Dismiss loading dialog
+                        }
+
+                        _controller.applyNewRoute(nodeIds);
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Route updated successfully!"),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      }
+                    } catch (e) {
+                      print('[NavigationPage] ❌ Failed to get new route: $e');
                       if (mounted) {
+                        Navigator.pop(context); // Dismiss loading dialog
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Route updated successfully!"),
-                            backgroundColor: Colors.green,
+                          SnackBar(
+                            content: Text("Failed to recalculate route: $e"),
+                            backgroundColor: Colors.red,
                           ),
                         );
                       }
                     }
-                  } catch (e) {
-                    print('[NavigationPage] ❌ Failed to get new route: $e');
-                    if (mounted) {
-                      Navigator.pop(context); // Dismiss loading dialog
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("Failed to recalculate route: $e"),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                onDecline: () {
-                  setState(() {
-                    _showReroutePopup = false;
-                  });
-                },
-              ),
-            ),
-
-          // Botão de centrar e Toggle Heatmap
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            left: 16,
-            bottom: _showReroutePopup
-                ? 360
-                : (_isBottomSheetExpanded ? 360 : 200),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton(
-                  heroTag: 'heatmap_toggle',
-                  backgroundColor: _showHeatmap ? Colors.orange : Colors.white,
-                  onPressed: () {
+                  },
+                  onDecline: () {
                     setState(() {
-                      _showHeatmap = !_showHeatmap;
+                      _showReroutePopup = false;
                     });
                   },
-                  child: Icon(
-                    _showHeatmap ? Icons.layers_clear : Icons.layers,
-                    color: _showHeatmap ? Colors.white : Colors.blue,
+                ),
+              ),
+
+            // Botão de centrar e Toggle Heatmap
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              left: 16,
+              bottom: _showReroutePopup
+                  ? 360
+                  : (_isBottomSheetExpanded ? 360 : 200),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton(
+                    heroTag: 'heatmap_toggle',
+                    backgroundColor:
+                        _showHeatmap ? Colors.orange : Colors.white,
+                    onPressed: () {
+                      setState(() {
+                        _showHeatmap = !_showHeatmap;
+                      });
+                    },
+                    child: Icon(
+                      _showHeatmap ? Icons.layers_clear : Icons.layers,
+                      color: _showHeatmap ? Colors.white : Colors.blue,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                FloatingActionButton(
-                  heroTag: 'center',
-                  backgroundColor: Colors.white,
-                  onPressed: _followUserPosition,
-                  child: const Icon(Icons.my_location, color: Colors.blue),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  FloatingActionButton(
+                    heroTag: 'center',
+                    backgroundColor:
+                        _isFollowingUser ? Colors.blue : Colors.white,
+                    onPressed: () {
+                      print("[NavigationPage] 📍 Center button pressed. Enabling follow mode.");
+                      setState(() {
+                        _isFollowingUser = true;
+                      });
+                      _followUserPosition();
+                    },
+                    child: Icon(
+                      Icons.my_location,
+                      color: _isFollowingUser ? Colors.white : Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

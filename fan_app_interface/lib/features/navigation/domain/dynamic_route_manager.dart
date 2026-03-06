@@ -3,6 +3,7 @@ import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/services/routing_service.dart';
 import 'dart:math';
+import '../../../core/utils/geographic_utils.dart';
 
 /// Gestor de rota dinâmica - recalcula automaticamente quando user se desvia
 ///
@@ -72,7 +73,7 @@ class DynamicRouteManager {
       final x2 = node2?.x ?? wp2.x;
       final y2 = node2?.y ?? wp2.y;
 
-      final dist = _pointToLineDistance(userX, userY, x1, y1, x2, y2);
+      final dist = GeographicUtils.pointToSegmentDistance(userX, userY, x1, y1, x2, y2);
 
       if (dist < minDistanceToRoute) {
         minDistanceToRoute = dist;
@@ -136,7 +137,7 @@ class DynamicRouteManager {
     double minDistance = double.infinity;
 
     for (final node in allNodes) {
-      final distance = sqrt(pow(node.x - x, 2) + pow(node.y - y, 2));
+      final distance = GeographicUtils.calculateDistance(x, y, node.x, node.y);
 
       if (distance < minDistance) {
         minDistance = distance;
@@ -147,7 +148,7 @@ class DynamicRouteManager {
     return nearest ?? allNodes.first;
   }
 
-  /// Calcula distância de um ponto a uma linha
+  /// Projetar e calcular distância (removido para usar GeographicUtils)
   double _pointToLineDistance(
     double px,
     double py,
@@ -156,24 +157,7 @@ class DynamicRouteManager {
     double x2,
     double y2,
   ) {
-    final lineLength = sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
-
-    if (lineLength == 0) {
-      return sqrt(pow(px - x1, 2) + pow(py - y1, 2));
-    }
-
-    final t = max(
-      0.0,
-      min(
-        1.0,
-        ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / pow(lineLength, 2),
-      ),
-    );
-
-    final projX = x1 + t * (x2 - x1);
-    final projY = y1 + t * (y2 - y1);
-
-    return sqrt(pow(px - projX, 2) + pow(py - projY, 2));
+    return GeographicUtils.pointToSegmentDistance(px, py, x1, y1, x2, y2);
   }
 
   void dispose() {
