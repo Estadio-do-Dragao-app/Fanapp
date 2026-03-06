@@ -3,7 +3,6 @@ import 'package:http/http.dart' as http;
 import '../models/node_model.dart';
 import '../models/edge_model.dart';
 import '../models/poi_model.dart';
-import '../models/gate_model.dart';
 import '../models/tile_model.dart';
 import 'local_map_cache.dart';
 import '../../../../core/config/api_config.dart';
@@ -41,17 +40,9 @@ class MapService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        // PERFORMANCE: Filtrar seats - são ~6000+ nodes que não precisamos para navegação
-        // Seats são usados apenas para routing (endpoint /route), não para renderização/posição
-        final nodes = data
-            .map((json) => NodeModel.fromJson(json))
-            .where((node) => node.type != 'seat')
-            .toList();
+        final nodes = data.map((json) => NodeModel.fromJson(json)).toList();
 
-        // Meter Seats
-        // final nodes = data.map((json) => NodeModel.fromJson(json)).toList();
-
-        // Salva no cache (sem seats para performance)
+        // Salva no cache
         await LocalMapCache.saveNodes(nodes);
 
         return nodes;
@@ -98,24 +89,19 @@ class MapService {
   }
 
   /// GET /nodes - Buscar todos os POIs a partir dos nós
-  /// O endpoint /pois do backend é muito restritivo, por isso filtramos client-side
-  /// Tipos POI: gate, restroom, food, bar, emergency_exit, first_aid, information, merchandise, stairs, ramp
+  /// Filtramos client-side para tipos relevantes
+  /// Tipos POI: room, restroom, bar, emergency_exit, first_aid, stairs, elevator, ramp
   Future<List<POIModel>> getAllPOIs() async {
-    // Tipos que consideramos POIs (excluindo corridor, normal, seat, row_aisle)
+    // Tipos que consideramos POIs (excluindo corridor, normal, door)
     const poiTypes = [
-      'gate',
+      'room',
       'restroom',
-      'food',
       'bar',
       'emergency_exit',
       'first_aid',
-      'information',
-      'merchandise',
       'stairs',
       'ramp',
-      'poi', // Tipo genérico
-      'entrance',
-      'shop',
+      'elevator',
     ];
 
     final response = await http
@@ -144,17 +130,50 @@ class MapService {
     return allPOIs.where((poi) => poi.level == level).toList();
   }
 
-  /// GET /gates - Todos os portões/entradas
-  Future<List<GateModel>> getAllGates() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/gates'))
-        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+  /// GET /rooms - Todas as salas
+  Future<List<dynamic>> getAllRooms({int? level}) async {
+    try {
+      final url = level != null
+          ? '$baseUrl/rooms?level=$level'
+          : '$baseUrl/rooms';
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
-    if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body);
-      return data.map((json) => GateModel.fromJson(json)).toList();
-    } else {
-      throw Exception('Failed to load gates: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) {
+          return data;
+        }
+        return [];
+      } else {
+        return [];
+      }
+    } catch (e) {
+      print('Erro ao carregar rooms: $e');
+      return [];
+    }
+  }
+
+  /// GET /rooms/{room_id} - Buscar uma sala específica por ID
+  Future<NodeModel?> getRoomById(String roomId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/rooms/$roomId'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return NodeModel.fromJson(data);
+      } else {
+        print(
+          '[MapService] Room $roomId não encontrada: ${response.statusCode}',
+        );
+        return null;
+      }
+    } catch (e) {
+      print('[MapService] Erro ao buscar room $roomId: $e');
+      return null;
     }
   }
 
@@ -187,54 +206,10 @@ class MapService {
     }
   }
 
-  /// GET /seats - Todos os lugares
-  Future<List<dynamic>> getAllSeats() async {
-    try {
-      // Nota: Endpoint é /seats diretamente, não /api/seats
-      final response = await http
-          .get(Uri.parse('$baseUrl/seats'))
-          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
-
-      if (response.statusCode == 200) {
-        // Formato esperado: {"seats": [...]} ou [...]
-        // Verificando resposta:
-        final data = json.decode(response.body);
-        if (data is Map && data.containsKey('seats')) {
-          return data['seats'];
-        } else if (data is List) {
-          return data;
-        }
-        return [];
-      } else {
-        return [];
-      }
-    } catch (e) {
-      print('Erro ao carregar seats: $e');
-      return [];
-    }
-  }
-
-  /// GET /seats/{seat_id} - Buscar um seat específico por ID
-  /// Usado para obter coordenadas do lugar do utilizador
+  /// Backward compatibility: delegates to getRoomById
+  /// Used by ticket-based navigation (seat → room)
   Future<NodeModel?> getSeatById(String seatId) async {
-    try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/seats/$seatId'))
-          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return NodeModel.fromJson(data);
-      } else {
-        print(
-          '[MapService] Seat $seatId não encontrado: ${response.statusCode}',
-        );
-        return null;
-      }
-    } catch (e) {
-      print('[MapService] Erro ao buscar seat $seatId: $e');
-      return null;
-    }
+    return getRoomById(seatId);
   }
 
   /// GET /maps/grid/tiles - Buscar todos os tiles do grid

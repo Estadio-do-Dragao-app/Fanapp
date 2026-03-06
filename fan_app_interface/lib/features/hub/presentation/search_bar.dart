@@ -280,6 +280,8 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         return Icons.exit_to_app;
       case 'first_aid':
         return Icons.local_hospital;
+      case 'elevator':
+        return Icons.elevator;
       case 'information':
         return Icons.info;
       case 'merchandise':
@@ -302,6 +304,8 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         return loc.exit;
       case 'first_aid':
         return loc.firstAid;
+      case 'elevator':
+        return 'Elevador';
       case 'information':
         return loc.information;
       case 'merchandise':

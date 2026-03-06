@@ -338,33 +338,20 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     }
   }
 
-  /// Converte coordenadas do backend para LatLng (mesmo método do StadiumMapPage)
-  LatLng _convertToLatLng(double x, double y) {
-    const backendCenterX = 499.0;
-    const backendCenterY = 400.0;
-    const stadiumCenterLat = 41.161758;
-    const stadiumCenterLng = -8.583933;
-    const unitsToLatDegrees = 0.000004;
-    const unitsToLngDegrees = 0.000005;
-
-    final centeredX = x - backendCenterX;
-    final centeredY = y - backendCenterY;
-
-    return LatLng(
-      stadiumCenterLat + (centeredY * unitsToLatDegrees),
-      stadiumCenterLng + (centeredX * unitsToLngDegrees),
-    );
-  }
+  /// Converte coordenadas do backend para LatLng
+  /// CrsSimple: LatLng(y, x) direto, sem projeção geográfica
+  /// Escala: dividimos por 10 para as latitudes ficarem entre -90 e 90 (limite do flutter_map)
+  LatLng _toMapPoint(double x, double y) => LatLng((465 - y) / 10, x / 10);
 
   /// Faz zoom para mostrar o início e fim da rota
   void _zoomToRoute(RouteModel route) {
     if (route.path.isEmpty) return;
 
     // Obter posição do utilizador (real) e do destino
-    final startLatLng = _convertToLatLng(_userX, _userY);
-    final endLatLng = _convertToLatLng(route.path.last.x, route.path.last.y);
+    final startLatLng = _toMapPoint(_userX, _userY);
+    final endLatLng = _toMapPoint(route.path.last.x, route.path.last.y);
 
-    // Calcular bounds para incluir início e fim
+    // Calcular bounds (em coordenadas Cartesianas)
     final minLat = min(startLatLng.latitude, endLatLng.latitude);
     final maxLat = max(startLatLng.latitude, endLatLng.latitude);
     final minLng = min(startLatLng.longitude, endLatLng.longitude);
@@ -379,16 +366,16 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       final centerLat = (minLat + maxLat) / 2;
       final centerLng = (minLng + maxLng) / 2;
 
-      // Calcular zoom level baseado na distância
+      // Calcular zoom level baseado na distância (coordenadas Cartesianas)
       final latDiff = maxLat - minLat + 2 * latPadding;
       final lngDiff = maxLng - minLng + 2 * lngPadding;
       final maxDiff = max(latDiff, lngDiff);
 
-      // Zoom: maior diferença = menor zoom
-      double zoom = 18.0;
-      if (maxDiff > 0.001) zoom = 17.0;
-      if (maxDiff > 0.002) zoom = 16.5;
-      if (maxDiff > 0.003) zoom = 16.0;
+      // Zoom: maior diferença = menor zoom (escala CrsSimple, zoom -4.7 = antigo -8)
+      double zoom = -4.2;
+      if (maxDiff > 20) zoom = -4.7;
+      if (maxDiff > 40) zoom = -5.2;
+      if (maxDiff > 60) zoom = -5.7;
 
       _mapController.move(LatLng(centerLat, centerLng), zoom);
     } catch (e) {
@@ -410,6 +397,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
         return Icons.meeting_room;
       case 'first_aid':
         return Icons.local_hospital;
+      case 'elevator':
+        return Icons.elevator;
       case 'information':
         return Icons.info;
       case 'merchandising':
@@ -446,6 +435,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                   highlightedPOI: selectedPOI,
                   showAllPOIs: false,
                   showOtherPOIs: false,
+                  initialFloor: selectedPOI?.level ?? _userLevel,
                 ),
                 if (_isCalculatingSelectedRoute)
                   Positioned(

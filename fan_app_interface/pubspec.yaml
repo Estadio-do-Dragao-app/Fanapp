@@ -52,6 +52,7 @@ dependencies:
   
   # MQTT for real-time data from broker
   mqtt_client: ^10.0.0
+  flutter_svg: ^2.2.3
 
 dev_dependencies:
   flutter_test:

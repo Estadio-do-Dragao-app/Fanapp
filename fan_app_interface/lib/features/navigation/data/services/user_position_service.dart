@@ -7,10 +7,10 @@ class UserPositionService {
   static const String _keyNodeId = 'user_node_id';
   static const String _keyLevel = 'user_position_level';
 
-  // Posição inicial padrão (Gate-21 - Porta 21, Entrada Norte)
-  static const double defaultX = 710.0;
-  static const double defaultY = 694.45;
-  static const String defaultNodeId = 'Gate-21';
+  // Posição inicial padrão (exit1_L0)
+  static const double defaultX = 54.85;
+  static const double defaultY = 425.32;
+  static const String defaultNodeId = 'exit1_L0';
   static const int defaultLevel = 0;
 
   /// Salva a posição atual do utilizador
@@ -26,7 +26,7 @@ class UserPositionService {
     await prefs.setString(_keyNodeId, nodeId);
     await prefs.setInt(_keyLevel, level);
     print(
-      '[UserPositionService] 💾 Posição salva: x=$x, y=$y, node=$nodeId, level=$level',
+      '[UserPositionService] Posição salva: x=$x, y=$y, node=$nodeId, level=$level',
     );
   }
 
@@ -39,7 +39,7 @@ class UserPositionService {
     final nodeId = prefs.getString(_keyNodeId) ?? defaultNodeId;
     final level = prefs.getInt(_keyLevel) ?? defaultLevel;
     print(
-      '[UserPositionService] 📍 Posição recuperada: x=$x, y=$y, node=$nodeId, level=$level',
+      '[UserPositionService] Posição recuperada: x=$x, y=$y, node=$nodeId, level=$level',
     );
     return (x: x, y: y, nodeId: nodeId, level: level);
   }

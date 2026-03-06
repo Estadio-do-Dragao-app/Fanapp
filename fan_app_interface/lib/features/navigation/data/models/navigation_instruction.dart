@@ -24,6 +24,11 @@ class NavigationInstruction {
         return 'assets/icons/straight.png';
       case 'arrive':
         return 'assets/icons/arrive.png';
+      case 'stairs_up':
+      case 'stairs_down':
+      case 'elevator_up':
+      case 'elevator_down':
+        return 'assets/icons/straight.png'; // Falback para straight, ou usar um ícone próprio se houver
       default:
         return 'assets/icons/straight.png';
     }
@@ -40,6 +45,14 @@ class NavigationInstruction {
         return translate('continue_straight');
       case 'arrive':
         return translate('arrive_at_destination');
+      case 'stairs_up':
+        return 'Subir pelas escadas';
+      case 'stairs_down':
+        return 'Descer pelas escadas';
+      case 'elevator_up':
+        return 'Subir de elevador';
+      case 'elevator_down':
+        return 'Descer de elevador';
       default:
         return '';
     }

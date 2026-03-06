@@ -17,7 +17,7 @@ class NavigationHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
-    
+
     if (instruction == null) {
       return const SizedBox.shrink();
     }
@@ -28,7 +28,7 @@ class NavigationHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: isEmergency 
+          colors: isEmergency
               ? [
                   const Color(0xFFBD453D),
                   const Color(0xFFBD453D).withOpacity(0.8),
@@ -59,13 +59,15 @@ class NavigationHeader extends StatelessWidget {
                 ),
                 child: Icon(
                   _getIconData(instruction!.type),
-                  color: isEmergency ? const Color(0xFFBD453D) : const Color(0xFF929AD4),
+                  color: isEmergency
+                      ? const Color(0xFFBD453D)
+                      : const Color(0xFF929AD4),
                   size: 40,
                 ),
               ),
-              
+
               const SizedBox(width: 20),
-              
+
               // Texto da instrução
               Expanded(
                 child: Column(
@@ -83,7 +85,9 @@ class NavigationHeader extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      instruction!.getDescription((key) => _translate(localizations, key)),
+                      instruction!.getDescription(
+                        (key) => _translate(localizations, key),
+                      ),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -110,6 +114,12 @@ class NavigationHeader extends StatelessWidget {
         return Icons.arrow_upward;
       case 'arrive':
         return Icons.location_on;
+      case 'stairs_up':
+      case 'stairs_down':
+        return Icons.stairs;
+      case 'elevator_up':
+      case 'elevator_down':
+        return Icons.elevator;
       default:
         return Icons.arrow_upward;
     }

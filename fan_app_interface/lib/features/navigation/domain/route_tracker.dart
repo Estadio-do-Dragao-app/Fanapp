@@ -155,7 +155,7 @@ class RouteTracker {
 
     if (distToLast < 5.0 && sameLevel) {
       print(
-        '[RouteTracker] 🎯 Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m, nível: $_userLevel',
+        '[RouteTracker] Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m, nível: $_userLevel',
       );
       return NavigationInstruction(
         type: 'arrive',
@@ -167,7 +167,7 @@ class RouteTracker {
     // Se está perto em X,Y mas no nível errado, mostrar instrução para escadas/rampa
     if (distToLast < 10.0 && !sameLevel) {
       print(
-        '[RouteTracker] 🪜 Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
+        '[RouteTracker] Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
       );
       // Continuar navegação normal para encontrar escadas
     }
@@ -216,7 +216,7 @@ class RouteTracker {
     }
 
     print(
-      '[RouteTracker] 📍 Instrução: "$turnType" em ${totalDistance.toStringAsFixed(1)}m '
+      '[RouteTracker] Instrução: "$turnType" em ${totalDistance.toStringAsFixed(1)}m '
       '(waypoints $_currentWaypointIndex→$nextTurnIndex de ${route.waypoints.length})',
     );
 
@@ -252,6 +252,19 @@ class RouteTracker {
     final current = route.waypoints[waypointIndex];
     final next = route.waypoints[waypointIndex + 1];
 
+    // Verificar mudança de piso
+    final currentLevel = _getWaypointLevel(current);
+    final nextLevel = _getWaypointLevel(next);
+    if (currentLevel != nextLevel) {
+      final node = _nodesMap[current.nodeId];
+      final isUp = nextLevel > currentLevel;
+      if (node?.type == 'elevator') {
+        return isUp ? 'elevator_up' : 'elevator_down';
+      } else {
+        return isUp ? 'stairs_up' : 'stairs_down';
+      }
+    }
+
     // Obter coordenadas corretas do Map Service
     final prevCoords = getCorrectWaypointCoords(prev);
     final currentCoords = getCorrectWaypointCoords(current);
@@ -278,7 +291,7 @@ class RouteTracker {
     final angleDegrees = acos(dotProduct.clamp(-1.0, 1.0)) * 180 / pi;
 
     print(
-      '[RouteTracker] 🧭 Curva em WP$waypointIndex: ângulo=${angleDegrees.toStringAsFixed(1)}° cross=${crossProduct.toStringAsFixed(0)}',
+      '[RouteTracker] Curva em WP$waypointIndex: ângulo=${angleDegrees.toStringAsFixed(1)}° cross=${crossProduct.toStringAsFixed(0)}',
     );
 
     // Se o ângulo é pequeno, é praticamente reto
@@ -332,7 +345,8 @@ class RouteTracker {
   double _calculateDistance(double x1, double y1, double x2, double y2) {
     final dx = x2 - x1;
     final dy = y2 - y1;
-    return sqrt(dx * dx + dy * dy);
+    const SVG_SCALE = 12.567;
+    return sqrt(dx * dx + dy * dy) / SVG_SCALE;
   }
 
   /// Retorna o progresso da rota (0.0 a 1.0)

@@ -72,7 +72,7 @@ class NavigationController extends ChangeNotifier {
 
     // Callback quando rota é recalculada
     _routeManager.onRouteUpdated = (newRoute) {
-      print('[NavigationController] 🔄 Rota atualizada!');
+      print('[NavigationController] Rota atualizada!');
       route = newRoute;
       // CRÍTICO: Preservar posição atual antes de recriar tracker
       final currentX = _tracker.currentX;
@@ -124,7 +124,7 @@ class NavigationController extends ChangeNotifier {
         startLevel = savedPosition.level;
       }
       print(
-        '[NavigationController] 📍 Usando posição fornecida: ($startX, $startY, level=$startLevel)',
+        '[NavigationController] Usando posição fornecida: ($startX, $startY, level=$startLevel)',
       );
     } else {
       // Carregar posição do UserPositionService
@@ -134,7 +134,7 @@ class NavigationController extends ChangeNotifier {
         startY = savedPosition.y;
         startLevel = savedPosition.level;
         print(
-          '[NavigationController] 📍 Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
+          '[NavigationController] Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
         );
       } else {
         // Fallback: usar N1
@@ -146,26 +146,26 @@ class NavigationController extends ChangeNotifier {
         startY = userNode.y;
         startLevel = userNode.level;
         print(
-          '[NavigationController] 📍 Fallback para nó ${userNode.id}: ($startX, $startY, level=$startLevel)',
+          '[NavigationController] Fallback para nó ${userNode.id}: ($startX, $startY, level=$startLevel)',
         );
       }
     }
 
     // Usar nível do utilizador (não do primeiro waypoint!)
     _currentLevel = startLevel;
-    print('[NavigationController] 🏢 Nível inicial: $_currentLevel');
+    print('[NavigationController] Nível inicial: $_currentLevel');
 
     _tracker.updateUserPosition(startX, startY, level: _currentLevel);
     _updateInstruction();
     notifyListeners();
 
     print(
-      '[NavigationController] 🚦 Start check: RouteLen=${route.waypoints.length}, HasArrived=${_tracker.hasArrived}',
+      '[NavigationController] Start check: RouteLen=${route.waypoints.length}, HasArrived=${_tracker.hasArrived}',
     );
 
     // Check for immediate arrival (e.g. route to current location)
     if (_tracker.hasArrived) {
-      print('[NavigationController] 🏁 Immediate arrival detected at start.');
+      print('[NavigationController] Immediate arrival detected at start.');
       _onArrival();
       return;
     }
@@ -174,7 +174,7 @@ class NavigationController extends ChangeNotifier {
     Future.delayed(const Duration(seconds: 2), () {
       if (!_isDisposed && _isNavigating) {
         print(
-          '[NavigationController] ⏰ Map loaded, starting auto-navigation...',
+          '[NavigationController] Map loaded, starting auto-navigation...',
         );
         _startAutoNavigation();
       }
@@ -236,7 +236,7 @@ class NavigationController extends ChangeNotifier {
   void pauseAutoNavigation() {
     _autoNavTimer?.cancel();
     _autoNavTimer = null;
-    print('[NavigationController] ⏸️ Auto-navigation paused');
+    print('[NavigationController] Auto-navigation paused');
   }
 
   /// Move o utilizador gradualmente em direção ao próximo waypoint
@@ -305,7 +305,7 @@ class NavigationController extends ChangeNotifier {
     _autoNavTimer?.cancel();
     if (!_tracker.hasArrived) {
       print(
-        '[NavigationController] 🏁 Route traversal finished. Forcing arrival.',
+        '[NavigationController] Route traversal finished. Forcing arrival.',
       );
       // Force update to last waypoint to ensure arrival state
       final lastWp = route.waypoints.last;
@@ -419,7 +419,7 @@ class NavigationController extends ChangeNotifier {
       level: _currentLevel,
     );
     print(
-      '[NavigationController] 💾 Posição final guardada: x=$finalX, y=$finalY, node=${finalNode.id}',
+      '[NavigationController] Posição final guardada: x=$finalX, y=$finalY, node=${finalNode.id}',
     );
 
     notifyListeners();
@@ -442,7 +442,7 @@ class NavigationController extends ChangeNotifier {
       level: _currentLevel,
     );
     print(
-      '[NavigationController] 💾 Posição guardada ao terminar: x=$finalX, y=$finalY, node=${finalNode.id}',
+      '[NavigationController] Posição guardada ao terminar: x=$finalX, y=$finalY, node=${finalNode.id}',
     );
 
     notifyListeners();
@@ -469,7 +469,7 @@ class NavigationController extends ChangeNotifier {
     if (nodeIds.isEmpty) return;
 
     print(
-      '[NavigationController] 🛣️ Applying new route with ${nodeIds.length} nodes',
+      '[NavigationController] Applying new route with ${nodeIds.length} nodes',
     );
 
     // Mapear IDs para NodeModels
@@ -549,13 +549,13 @@ class NavigationController extends ChangeNotifier {
     }
 
     print(
-      '[NavigationController] 📍 Starting from waypoint $_targetWaypointIndex (nearest to current position)',
+      '[NavigationController] Starting from waypoint $_targetWaypointIndex (nearest to current position)',
     );
 
     _startAutoNavigation();
 
     print(
-      '[NavigationController] ✅ New route applied, auto-navigation restarted from waypoint $_targetWaypointIndex',
+      '[NavigationController] New route applied, auto-navigation restarted from waypoint $_targetWaypointIndex',
     );
 
     notifyListeners();
@@ -565,7 +565,7 @@ class NavigationController extends ChangeNotifier {
   void _onMqttEvent(Map<String, dynamic> event) {
     if (_isDisposed) {
       // Controller disposed, ignore any incoming MQTT events
-      print('[NavigationController] ⚠️ Ignoring MQTT event after dispose');
+      print('[NavigationController] Ignoring MQTT event after dispose');
       return;
     }
 
@@ -573,15 +573,15 @@ class NavigationController extends ChangeNotifier {
 
     // Handle evacuation routes (emergency)
     if (eventType == 'evacuation') {
-      print('[NavigationController] 🚨 EVACUATION route received!');
+      print('[NavigationController] EVACUATION route received!');
       try {
         final routeIds = List<String>.from(event['route'] ?? []);
         if (routeIds.isNotEmpty) {
           print(
-            '[NavigationController] 🚨 Applying evacuation route with  24{routeIds.length} nodes',
+            '[NavigationController] Applying evacuation route with  24{routeIds.length} nodes',
           );
           print(
-            '[NavigationController] 🚨 Keeping user at current position: ( 24{_tracker.currentX},  24{_tracker.currentY})',
+            '[NavigationController] Keeping user at current position: ( 24{_tracker.currentX},  24{_tracker.currentY})',
           );
 
           // STOP existing auto-navigation completely
@@ -597,7 +597,7 @@ class NavigationController extends ChangeNotifier {
           // The route is now displayed and user can follow it manually
         }
       } catch (e) {
-        print('[NavigationController] ❌ Error applying evacuation route: $e');
+        print('[NavigationController] Error applying evacuation route: $e');
       }
       return;
     }
@@ -605,7 +605,7 @@ class NavigationController extends ChangeNotifier {
     // Handle reroute suggestions
     if (eventType == 'reroute_suggestion') {
       print(
-        '[NavigationController] 📩 MQTT Reroute Suggestion received: $event',
+        '[NavigationController] MQTT Reroute Suggestion received: $event',
       );
       try {
         // Parse payload (flat structure from backend)
@@ -664,21 +664,21 @@ class NavigationController extends ChangeNotifier {
           _rerouteStream.add(rerouteEvent);
         } else {
           print(
-            '[NavigationController] ⚠️ Tried to add reroute event after dispose',
+            '[NavigationController] Tried to add reroute event after dispose',
           );
         }
       } catch (e) {
-        print('[NavigationController] ❌ Error parsing reroute event: $e');
+        print('[NavigationController] Error parsing reroute event: $e');
       }
     }
   }
 
   @override
   void dispose() {
-    print('[NavigationController] 🧹 Disposing controller...');
+    print('[NavigationController] Disposing controller...');
     _isDisposed = true;
     if (_mqttSubscription != null) {
-      print('[NavigationController] 🧹 Cancelling MQTT subscription');
+      print('[NavigationController] Cancelling MQTT subscription');
       _mqttSubscription?.cancel();
       _mqttSubscription = null;
     }
@@ -688,7 +688,7 @@ class NavigationController extends ChangeNotifier {
     _positionStream.close();
     _rerouteStream.close();
     _routeManager.dispose();
-    print('[NavigationController] 🧹 Dispose complete');
+    print('[NavigationController] Dispose complete');
     super.dispose();
   }
 

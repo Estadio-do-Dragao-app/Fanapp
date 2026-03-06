@@ -13,7 +13,7 @@ import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
 // import '../data/services/saved_places_service.dart'; // Removed favorites
 import '../../poi/presentation/poi_details_sheet.dart';
-import 'layers/floor_plan_layer.dart';
+import 'layers/svg_floor_plan_layer.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
 import '../../navigation/data/services/user_position_service.dart';
@@ -82,7 +82,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
   double _userPositionX = 0.0;
   double _userPositionY = 0.0;
   int _userLevel = 0; // Guardar nível real do utilizador
-  String _userNodeId = 'N1';
+  String _userNodeId = 'exit1_L0';
   bool _userPositionLoaded = false;
   double _userHeading = 0.0; // Heading em graus (0 = Norte)
 
@@ -115,9 +115,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
     // Usar o piso inicial fornecido
     _currentFloor = widget.initialFloor;
     // Posição inicial: será carregada do UserPositionService
-    _userNodeId = 'N1';
-    _userPositionX = 0.0;
-    _userPositionY = 0.0;
+    _userNodeId = 'exit1_L0';
+    _userPositionX = 54.85;
+    _userPositionY = 425.32;
     _userLevel = 0;
     _userPositionLoaded = false;
 
@@ -140,21 +140,31 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
   /// Carrega a posição guardada do utilizador
   Future<void> loadUserPosition({bool updateFloor = true}) async {
+    // FORCE OVERRIDE PARA TESTING (exit1_L0)
+    await UserPositionService.savePosition(
+      x: 54.85,
+      y: 425.32,
+      nodeId: 'exit1_L0',
+      level: 0,
+    );
+
     final position = await UserPositionService.getPosition();
     if (mounted) {
+      // Clamp level to valid range [0, 1]
+      final validLevel = position.level.clamp(0, 1);
       print(
-        "[StadiumMapPage] 📥 Loading user position from service: ${position.x}, ${position.y} (Level ${position.level})",
+        "[StadiumMapPage] Loading user position from service: ${position.x}, ${position.y} (Level ${position.level} → $validLevel)",
       );
       setState(() {
         _userPositionX = position.x;
         _userPositionY = position.y;
         _userNodeId = position.nodeId;
-        _userLevel = position.level; // Guardar nível real
+        _userLevel = validLevel; // Guardar nível real
 
         // Só atualizar _currentFloor a partir da posição guardada se solicitado E não estivermos em navegação
         if (updateFloor && !widget.isNavigating) {
-          if (_currentFloor != position.level) {
-            _currentFloor = position.level;
+          if (_currentFloor != validLevel) {
+            _currentFloor = validLevel;
             widget.onFloorChanged?.call(_currentFloor);
             _loadMapData();
           }
@@ -230,27 +240,27 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
   /// Public method to reload map data (called from parent)
   void reloadMapData() {
-    print("🔁 Reloading map data requested...");
+    print("Reloading map data requested...");
     _loadMapData();
   }
 
   Iterable<Marker> _buildTicketMarkers() sync* {
     print(
-      "🎫 Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}",
+      "Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}",
     );
     if (_userTicket == null || _userTicket!.seatNodeId == null) return;
 
     try {
-      print("🔍 Searching for seat node: ${_userTicket!.seatNodeId}");
+      print("Searching for seat node: ${_userTicket!.seatNodeId}");
       final seatNode = _nodes.firstWhere(
         (n) => n.id == _userTicket!.seatNodeId,
       );
       print(
-        "✅ Seat node found: ${seatNode.id} at level ${seatNode.level} (Current floor: $_currentFloor)",
+        "Seat node found: ${seatNode.id} at level ${seatNode.level} (Current floor: $_currentFloor)",
       );
 
       if (seatNode.level == _currentFloor) {
-        final seatPos = _convertToLatLng(seatNode.x, seatNode.y);
+        final seatPos = _toMapPoint(seatNode.x, seatNode.y);
         yield Marker(
           point: seatPos,
           width: 50,
@@ -293,19 +303,14 @@ class StadiumMapPageState extends State<StadiumMapPage>
         );
       }
     } catch (e) {
-      print("❌ Error building ticket marker: $e");
+      print("Error building ticket marker: $e");
       // Ignore
     }
   }
 
-  // Coordenadas do Estádio do Dragão (Porto, Portugal)
-  static const LatLng stadiumCenter = LatLng(41.161758, -8.583933);
-
-  // Bounding box do estádio (aproximado - ajustar com dados reais do backend)
-  static final LatLngBounds stadiumBounds = LatLngBounds(
-    const LatLng(41.1600, -8.5850), // Southwest
-    const LatLng(41.1635, -8.5820), // Northeast
-  );
+  // Origem das coordenadas SVG (viewBox 459x465)
+  // CrsSimple: lat aumenta para cima, SVG y aumenta para baixo → lat = (465 - y)/10
+  static const LatLng stadiumCenter = LatLng(23.2, 22.9);
 
   Future<void> _loadMapData() async {
     final floorToLoad = _currentFloor;
@@ -325,7 +330,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
       // final savedPlaces = await SavedPlacesService.getSavedPlaces(); // Removed favorites
       final ticket = await _ticketStorage.getTicket(); // Carregar bilhete
       print(
-        "📥 Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
+        "Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
       );
 
       if (!mounted) return;
@@ -339,16 +344,16 @@ class StadiumMapPageState extends State<StadiumMapPage>
           print("💺 Fetching specific seat node: ${ticket.seatNodeId}");
           final seatNode = await _mapService.getSeatById(ticket.seatNodeId!);
           if (seatNode != null) {
-            print("✅ Seat node fetched: ${seatNode.id}");
+            print("Seat node fetched: ${seatNode.id}");
             // Adicionar à lista de nós se ainda não existir
             if (!nodes.any((n) => n.id == seatNode.id)) {
               nodes.add(seatNode);
             }
           } else {
-            print("⚠️ Seat node not found in backend: ${ticket.seatNodeId}");
+            print("Seat node not found in backend: ${ticket.seatNodeId}");
           }
         } catch (e) {
-          print("❌ Error fetching seat node: $e");
+          print("Error fetching seat node: $e");
         }
       }
 
@@ -386,49 +391,30 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // Se tem posição guardada válida (não é 0,0), usar essa
         if (_userPositionLoaded &&
             (_userPositionX != 0.0 || _userPositionY != 0.0)) {
-          final userLatLng = _convertToLatLng(_userPositionX, _userPositionY);
-          _mapController.move(userLatLng, 20.0);
+          final userLatLng = _toMapPoint(_userPositionX, _userPositionY);
+          _mapController.move(userLatLng, -4.2);
         } else if (_nodes.isNotEmpty) {
-          // Fallback: usar nó N1 ou primeiro nó
+          // Fallback: usar nó exit1_L0 ou primeiro nó
           final userNode = _nodes.firstWhere(
             (n) => n.id == _userNodeId,
             orElse: () => _nodes.first,
           );
-          final userLatLng = _convertToLatLng(userNode.x, userNode.y);
-          _mapController.move(userLatLng, 20.0);
+          final userLatLng = _toMapPoint(userNode.x, userNode.y);
+          _mapController.move(userLatLng, -4.2);
         }
       } catch (e) {}
     });
   }
 
   /// Converte coordenadas do backend (x, y) para LatLng do mapa
-  /// O backend usa coordenadas em unidades arbitrárias:
-  /// X: 82 a 916 (centro ~499)
-  /// Y: 60 a 740 (centro ~400)
-  LatLng _convertToLatLng(double x, double y) {
-    // Centro das coordenadas do backend
-    const backendCenterX = 499.0; // (82 + 916) / 2
-    const backendCenterY = 400.0; // (60 + 740) / 2
-
-    // Aproximação: 1 unidade do backend ≈ graus
-    // Ajustado para que o estádio (~800 unidades largura) caiba nos bounds
-    const unitsToLatDegrees = 0.000004; // Ajustado para melhor escala
-    const unitsToLngDegrees = 0.000005; // Longitude ligeiramente diferente
-
-    // Centrar as coordenadas antes de converter
-    final centeredX = x - backendCenterX;
-    final centeredY = y - backendCenterY;
-
-    return LatLng(
-      stadiumCenter.latitude + (centeredY * unitsToLatDegrees),
-      stadiumCenter.longitude + (centeredX * unitsToLngDegrees),
-    );
-  }
+  /// Com CrsSimple: LatLng(y, x) — mapeamento direto, sem projeção geográfica
+  /// Escala: dividimos por 10 para as latitudes ficarem entre -90 e 90 (limite do flutter_map)
+  LatLng _toMapPoint(double x, double y) => LatLng((465 - y) / 10, x / 10);
 
   /// Método público para fazer zoom num POI (usado pela barra de pesquisa)
   void zoomToPOI(POIModel poi) {
-    final poiLocation = _convertToLatLng(poi.x, poi.y);
-    _mapController.move(poiLocation, 19.5);
+    final poiLocation = _toMapPoint(poi.x, poi.y);
+    _mapController.move(poiLocation, -4.2);
   }
 
   /// Mostra detalhes do POI num bottom sheet com zoom
@@ -437,8 +423,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
     final previousZoom = _mapController.camera.zoom;
 
     // Fazer zoom no POI
-    final poiLocation = _convertToLatLng(poi.x, poi.y);
-    _mapController.move(poiLocation, 19.5);
+    final poiLocation = _toMapPoint(poi.x, poi.y);
+    _mapController.move(poiLocation, -4.2);
 
     // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
     // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
@@ -458,11 +444,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         startX = _userPositionX;
         startY = _userPositionY;
         // Se não há posição guardada, usar _userLevel se disponível, se não, fallback inteligente
-        // Se startX é 0 (posição default), assumimos N1 (nível 1).
-        // Se startX != 0 mas _userLevel é 0, usamos _currentFloor como "melhor palpite" (mas isso causou o bug, então preferimos 1 se startX for 0)
-        startLevel = _userLevel != 0
-            ? _userLevel
-            : (startX != 0.0 ? _currentFloor : 1);
+        startLevel = _userLevel;
       }
 
       // Usar rota por POI ID para obter wait_time do cache
@@ -647,7 +629,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
     // Centrar mapa no utilizador
     try {
-      final userLatLng = _convertToLatLng(newX, newY);
+      final userLatLng = _toMapPoint(newX, newY);
       _mapController.move(userLatLng, _mapController.camera.zoom);
     } catch (e) {}
   }
@@ -697,10 +679,12 @@ class StadiumMapPageState extends State<StadiumMapPage>
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: stadiumCenter,
-        initialZoom: 20.0, // Zoom mais aproximado
-        minZoom: 16.0,
-        maxZoom: 20.0,
+        crs: const CrsSimple(),
+        initialCenter: const LatLng(0, 0),
+        initialZoom: -4.7,
+        minZoom: -8.7, // Reduced for testing
+        maxZoom: 5.3, // Increased for testing
+        // Removido cameraConstraint porque LatLngBounds não suporta lat > 90, o que crasha com o nosso CrsSimple
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
         ),
@@ -709,13 +693,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // Remove a atribuição padrão do flutter_map
         RichAttributionWidget(attributions: []),
 
-        // Camada do Mapa Gerado (Floor Plan) - Skip in simplified mode for performance
+        // Camada do Mapa SVG (Floor Plan)
         if (!widget.simplifiedMode)
-          FloorPlanLayer(
-            edges: _edges,
-            nodes: _nodes,
-            currentLevel: _currentFloor,
-            converter: _convertToLatLng,
+          SvgFloorPlanLayer(
+            svgAsset: _currentFloor == 0
+                ? 'assets/images/PLANTA1.svg'
+                : 'assets/images/PLANTA2.svg',
+            bottomRight: _currentFloor == 0
+                ? const LatLng(0, 45.9)
+                : const LatLng((465 - 318.02) / 10, 313.97 / 10),
           ),
 
         // REMOVIDO: Camada de seats para melhor performance
@@ -772,19 +758,19 @@ class StadiumMapPageState extends State<StadiumMapPage>
       final color = _getCongestionColor(cellData.congestionLevel);
 
       // Criar retângulo para a célula (cantos do quadrado)
-      final topLeft = _convertToLatLng(
+      final topLeft = _toMapPoint(
         x.toDouble() - cellSize / 2,
         y.toDouble() - cellSize / 2,
       );
-      final topRight = _convertToLatLng(
+      final topRight = _toMapPoint(
         x.toDouble() + cellSize / 2,
         y.toDouble() - cellSize / 2,
       );
-      final bottomRight = _convertToLatLng(
+      final bottomRight = _toMapPoint(
         x.toDouble() + cellSize / 2,
         y.toDouble() + cellSize / 2,
       );
-      final bottomLeft = _convertToLatLng(
+      final bottomLeft = _toMapPoint(
         x.toDouble() - cellSize / 2,
         y.toDouble() + cellSize / 2,
       );
@@ -822,7 +808,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
     // As coordenadas X,Y já são absolutas (ex: 125, 425)
     // Não precisa multiplicar, usar diretamente
-    return _convertToLatLng(x.toDouble(), y.toDouble());
+    return _toMapPoint(x.toDouble(), y.toDouble());
   }
 
   /// Retorna cor baseada no nível de congestão (0.0-1.0)
@@ -883,15 +869,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
 
     for (var wp in remainingWaypoints) {
-      // Verificar se este ponto pertence ao piso atual OU se estamos em modo preview (mostrar tudo)
-      if (!widget.isNavigating || wp.level == _currentFloor) {
+      // Desenhar o ponto Apenas se pertencer ao piso que está a ser visualizado neste momento.
+      if (wp.level == _currentFloor) {
         // Tentar encontrar o nó no Map Service para coords precisas
         final node = nodesMap[wp.nodeId];
         LatLng point;
         if (node != null) {
-          point = _convertToLatLng(node.x, node.y);
+          point = _toMapPoint(node.x, node.y);
         } else {
-          point = _convertToLatLng(wp.x, wp.y);
+          point = _toMapPoint(wp.x, wp.y);
         }
         currentSegment.add(point);
       } else {
@@ -1043,7 +1029,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
       if (_userPositionLoaded &&
           (_userPositionX != 0.0 || _userPositionY != 0.0)) {
         // Usar posição guardada
-        userLatLng = _convertToLatLng(_userPositionX, _userPositionY);
+        userLatLng = _toMapPoint(_userPositionX, _userPositionY);
       } else {
         // Fallback: usar nó
         final userNode = _nodes.firstWhere(
@@ -1051,7 +1037,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
           orElse: () => _nodes.first,
         );
         // Verificar nível do nó também? Assume-se que _userLevel está correto.
-        userLatLng = _convertToLatLng(userNode.x, userNode.y);
+        userLatLng = _toMapPoint(userNode.x, userNode.y);
       }
 
       userMarkers.add(
@@ -1086,7 +1072,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // REMOVIDO: Lugares guardados com ícone de estrela
         // POIs normais
         ...poisToShow.map<Marker>((POIModel poi) {
-          final position = _convertToLatLng(poi.x, poi.y);
+          final position = _toMapPoint(poi.x, poi.y);
           final isHighlighted = widget.highlightedPOI?.id == poi.id;
           // REMOVED: Check for saved places
           // if (_savedPlaces.any((p) => p.id == poi.id)) { ... }
@@ -1180,6 +1166,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         return Colors.pink.shade700;
       case 'stairs':
       case 'ramp':
+      case 'elevator':
         return Colors.amber.shade700;
       case 'entrance':
         return Colors.teal.shade700;
@@ -1211,6 +1198,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
         return Icons.store;
       case 'stairs':
         return Icons.stairs;
+      case 'elevator':
+        return Icons.elevator;
       case 'ramp':
         return Icons.accessible;
       case 'entrance':

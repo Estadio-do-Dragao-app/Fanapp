@@ -162,26 +162,13 @@ class _NavigationPageState extends State<NavigationPage>
 
   void _followUserPosition() {
     final tracker = _controller.tracker;
-    // Usar mesma lógica de projeção corrigida do StadiumMapPage
-    // Centro das coordenadas do backend
-    const backendCenterX = 499.0;
-    const backendCenterY = 400.0;
-    const unitsToLatDegrees = 0.000004;
-    const unitsToLngDegrees = 0.000005;
-
-    final center = StadiumMapPageState.stadiumCenter;
-
-    // Centrar as coordenadas antes de converter
-    final centeredX = tracker.currentX - backendCenterX;
-    final centeredY = tracker.currentY - backendCenterY;
-
-    final userLat = center.latitude + (centeredY * unitsToLatDegrees);
-    final userLng = center.longitude + (centeredX * unitsToLngDegrees);
+    // CrsSimple: LatLng(y, x) direto, sem projeção geográfica
+    final userPos = LatLng(tracker.currentY, tracker.currentX);
 
     // Mover e rodar câmara com animação
     try {
       final targetRot = _controller.heading - 180.0;
-      _animateMapTo(LatLng(userLat, userLng), targetRot);
+      _animateMapTo(userPos, targetRot);
     } catch (e) {
       // Mapa ainda não renderizado, ignorar
     }
@@ -238,21 +225,8 @@ class _NavigationPageState extends State<NavigationPage>
   Widget build(BuildContext context) {
     final tracker = _controller.tracker;
 
-    // Calcular posição para o mapa (usando mesma projeção corrigida)
-    const backendCenterX = 499.0;
-    const backendCenterY = 400.0;
-    const unitsToLatDegrees = 0.000004;
-    const unitsToLngDegrees = 0.000005;
-    final center = StadiumMapPageState.stadiumCenter;
-
-    // Centrar as coordenadas antes de converter
-    final centeredX = tracker.currentX - backendCenterX;
-    final centeredY = tracker.currentY - backendCenterY;
-
-    final userPosition = LatLng(
-      center.latitude + (centeredY * unitsToLatDegrees),
-      center.longitude + (centeredX * unitsToLngDegrees),
-    );
+    // CrsSimple: LatLng(y, x) direto, sem projeção geográfica
+    final userPosition = LatLng(tracker.currentY, tracker.currentX);
 
     return Scaffold(
       body: Stack(
