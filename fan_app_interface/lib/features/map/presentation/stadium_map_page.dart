@@ -717,112 +717,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
     return minDist < MapConfig.walkableRadius;
   }
 
-  /// Handler para long-press no mapa — cria POI custom
-  void _onMapLongPress(TapPosition tapPosition, LatLng point) {
-    _showCreatePOIDialog(point);
-  }
 
-  /// Mostra diálogo para criar POI custom
-  void _showCreatePOIDialog(LatLng position) {
-    final nameController = TextEditingController();
-    String selectedType = 'poi';
-
-    final types = {
-      'poi': ('Ponto de Interesse', Icons.place),
-      'food': ('Comida', Icons.restaurant),
-      'bar': ('Bar', Icons.local_bar),
-      'information': ('Informação', Icons.info),
-      'entrance': ('Entrada', Icons.door_front_door),
-      'shop': ('Loja', Icons.shopping_bag),
-      'first_aid': ('Primeiro Socorro', Icons.medical_services),
-      'wc': ('WC', Icons.wc),
-    };
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Criar Ponto de Interesse'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nome',
-                  hintText: 'Ex: Stand de Comida, Palco Principal...',
-                  border: OutlineInputBorder(),
-                ),
-                autofocus: true,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: selectedType,
-                decoration: const InputDecoration(
-                  labelText: 'Tipo',
-                  border: OutlineInputBorder(),
-                ),
-                items: types.entries.map((e) => DropdownMenuItem(
-                  value: e.key,
-                  child: Row(
-                    children: [
-                      Icon(e.value.$2, size: 20),
-                      const SizedBox(width: 8),
-                      Text(e.value.$1),
-                    ],
-                  ),
-                )).toList(),
-                onChanged: (v) => setDialogState(() => selectedType = v!),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '📍 ${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton.icon(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                Navigator.pop(ctx);
-                try {
-                  await MapService().createPOI(
-                    name: name,
-                    type: selectedType,
-                    x: position.longitude,
-                    y: position.latitude,
-                    level: _currentFloor,
-                  );
-                  // Recarregar POIs
-                  final pois = await MapService().getAllPOIs();
-                  setState(() => _pois = pois);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('POI "$name" criado!')),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Erro ao criar POI: $e')),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.add_location),
-              label: const Text('Criar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildMap() {
     return FlutterMap(
@@ -838,7 +733,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
           flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
         ),
         onPositionChanged: widget.onPositionChanged,
-        onLongPress: widget.isNavigating ? null : _onMapLongPress,
       ),
       children: [
         // Base layer: OSM tiles (outdoor) ou fundo vazio (indoor)

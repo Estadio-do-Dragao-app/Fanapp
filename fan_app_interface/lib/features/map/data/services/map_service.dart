@@ -173,45 +173,7 @@ class MapService {
     }
   }
 
-  /// POST /pois - Criar POI custom (evento, marcador temporário)
-  Future<POIModel> createPOI({
-    required String name,
-    required String type,
-    required double x,
-    required double y,
-    int level = 0,
-    String? description,
-  }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/pois'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'name': name,
-        'type': type,
-        'x': x,
-        'y': y,
-        'level': level,
-        'description': description ?? name,
-      }),
-    ).timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
-    if (response.statusCode == 201) {
-      return POIModel.fromJson(json.decode(response.body));
-    } else {
-      throw Exception('Failed to create POI: ${response.statusCode}');
-    }
-  }
-
-  /// DELETE /pois/{id} - Remover POI custom
-  Future<void> deletePOI(String poiId) async {
-    final response = await http.delete(
-      Uri.parse('$baseUrl/pois/$poiId'),
-    ).timeout(const Duration(seconds: ApiConfig.httpTimeout));
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to delete POI: ${response.statusCode}');
-    }
-  }
 
   /// GET /nodes - Filtrar POIs por piso
   Future<List<POIModel>> getPOIsByFloor(int level) async {
