@@ -19,8 +19,6 @@ class EmergencyAlertPage extends StatefulWidget {
 
 class _EmergencyAlertPageState extends State<EmergencyAlertPage>
     with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
 
@@ -30,12 +28,6 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
   @override
   void initState() {
     super.initState();
-
-    // Animação de piscar (blink) para a borda vermelha
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
 
     // Auto-redirect timer
     _startedirectTimer();
@@ -60,7 +52,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _redirectTimer?.cancel();
     super.dispose();
   }
 
@@ -177,38 +169,10 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
     return Scaffold(
       body: Builder(
         builder: (context) {
-          final radius = MediaQuery.of(context).viewPadding.top > 0
-              ? 70.0
-              : 0.0; // curva do telemóvel
-
           return Stack(
             children: [
               // Fundo (mapa)
               Positioned.fill(child: StadiumMapPage()),
-
-              // Borda vermelha ANIMADA (AGORA ocupa o ecrã INTEIRO)
-              Positioned(
-                top: -20,
-                bottom: -20,
-                left: -20,
-                right: -20,
-                child: AnimatedBuilder(
-                  animation: _animationController,
-                  builder: (context, child) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(radius),
-                        border: Border.all(
-                          color: const Color(
-                            0xFFBD453D,
-                          ).withOpacity((_animationController.value)),
-                          width: 35,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
               // Conteúdo respeita SafeArea — a BORDA NÃO
               SafeArea(
                 child: Stack(

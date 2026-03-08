@@ -28,7 +28,7 @@ class Navbar extends StatefulWidget {
 }
 
 class _NavbarState extends State<Navbar> {
-  final List<String> categoryIds = ['seat', 'wc', 'food', 'exit'];
+  final List<String> categoryIds = ['food', 'first_aid', 'parking', 'poi'];
   final TicketStorageService _ticketStorage = TicketStorageService();
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
@@ -287,18 +287,21 @@ class _NavbarState extends State<Navbar> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
+    final parkingLabel = Localizations.localeOf(context).languageCode == 'pt'
+        ? 'Estacionamento'
+        : 'Parking';
     final categories = [
-      localizations.seat,
-      localizations.wc,
       localizations.food,
-      localizations.exit,
+      localizations.firstAid,
+      parkingLabel,
+      localizations.information,
     ];
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Container(
+    return Stack(
+      children: [
+        // IgnorePointer so the map behind the gradient can receive touches
+        IgnorePointer(
+          child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -312,71 +315,68 @@ class _NavbarState extends State<Navbar> {
               ),
             ),
           ),
+        ),
 
-          // Top overlay: category buttons inside SafeArea
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              child: Stack(
-                children: [
-                  Align(
-                    alignment: Alignment.topLeft,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          localizations.whereToQuestion,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontFamily: 'Gabarito',
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.left,
+        // Top overlay: category buttons inside SafeArea
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        localizations.whereToQuestion,
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontFamily: 'Gabarito',
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(height: 16),
-                        CategoryButtons(
-                          labels: categories,
-                          selectedIndex: selected,
-                          onSelect: (i) =>
-                              _handleCategorySelect(i, localizations),
-                          iconBuilder: (label) {
-                            // Match against translated labels
-                            if (label == localizations.seat) {
-                              return const Icon(
-                                Icons.event_seat,
-                                color: Colors.black,
-                              );
-                            } else if (label == localizations.wc) {
-                              return const Icon(Icons.wc, color: Colors.black);
-                            } else if (label == localizations.food) {
-                              return const Icon(
-                                Icons.fastfood,
-                                color: Colors.black,
-                              );
-                            } else if (label == localizations.exit) {
-                              return const Icon(
-                                Icons.meeting_room,
-                                color: Colors.black,
-                              );
-                            } else {
-                              return const Icon(
-                                Icons.help,
-                                color: Colors.black,
-                              );
-                            }
-                          },
-                        ),
-                      ],
-                    ),
+                        textAlign: TextAlign.left,
+                      ),
+                      const SizedBox(height: 16),
+                      CategoryButtons(
+                        labels: categories,
+                        selectedIndex: selected,
+                        onSelect: (i) =>
+                            _handleCategorySelect(i, localizations),
+                        iconBuilder: (label) {
+                          // Match against translated labels
+                          if (label == localizations.food) {
+                            return const Icon(
+                              Icons.fastfood,
+                              color: Colors.black,
+                            );
+                          } else if (label == localizations.firstAid) {
+                            return const Icon(
+                              Icons.local_hospital,
+                              color: Colors.black,
+                            );
+                          } else if (label == parkingLabel) {
+                            return const Icon(
+                              Icons.local_parking,
+                              color: Colors.black,
+                            );
+                          } else if (label == localizations.information) {
+                            return const Icon(Icons.place, color: Colors.black);
+                          } else {
+                            return const Icon(Icons.help, color: Colors.black);
+                          }
+                        },
+                      ),
+                    ],
                   ),
-                  // Search button in top right
-                ],
-              ),
+                ),
+                // Search button in top right
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

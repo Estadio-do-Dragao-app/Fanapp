@@ -240,6 +240,14 @@ class NavigationController extends ChangeNotifier {
     print('[NavigationController] ⏸️ Auto-navigation paused');
   }
 
+  /// Resume auto-navigation after a pause (e.g. user dismissed destination change)
+  void resumeAutoNavigation() {
+    if (_isNavigating && _autoNavTimer == null) {
+      print('[NavigationController] ▶️ Auto-navigation resumed');
+      _startAutoNavigation();
+    }
+  }
+
   /// Move o utilizador gradualmente em direção ao próximo waypoint
   void _moveTowardsNextWaypoint() {
     if (route.waypoints.isEmpty) return;
@@ -262,7 +270,12 @@ class NavigationController extends ChangeNotifier {
       final dy = targetY - currentY;
 
       // Calcular distância em metros
-      final distanceMeters = GeographicUtils.calculateDistance(currentX, currentY, targetX, targetY);
+      final distanceMeters = GeographicUtils.calculateDistance(
+        currentX,
+        currentY,
+        targetX,
+        targetY,
+      );
 
       // Se chegou ao waypoint atual (4.0 metros)
       if (distanceMeters < 4.0) {
@@ -289,7 +302,7 @@ class NavigationController extends ChangeNotifier {
 
       // Calcular fator de movimento (percentagem da distância total em graus que representa 0.14m)
       final moveFactor = math.min(1.0, speedPerTick / distanceMeters);
-      
+
       final moveX = dx * moveFactor;
       final moveY = dy * moveFactor;
 
@@ -330,12 +343,16 @@ class NavigationController extends ChangeNotifier {
     final rad = _heading * (math.pi / 180.0);
 
     // Calcular deltas em metros
-    final deltaMetersX = meters * math.sin(rad);  // Este-Oeste (Longitude)
-    final deltaMetersY = meters * math.cos(rad);   // Norte-Sul (Latitude)
+    final deltaMetersX = meters * math.sin(rad); // Este-Oeste (Longitude)
+    final deltaMetersY = meters * math.cos(rad); // Norte-Sul (Latitude)
 
     // Converter metros → graus GPS (1° ≈ 111,320m)
-    final deltaLng = GeographicUtils.metersToDegrees(deltaMetersX); // x = Longitude
-    final deltaLat = GeographicUtils.metersToDegrees(deltaMetersY); // y = Latitude
+    final deltaLng = GeographicUtils.metersToDegrees(
+      deltaMetersX,
+    ); // x = Longitude
+    final deltaLat = GeographicUtils.metersToDegrees(
+      deltaMetersY,
+    ); // y = Latitude
 
     moveUser(deltaLng, deltaLat);
   }
@@ -482,7 +499,12 @@ class NavigationController extends ChangeNotifier {
       if (i > 0) {
         final prevNode = nodesMap[nodeIds[i - 1]];
         if (prevNode != null) {
-          final dist = GeographicUtils.calculateDistance(prevNode.x, prevNode.y, node.x, node.y);
+          final dist = GeographicUtils.calculateDistance(
+            prevNode.x,
+            prevNode.y,
+            node.x,
+            node.y,
+          );
           cumulativeDist += dist;
           cumulativeTime += dist / 1.4; // 1.4 m/s walking speed
         }
@@ -535,7 +557,12 @@ class NavigationController extends ChangeNotifier {
       final wpY = node?.y ?? wp.y;
       final dx = wpX - currentX;
       final dy = wpY - currentY;
-      final dist = GeographicUtils.calculateDistance(currentX, currentY, wpX, wpY);
+      final dist = GeographicUtils.calculateDistance(
+        currentX,
+        currentY,
+        wpX,
+        wpY,
+      );
       if (dist < minDistance) {
         minDistance = dist;
         _targetWaypointIndex = i;

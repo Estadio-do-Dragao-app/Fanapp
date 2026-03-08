@@ -11,8 +11,8 @@ import '../data/models/tile_model.dart';
 import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
-// import '../data/services/saved_places_service.dart'; // Removed favorites
-import '../../poi/presentation/poi_details_sheet.dart';
+import '../data/services/saved_places_service.dart';
+
 import 'layers/floor_plan_layer.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
@@ -44,6 +44,8 @@ class StadiumMapPage extends StatefulWidget {
   final ValueChanged<int>? onFloorChanged;
   final bool avoidStairs;
   final void Function(MapCamera, bool)? onPositionChanged;
+  final ValueChanged<bool>? onPOIPanelChanged;
+  final RouteModel? previewRoute;
 
   const StadiumMapPage({
     super.key,
@@ -66,6 +68,8 @@ class StadiumMapPage extends StatefulWidget {
     this.avoidStairs = false,
     this.onPositionChanged,
     this.isEmergency = false,
+    this.onPOIPanelChanged,
+    this.previewRoute,
   });
 
   final bool isEmergency;
@@ -88,18 +92,22 @@ class StadiumMapPageState extends State<StadiumMapPage>
   int _userLevel = 0; // Guardar nível real do utilizador
   String _userNodeId = 'N1';
   bool _userPositionLoaded = false;
-  double _userHeading = 0.0; // Heading em graus (0 = Norte)
 
   // Estado
   int _currentFloor = 0;
   List<POIModel> _pois = [];
-  // List<POIModel> _savedPlaces = []; // Removed favorites
   List<NodeModel> _nodes = [];
   List<EdgeModel> _edges = [];
   List<TileModel> _tiles = []; // Tiles para verificar walkable
   RouteModel? _currentRoute;
   bool _isLoading = true;
   String? _errorMessage;
+
+  // POI preview panel (non-modal, allows map interaction)
+  POIModel? _selectedPOI;
+  RouteModel? _previewRoute;
+  bool _isCalculatingPreviewRoute = false;
+  bool _isSelectedPOISaved = false;
 
   // Heatmap data
   StadiumHeatmapData? _heatmapData;
@@ -319,7 +327,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
   }
 
-  // Coordenadas da Universidade de Aveiro 
+  // Coordenadas da Universidade de Aveiro
   static const LatLng stadiumCenter = LatLng(40.6300, -8.6558);
 
   // Bounding box da UA (aproximado)
@@ -410,7 +418,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         if (_userPositionLoaded &&
             (_userPositionX != 0.0 || _userPositionY != 0.0)) {
           final userLatLng = _convertToLatLng(_userPositionX, _userPositionY);
-          
+
           // Verificar se a posição carregada faz sentido no contexto atual
           // Se for uma coordenada legada (ex: x=219.7, y=112.3 do estádio), ignoramos
           if (stadiumBounds.contains(userLatLng)) {
@@ -446,20 +454,32 @@ class StadiumMapPageState extends State<StadiumMapPage>
     _mapController.move(poiLocation, 19.5);
   }
 
-  /// Mostra detalhes do POI num bottom sheet com zoom
+  /// Método público para abrir o mesmo fluxo de detalhes/rota do clique no POI
+  void openPOIDetails(POIModel poi) {
+    _showPOIDetails(poi);
+  }
+
+  /// Mostra detalhes do POI como painel in-stack (sem bloquear o mapa)
   void _showPOIDetails(POIModel poi) async {
-    // Guardar apenas o zoom atual (não a posição)
-    final previousZoom = _mapController.camera.zoom;
+    // Show panel immediately with loading state
+    setState(() {
+      _selectedPOI = poi;
+      _previewRoute = null;
+      _isCalculatingPreviewRoute = true;
+      _currentRoute = null;
+      _isSelectedPOISaved = false;
+    });
+    widget.onPOIPanelChanged?.call(true);
 
-    // Fazer zoom no POI
-    final poiLocation = _convertToLatLng(poi.x, poi.y);
-    _mapController.move(poiLocation, 19.5);
+    final isSaved = await SavedPlacesService.isSaved(poi.id);
+    if (mounted && _selectedPOI?.id == poi.id) {
+      setState(() {
+        _isSelectedPOISaved = isSaved;
+      });
+    }
 
-    // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
-    // Calcular rota para o POI (apenas para mostrar distância/tempo no popup)
     RouteModel? route;
     try {
-      // 1. Obter posição fresca do utilizador
       final savedPos = await UserPositionService.getPosition();
       double startX;
       double startY;
@@ -472,15 +492,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
       } else {
         startX = _userPositionX;
         startY = _userPositionY;
-        // Se não há posição guardada, usar _userLevel se disponível, se não, fallback inteligente
-        // Se startX é 0 (posição default), assumimos N1 (nível 1).
-        // Se startX != 0 mas _userLevel é 0, usamos _currentFloor como "melhor palpite" (mas isso causou o bug, então preferimos 1 se startX for 0)
         startLevel = _userLevel != 0
             ? _userLevel
             : (startX != 0.0 ? _currentFloor : 1);
       }
 
-      // Usar rota por POI ID para obter wait_time do cache
       route = await _routingService.getRouteToPOI(
         startX: startX,
         startY: startY,
@@ -492,43 +508,256 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
     if (!mounted) return;
 
-    POIDetailsSheet.show(
-      context,
-      poi: poi,
-      route: route,
-      onNavigate: () {
-        if (route != null) {
-          // Navegar para a página de navegação
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NavigationPage(
-                route: route!,
-                destination: poi,
-                nodes: _nodes,
-                initialX: _userPositionX,
-                initialY: _userPositionY,
-                initialLevel: _userLevel,
+    setState(() {
+      _previewRoute = route;
+      _currentRoute = route;
+      _isCalculatingPreviewRoute = false;
+    });
+
+    // Zoom to fit user and destination
+    if (route != null) {
+      try {
+        final savedPos = await UserPositionService.getPosition();
+        final userX = savedPos.x != 0.0 ? savedPos.x : _userPositionX;
+        final userY = savedPos.y != 0.0 ? savedPos.y : _userPositionY;
+        final userLatLng = _convertToLatLng(userX, userY);
+        final poiLatLng = _convertToLatLng(poi.x, poi.y);
+        final bounds = LatLngBounds.fromPoints([userLatLng, poiLatLng]);
+        _mapController.fitCamera(
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.fromLTRB(60, 120, 60, 340),
+            maxZoom: 19.0,
+          ),
+        );
+      } catch (e) {}
+    } else {
+      _mapController.move(_convertToLatLng(poi.x, poi.y), 19.5);
+    }
+  }
+
+  /// Fecha o painel de preview do POI
+  void _closePOIPanel() {
+    setState(() {
+      _selectedPOI = null;
+      _previewRoute = null;
+      _currentRoute = null;
+      _isCalculatingPreviewRoute = false;
+      _isSelectedPOISaved = false;
+    });
+    widget.onPOIPanelChanged?.call(false);
+  }
+
+  Future<void> _toggleSelectedPOIFavorite() async {
+    final poi = _selectedPOI;
+    if (poi == null) return;
+
+    if (_isSelectedPOISaved) {
+      await SavedPlacesService.removePlace(poi.id);
+    } else {
+      await SavedPlacesService.savePlace(poi);
+    }
+
+    if (!mounted || _selectedPOI?.id != poi.id) return;
+    setState(() {
+      _isSelectedPOISaved = !_isSelectedPOISaved;
+    });
+  }
+
+  Widget _buildInfoChip({
+    required IconData icon,
+    required String label,
+    Color backgroundColor = const Color(0x22FFFFFF),
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Constrói o painel inline de detalhes do POI
+  Widget _buildPOIPreviewPanel() {
+    final poi = _selectedPOI!;
+    final route = _previewRoute;
+    final isLoading = _isCalculatingPreviewRoute;
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E3F),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: icon + name + actions (favorite/close)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.place, color: Colors.white70, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    poi.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Gabarito',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: _isSelectedPOISaved
+                          ? 'Remover dos favoritos'
+                          : 'Adicionar aos favoritos',
+                      onPressed: _toggleSelectedPOIFavorite,
+                      icon: Icon(
+                        _isSelectedPOISaved ? Icons.star : Icons.star_border,
+                        color: _isSelectedPOISaved
+                            ? Colors.amberAccent
+                            : Colors.white70,
+                        size: 24,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Fechar',
+                      onPressed: _closePOIPanel,
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white54,
+                        size: 22,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Route metrics
+            if (isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white54,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'A calcular rota...',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ],
+                ),
+              )
+            else if (route != null)
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildInfoChip(
+                    icon: Icons.directions_walk,
+                    label: '${(route.etaSeconds / 60).round()} min',
+                  ),
+                  _buildInfoChip(
+                    icon: Icons.straighten,
+                    label: '${route.distance.toStringAsFixed(0)} m',
+                  ),
+                  if ([
+                        'wc',
+                        'food',
+                        'ticket',
+                        'store',
+                        'bar',
+                        'bar_p',
+                      ].contains(_selectedPOI!.category) ||
+                      _selectedPOI!.name.toLowerCase().contains('farmácia'))
+                    _buildInfoChip(
+                      icon: Icons.group,
+                      label: '${route.waitTime?.round() ?? 0} min fila',
+                    ),
+                ],
+              ),
+            const SizedBox(height: 20),
+
+            // Navigate button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: route != null
+                    ? () {
+                        _closePOIPanel();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NavigationPage(
+                              route: route,
+                              destination: poi,
+                              nodes: _nodes,
+                              initialX: _userPositionX,
+                              initialY: _userPositionY,
+                              initialLevel: _userLevel,
+                            ),
+                          ),
+                        ).then((_) => loadUserPosition());
+                      }
+                    : null,
+                icon: const Icon(Icons.navigation, color: Colors.white),
+                label: const Text(
+                  'Navegar',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                ),
               ),
             ),
-          ).then((_) {
-            // Recarregar posição do utilizador quando voltar da navegação
-            loadUserPosition();
-          });
-
-          // Também desenhar rota no mapa caso volte
-          setState(() {
-            _currentRoute = route;
-          });
-        }
-      },
-    ).whenComplete(() {
-      // Apenas fazer zoom-out (mantém a posição centrada no POI)
-      if (mounted) {
-        final currentCenter = _mapController.camera.center;
-        _mapController.move(currentCenter, previousZoom);
-      }
-    });
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -543,43 +772,22 @@ class StadiumMapPageState extends State<StadiumMapPage>
         else
           _buildMap(),
 
+        // Inline POI preview panel (non-modal, allows map interaction)
+        if (_selectedPOI != null && !widget.isNavigating)
+          _buildPOIPreviewPanel(),
+
         // Controlos de movimento (apenas na Home, não durante navegação)
         if (!widget.isNavigating && !_isLoading && _errorMessage == null)
           Positioned(
-            left: 16,
-            bottom: 110,
+            right: 16,
+            bottom: _selectedPOI != null ? 280 : 110,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Botão de mover para frente (Simulação)
-                FloatingActionButton(
-                  heroTag: 'home_forward',
-                  backgroundColor: const Color(0xFF161A3E),
-                  onPressed: () => _moveForward(3),
-                  tooltip: 'Mover para frente',
-                  child: const Icon(Icons.navigation, color: Colors.white),
-                ),
-                const SizedBox(height: 12),
-                
-                // Botão de rodar (Simulação)
-                FloatingActionButton(
-                  heroTag: 'home_rotate',
-                  mini: true,
-                  backgroundColor: Colors.white,
-                  onPressed: () => _rotateUser(45),
-                  tooltip: 'Rodar 45°',
-                  child: const Icon(
-                    Icons.rotate_right,
-                    color: Color(0xFF161A3E),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
                 // Recenter
                 FloatingActionButton(
                   heroTag: 'recenter',
                   backgroundColor: Colors.white,
-                  mini: true,
                   onPressed: _zoomToUserPosition,
                   tooltip: 'Ir para minha posição',
                   child: const Icon(Icons.my_location, color: Colors.blue),
@@ -590,7 +798,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
                 FloatingActionButton(
                   heroTag: 'reset_pos',
                   backgroundColor: Colors.white,
-                  mini: true,
                   onPressed: () async {
                     await UserPositionService.resetToDefault();
                     await loadUserPosition();
@@ -606,126 +813,13 @@ class StadiumMapPageState extends State<StadiumMapPage>
     );
   }
 
-  /// Roda o utilizador em graus
-  void _rotateUser(double degrees) {
-    setState(() {
-      _userHeading += degrees;
-      _userHeading = _userHeading % 360;
-      if (_userHeading < 0) _userHeading += 360;
-    });
-  }
-
-  /// Move o utilizador para a frente na direção atual
-  /// Move para o nó mais próximo na direção pretendida
-  void _moveForward(double meters) async {
-    if (_nodes.isEmpty) return;
-
-    final rad = _userHeading * (math.pi / 180.0);
-    final deltaMetersX = meters * math.sin(rad);
-    final deltaMetersY = meters * -math.cos(rad);
-
-    // Converter metros para graus (aproximação para o campus da UA)
-    final deltaX = GeographicUtils.metersToDegrees(deltaMetersX);
-    final deltaY = GeographicUtils.metersToDegrees(deltaMetersY);
-
-    await _moveUser(deltaX, deltaY);
-  }
-
-  /// Move o utilizador e guarda a posição
-  /// Limita o movimento a áreas walkable
-  Future<void> _moveUser(double deltaX, double deltaY) async {
-    if (_nodes.isEmpty) return;
-
-    // Obter posição atual
-    double currentX = _userPositionX;
-    double currentY = _userPositionY;
-
-    // Se posição atual é 0,0, usar posição do nó guardado
-    if (currentX == 0.0 && currentY == 0.0) {
-      final userNode = _nodes.firstWhere(
-        (n) => n.id == _userNodeId,
-        orElse: () => _nodes.first,
-      );
-      currentX = userNode.x;
-      currentY = userNode.y;
-    }
-
-    // Calcular posição pretendida
-    final targetX = currentX + deltaX;
-    final targetY = currentY + deltaY;
-
-    // Verificar se a posição pretendida é walkable
-    if (!_isPositionWalkable(targetX, targetY)) {
-      return;
-    }
-
-    // Encontrar nó mais próximo da posição pretendida (para guardar o nodeId)
-    NodeModel? nearestNode;
-    double minDist = double.infinity;
-    for (final node in _nodes) {
-      final d = GeographicUtils.calculateDistance(node.x, node.y, targetX, targetY);
-      if (d < minDist) {
-        minDist = d;
-        nearestNode = node;
-      }
-    }
-
-    if (nearestNode == null) return;
-
-    // Usar a posição target (não snap to node) para movimento mais livre dentro dos corredores
-    final newX = targetX;
-    final newY = targetY;
-
-    // Atualizar estado
-    setState(() {
-      _userPositionX = newX;
-      _userPositionY = newY;
-      _userNodeId = nearestNode!.id;
-      _userPositionLoaded = true; // Garantir que está marcado como carregado
-    });
-
-    // Guardar posição
-    await UserPositionService.savePosition(
-      x: newX,
-      y: newY,
-      nodeId: nearestNode.id,
-      level: _currentFloor,
-    );
-
-    // Centrar mapa no utilizador
-    try {
-      final userLatLng = _convertToLatLng(newX, newY);
-      _mapController.move(userLatLng, _mapController.camera.zoom);
-    } catch (e) {}
-  }
-
-  /// Verifica se uma posição está numa área walkable
-  /// Para outdoor OSM, verificamos apenas se está perto de um nó do grafo
-  bool _isPositionWalkable(double x, double y) {
-    if (_nodes.isEmpty) return true;
-
-    // Encontrar nó mais próximo usando Haversine
-    double minDist = double.infinity;
-    for (final node in _nodes) {
-      final d = GeographicUtils.calculateDistance(node.x, node.y, x, y);
-      if (d < minDist) {
-        minDist = d;
-      }
-    }
-
-    // Permitir movimento até X metros do nó mais próximo
-    return minDist < MapConfig.walkableRadius;
-  }
-
-
-
   Widget _buildMap() {
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: widget.isNavigating && widget.userPosition != null 
-          ? widget.userPosition! 
-          : stadiumCenter,
+        initialCenter: widget.isNavigating && widget.userPosition != null
+            ? widget.userPosition!
+            : stadiumCenter,
         initialZoom: widget.isNavigating ? 20.0 : 17.0,
         minZoom: 14.0,
         maxZoom: 20.0,
@@ -760,10 +854,12 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // Camada de heatmap (se ativa)
         if (widget.showHeatmap) _buildHeatmapLayer(),
 
-        // Camada de rota (polyline) - durante navegação OU quando há rota destacada (preview)
-        if (_currentRoute != null &&
-            (widget.isNavigating || widget.highlightedRoute != null))
+        // Camada de rota (polyline) — ocultar quando há rota alternativa em preview
+        if (_currentRoute != null && widget.previewRoute == null)
           _buildRouteLayer(),
+
+        // Preview da nova rota (quando a selecionar um POI durante navegação) — verde
+        if (widget.previewRoute != null) _buildPreviewRouteLayer(),
 
         // Camada de POIs (markers)
         _buildPOILayer(),
@@ -810,7 +906,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
       // Criar retângulo para a célula (cantos do quadrado)
       // Como agora x/y representam Lat/Lng
       // cellsize deixa de ser 50(pixeis) -> 0.0005 graus (aprox ~50 metros)
-      const cellSizeLat = 0.0005; 
+      const cellSizeLat = 0.0005;
       const cellSizeLng = 0.0005;
 
       final topLeft = LatLng(
@@ -982,6 +1078,36 @@ class StadiumMapPageState extends State<StadiumMapPage>
     );
   }
 
+  /// Renders the candidate new route (green) when user selects a POI mid-navigation
+  Widget _buildPreviewRouteLayer() {
+    final route = widget.previewRoute!;
+    final nodesMap = {for (var n in _nodes) n.id: n};
+    final points = <LatLng>[];
+
+    for (final wp in route.waypoints) {
+      final node = nodesMap[wp.nodeId];
+      if (node != null) {
+        points.add(_convertToLatLng(node.x, node.y));
+      } else {
+        points.add(_convertToLatLng(wp.x, wp.y));
+      }
+    }
+
+    if (points.isEmpty) return const SizedBox.shrink();
+
+    return PolylineLayer(
+      polylines: [
+        Polyline(
+          points: points,
+          strokeWidth: 5.0,
+          color: const Color(0xFF22C55E), // green-500
+          borderColor: Colors.white,
+          borderStrokeWidth: 1.5,
+        ),
+      ],
+    );
+  }
+
   Widget _buildPOILayer() {
     // Adicionar marcador da posição do utilizador (sempre visível)
     final userMarkers = <Marker>[];
@@ -1016,9 +1142,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
           !widget.isNavigating || widget.highlightedPOI!.level == _currentFloor;
 
       if (show) {
-        if (!poisToShow.any((p) => p.id == widget.highlightedPOI!.id)) {
-          poisToShow.add(widget.highlightedPOI!);
-        }
+        // Always replace any same-id POI with highlightedPOI instance.
+        // This keeps marker coordinates stable across zoom-level filtering
+        // (generic list may carry slightly different coordinates).
+        poisToShow.removeWhere((p) => p.id == widget.highlightedPOI!.id);
+        poisToShow.add(widget.highlightedPOI!);
       }
     }
 
@@ -1133,25 +1261,38 @@ class StadiumMapPageState extends State<StadiumMapPage>
       final isHighlighted = widget.highlightedPOI?.id == poi.id;
 
       // Detetar sobreposição com o user (< 15m)
-      bool isNearUser = false;
+      // e evitar deslocar POIs quando o utilizador está praticamente em cima do destino.
+      double? userDistanceMeters;
       if (currentUserLatLng != null) {
-        final dist = GeographicUtils.calculateDistance(
-          position.longitude, position.latitude,
-          currentUserLatLng.longitude, currentUserLatLng.latitude,
+        userDistanceMeters = GeographicUtils.calculateDistance(
+          position.longitude,
+          position.latitude,
+          currentUserLatLng.longitude,
+          currentUserLatLng.latitude,
         );
-        isNearUser = dist < 15.0;
       }
+
+      // Do not displace the active destination marker.
+      // A fixed pixel offset looks like the marker drifts when zooming out.
+      final isNearUser =
+          userDistanceMeters != null && userDistanceMeters < 15.0;
+      final isPracticallySameSpot =
+          userDistanceMeters != null && userDistanceMeters < 5.0;
+      final shouldShiftForOverlap =
+          isNearUser && !isHighlighted && !isPracticallySameSpot;
 
       return Marker(
         point: position,
         width: isHighlighted ? 60 : 50,
-        height: isNearUser ? 70 : (isHighlighted ? 60 : 50),
+        height: shouldShiftForOverlap ? 70 : (isHighlighted ? 60 : 50),
         // Quando perto do user, desloca o POI para cima para não sobrepor
-        alignment: isNearUser
+        alignment: shouldShiftForOverlap
             ? const Alignment(0.0, -1.5) // Sobe o marcador
             : Alignment.center,
         child: GestureDetector(
-          onTap: () => _showPOIDetails(poi),
+          onTap: widget.isNavigating
+              ? (widget.onTapPOI != null ? () => widget.onTapPOI!(poi) : null)
+              : () => _showPOIDetails(poi),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1179,12 +1320,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
                 ),
               ),
               // Quando perto do user, mostra uma setinha a indicar a posição real
-              if (isNearUser)
-                const Icon(
-                  Icons.arrow_drop_down,
-                  color: Colors.grey,
-                  size: 16,
-                ),
+              if (shouldShiftForOverlap)
+                const Icon(Icons.arrow_drop_down, color: Colors.grey, size: 16),
             ],
           ),
         ),
@@ -1199,15 +1336,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // POIs: sempre verticais, alinhados ao ecrã
         MarkerLayer(
           rotate: false,
-          markers: [
-            ..._buildTicketMarkers(),
-            ...poiMarkers,
-          ],
+          markers: [..._buildTicketMarkers(), ...poiMarkers],
         ),
         // User: roda com o mapa (navegação), renderizado por cima dos POIs
-        MarkerLayer(
-          markers: userMarkers,
-        ),
+        MarkerLayer(markers: userMarkers),
       ],
     );
   }

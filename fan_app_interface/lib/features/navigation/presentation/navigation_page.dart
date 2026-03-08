@@ -6,6 +6,7 @@ import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../map/presentation/stadium_map_page.dart';
+import '../../poi/presentation/poi_details_sheet.dart';
 import '../domain/navigation_controller.dart';
 import '../domain/models/reroute_event.dart';
 import 'widgets/navigation_header.dart';
@@ -21,7 +22,8 @@ class NavigationPage extends StatefulWidget {
   final double? initialX;
   final double? initialY;
   final int? initialLevel;
-  final bool isEmergency; // FIX 1: moved inside constructor params (was dangling field)
+  final bool
+  isEmergency; // FIX 1: moved inside constructor params (was dangling field)
 
   const NavigationPage({
     super.key,
@@ -50,9 +52,6 @@ class _NavigationPageState extends State<NavigationPage>
   Animation<double>? _lngAnimation;
   Animation<double>? _rotAnimation;
 
-  // Animation controller for blinking border (emergency mode)
-  late AnimationController _blinkController;
-
   bool _showHeatmap = false;
 
   // State for reroute popup
@@ -65,6 +64,9 @@ class _NavigationPageState extends State<NavigationPage>
   // Track if the map should follow the user position
   bool _isFollowingUser = true;
 
+  // Preview route to show when selecting a new destination mid-navigation
+  RouteModel? _previewRoute;
+
   @override
   void initState() {
     super.initState();
@@ -74,14 +76,6 @@ class _NavigationPageState extends State<NavigationPage>
       duration: const Duration(milliseconds: 100),
       vsync: this,
     );
-
-    _blinkController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    if (widget.isEmergency) {
-      _blinkController.repeat(reverse: true);
-    }
 
     // FIX 3: _controller initialized BEFORE addListener (was the other way around)
     _controller = NavigationController(
@@ -110,6 +104,10 @@ class _NavigationPageState extends State<NavigationPage>
     // Escutar eventos de reroute
     _controller.rerouteStream.listen((event) {
       if (!mounted) return;
+      if (widget.isEmergency) {
+        print('[NavigationPage] Emergency mode: reroute change ignored.');
+        return;
+      }
       print("[NavigationPage] 🔔 Reroute event received!");
       setState(() {
         _rerouteEvent = event;
@@ -125,7 +123,6 @@ class _NavigationPageState extends State<NavigationPage>
     _controller.removeListener(_onNavigationUpdate);
     _controller.dispose();
     _animationController.dispose();
-    _blinkController.dispose();
     super.dispose();
   }
 
@@ -213,6 +210,74 @@ class _NavigationPageState extends State<NavigationPage>
     }
   }
 
+  /// Shows a sheet for switching destination mid-navigation
+  void _showSwitchDestinationSheet(POIModel poi) async {
+    if (widget.isEmergency) {
+      print('[NavigationPage] Emergency mode: destination switch blocked.');
+      return;
+    }
+
+    // Pause movement immediately while user decides
+    _controller.pauseAutoNavigation();
+
+    RouteModel? route;
+    try {
+      route = await _routingService.getRouteToPOI(
+        startX: _controller.tracker.currentX,
+        startY: _controller.tracker.currentY,
+        startLevel: _controller.currentLevel,
+        poiId: poi.id,
+        avoidStairs: false,
+      );
+    } catch (e) {}
+
+    if (!mounted) {
+      _controller.resumeAutoNavigation();
+      return;
+    }
+
+    // Show the green preview route on the map
+    if (route != null) {
+      setState(() => _previewRoute = route);
+    }
+
+    POIDetailsSheet.show(
+      context,
+      poi: poi,
+      route: route,
+      allNodes: widget.nodes,
+      onNavigate: () {
+        if (route != null) {
+          // Switch to new navigation
+          setState(() => _previewRoute = null);
+          _controller.endNavigation().then((_) {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NavigationPage(
+                    route: route!,
+                    destination: poi,
+                    nodes: widget.nodes,
+                    initialX: _controller.tracker.currentX,
+                    initialY: _controller.tracker.currentY,
+                    initialLevel: _controller.currentLevel,
+                  ),
+                ),
+              );
+            }
+          });
+        }
+      },
+    ).whenComplete(() {
+      // Sheet dismissed without navigating — clear preview and resume original
+      if (mounted) {
+        setState(() => _previewRoute = null);
+        _controller.resumeAutoNavigation();
+      }
+    });
+  }
+
   // FIX 5: consistent zero-padding for both hours and minutes
   String _getArrivalTime() {
     final now = DateTime.now();
@@ -226,10 +291,7 @@ class _NavigationPageState extends State<NavigationPage>
   Widget build(BuildContext context) {
     final tracker = _controller.tracker;
 
-    final userPosition = LatLng(
-      tracker.currentY,
-      tracker.currentX,
-    );
+    final userPosition = LatLng(tracker.currentY, tracker.currentX);
 
     return PopScope(
       canPop: false,
@@ -253,9 +315,13 @@ class _NavigationPageState extends State<NavigationPage>
               initialFloor: _controller.currentLevel,
               showHeatmap: _showHeatmap,
               isEmergency: widget.isEmergency,
+              onTapPOI: widget.isEmergency ? null : _showSwitchDestinationSheet,
+              previewRoute: _previewRoute,
               onPositionChanged: (camera, hasGesture) {
                 if (hasGesture && _isFollowingUser) {
-                  print("[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.");
+                  print(
+                    "[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.",
+                  );
                   setState(() {
                     _isFollowingUser = false;
                   });
@@ -263,40 +329,16 @@ class _NavigationPageState extends State<NavigationPage>
               },
             ),
 
-            // Emergency Blinking Border
-            if (widget.isEmergency)
-              Positioned(
-                top: -20,
-                bottom: -20,
-                left: -20,
-                right: -20,
-                child: AnimatedBuilder(
-                  animation: _blinkController,
-                  builder: (context, child) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(
-                          MediaQuery.of(context).viewPadding.top > 0 ? 70.0 : 0.0,
-                        ),
-                        border: Border.all(
-                          color: const Color(0xFFBD453D)
-                              .withValues(alpha: _blinkController.value),
-                          width: 35,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-            // Header com instrução de navegação (topo)
+            // Header com instrução de navegação (topo) — IgnorePointer para o mapa receber toques
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              child: NavigationHeader(
-                instruction: _controller.currentInstruction,
-                isEmergency: widget.isEmergency,
+              child: IgnorePointer(
+                child: NavigationHeader(
+                  instruction: _controller.currentInstruction,
+                  isEmergency: widget.isEmergency,
+                ),
               ),
             ),
 
@@ -343,19 +385,25 @@ class _NavigationPageState extends State<NavigationPage>
                     final originalCategory = widget.destination.category;
 
                     print('[NavigationPage] 🔍 Debug Reroute Values:');
-                    print('  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"');
+                    print(
+                      '  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"',
+                    );
                     print('  - Captured Dest ID: "$capturedNewDestinationId"');
                     print('  - Event Category: "${_rerouteEvent?.category}"');
                     print('  - Widget Dest Category: "$originalCategory"');
 
-                    if ((capturedCategory == null || capturedCategory.isEmpty) &&
+                    if ((capturedCategory == null ||
+                            capturedCategory.isEmpty) &&
                         originalCategory.isNotEmpty) {
                       capturedCategory = originalCategory;
-                      print('[NavigationPage] 📦 Using original destination category: $capturedCategory');
+                      print(
+                        '[NavigationPage] 📦 Using original destination category: $capturedCategory',
+                      );
                     }
 
                     // FIX 7: simplified and corrected category normalisation
-                    if (capturedCategory != null && capturedCategory.isNotEmpty) {
+                    if (capturedCategory != null &&
+                        capturedCategory.isNotEmpty) {
                       if (capturedCategory.toLowerCase() == 'wc') {
                         capturedCategory = 'WC';
                       } else {
@@ -393,9 +441,12 @@ class _NavigationPageState extends State<NavigationPage>
                       if ((effectiveCategory == null ||
                               effectiveCategory.isEmpty) &&
                           capturedNewDestinationId.contains('-')) {
-                        effectiveCategory =
-                            capturedNewDestinationId.split('-').first;
-                        print('[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory');
+                        effectiveCategory = capturedNewDestinationId
+                            .split('-')
+                            .first;
+                        print(
+                          '[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory',
+                        );
                       }
 
                       if (effectiveCategory != null &&
@@ -403,15 +454,18 @@ class _NavigationPageState extends State<NavigationPage>
                         print(
                           '[NavigationPage] 🔄 Requesting nearest $effectiveCategory from ($currentX, $currentY) level=$currentLevel',
                         );
-                        newRoute = await _routingService.getRouteToNearestCategory(
-                          startX: currentX,
-                          startY: currentY,
-                          startLevel: currentLevel,
-                          category: effectiveCategory,
-                          avoidStairs: false,
-                        );
+                        newRoute = await _routingService
+                            .getRouteToNearestCategory(
+                              startX: currentX,
+                              startY: currentY,
+                              startLevel: currentLevel,
+                              category: effectiveCategory,
+                              avoidStairs: false,
+                            );
                       } else {
-                        print('[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId');
+                        print(
+                          '[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId',
+                        );
                         newRoute = await _routingService.getRouteToPOI(
                           startX: currentX,
                           startY: currentY,
@@ -422,9 +476,12 @@ class _NavigationPageState extends State<NavigationPage>
                       }
 
                       if (newRoute.path.isNotEmpty) {
-                        final nodeIds =
-                            newRoute.path.map((p) => p.nodeId).toList();
-                        print('[NavigationPage] ✅ New route received with ${nodeIds.length} nodes');
+                        final nodeIds = newRoute.path
+                            .map((p) => p.nodeId)
+                            .toList();
+                        print(
+                          '[NavigationPage] ✅ New route received with ${nodeIds.length} nodes',
+                        );
                         if (mounted) {
                           Navigator.pop(context); // Dismiss loading dialog
                         }
@@ -465,7 +522,7 @@ class _NavigationPageState extends State<NavigationPage>
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
-              left: 16,
+              right: 16,
               bottom: _showReroutePopup
                   ? 360
                   : (_isBottomSheetExpanded ? 360 : 200),
@@ -474,8 +531,9 @@ class _NavigationPageState extends State<NavigationPage>
                 children: [
                   FloatingActionButton(
                     heroTag: 'heatmap_toggle',
-                    backgroundColor:
-                        _showHeatmap ? Colors.orange : Colors.white,
+                    backgroundColor: _showHeatmap
+                        ? Colors.orange
+                        : Colors.white,
                     onPressed: () {
                       setState(() {
                         _showHeatmap = !_showHeatmap;
@@ -489,10 +547,13 @@ class _NavigationPageState extends State<NavigationPage>
                   const SizedBox(height: 16),
                   FloatingActionButton(
                     heroTag: 'center',
-                    backgroundColor:
-                        _isFollowingUser ? Colors.blue : Colors.white,
+                    backgroundColor: _isFollowingUser
+                        ? Colors.blue
+                        : Colors.white,
                     onPressed: () {
-                      print("[NavigationPage] 📍 Center button pressed. Enabling follow mode.");
+                      print(
+                        "[NavigationPage] 📍 Center button pressed. Enabling follow mode.",
+                      );
                       setState(() {
                         _isFollowingUser = true;
                       });

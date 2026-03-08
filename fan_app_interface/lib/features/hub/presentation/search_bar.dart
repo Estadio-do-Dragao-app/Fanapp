@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import '../../map/data/models/poi_model.dart';
-import '../../map/data/models/route_model.dart';
-import '../../map/data/models/node_model.dart';
 import '../../map/data/services/map_service.dart';
-import '../../map/data/services/routing_service.dart';
-import '../../poi/presentation/poi_details_sheet.dart';
-import '../../navigation/data/services/user_position_service.dart';
-import '../../navigation/presentation/navigation_page.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
@@ -28,13 +22,8 @@ class SearchBarBottomSheet extends StatefulWidget {
 class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
   late TextEditingController _searchController;
   final MapService _mapService = MapService();
-  final RoutingService _routingService = RoutingService();
-
-  // Posição fixa do utilizador (mesma do StadiumMapPage)
-  static const String userNodeId = 'N1';
 
   List<POIModel> _allPOIs = [];
-  List<NodeModel> _allNodes = [];
   bool _isLoading = true;
 
   @override
@@ -47,10 +36,8 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
   Future<void> _loadPOIs() async {
     try {
       final pois = await _mapService.getAllPOIs();
-      final nodes = await _mapService.getAllNodes();
       setState(() {
         _allPOIs = pois;
-        _allNodes = nodes;
         _isLoading = false;
       });
     } catch (e) {
@@ -67,67 +54,11 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
     super.dispose();
   }
 
-  /// Mostra detalhes do POI selecionado
+  /// Fecha a pesquisa e delega no callback o fluxo de abrir painel/rota
   Future<void> _showPOIDetails(POIModel poi) async {
-    // Fechar a barra de pesquisa primeiro
     Navigator.pop(context);
-
-    // Aguardar um frame para garantir que o modal foi fechado
     await Future.delayed(const Duration(milliseconds: 100));
-
-    // Notificar callback para fazer zoom (se existir)
     widget.onPOISelected?.call(poi);
-
-    // Calcular rota para o POI (apenas para mostrar distância/tempo)
-    RouteModel? route;
-    try {
-      // Obter posição guardada do utilizador
-      final savedPosition = await UserPositionService.getPosition();
-      double startX;
-      double startY;
-      int startLevel;
-
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
-        startX = savedPosition.x;
-        startY = savedPosition.y;
-        startLevel = savedPosition.level;
-      } else {
-        // Fallback para N1
-        final userNode = _allNodes.firstWhere(
-          (n) => n.id == userNodeId,
-          orElse: () => _allNodes.first,
-        );
-        startX = userNode.x;
-        startY = userNode.y;
-        startLevel = userNode.level;
-      }
-
-      // Usar nova API com coordenadas
-      route = await _routingService.getRouteToPOI(
-        startX: startX,
-        startY: startY,
-        startLevel: startLevel,
-        poiId: poi.id,
-        avoidStairs: widget.avoidStairs,
-      );
-    } catch (e) {
-      print('[SearchBar] Erro ao calcular rota: $e');
-    }
-
-    if (!mounted) return;
-
-    // Capturar o messenger antes de mostrar o sheet (evita usar context desmontado)
-    final messenger = ScaffoldMessenger.of(context);
-
-    // Mostrar detalhes do POI - não passar onNavigate pois o context está inválido
-    // POIDetailsSheet usará o fallback com route e allNodes que são válidos
-    POIDetailsSheet.show(
-      context,
-      poi: poi,
-      route: route,
-      allNodes: _allNodes,
-      onNavigationEnd: widget.onNavigationEnd,
-    );
   }
 
   @override
@@ -146,122 +77,179 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
 
         return FractionallySizedBox(
           heightFactor: 1.0,
-          child: Column(
-            children: [
-              // Search Bar
-              Container(
-                height: 60,
-                margin: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161A3E),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
+          child: Container(
+            color: const Color(0xFF161A3E),
+            child: Column(
+              children: [
+                // Search Bar
+                Container(
+                  height: 68,
+                  margin: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF1A1E4B), Color(0xFF111639)],
                     ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 12),
-                    Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                      child: const Icon(
-                        Icons.search,
-                        color: Colors.white,
-                        size: 30,
+                    borderRadius: BorderRadius.circular(34),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.26),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Gabarito',
-                          fontSize: 20,
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, -1),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.09),
+                          shape: BoxShape.circle,
                         ),
-                        decoration: InputDecoration(
-                          hintText: AppLocalizations.of(context)!.search,
-                          hintStyle: TextStyle(
-                            color: Colors.white70,
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                          child: const Icon(
+                            Icons.search,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          autofocus: true,
+                          style: const TextStyle(
+                            color: Colors.white,
                             fontFamily: 'Gabarito',
                             fontSize: 20,
+                            fontWeight: FontWeight.w600,
                           ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onChanged: (value) {
-                          setModalState(() {});
-                        },
-                      ),
-                    ),
-                    if (_searchController.text.isNotEmpty)
-                      GestureDetector(
-                        onTap: () {
-                          _searchController.clear();
-                          setModalState(() {});
-                        },
-                        child: const Icon(
-                          Icons.clear,
-                          color: Colors.white,
-                          size: 30,
+                          decoration: InputDecoration(
+                            hintText: AppLocalizations.of(context)!.search,
+                            hintStyle: const TextStyle(
+                              color: Color(0xFF9BA3C8),
+                              fontFamily: 'Gabarito',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onChanged: (value) {
+                            setModalState(() {});
+                          },
                         ),
                       ),
-                    const SizedBox(width: 12),
-                  ],
+                      if (_searchController.text.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                _searchController.clear();
+                                setModalState(() {});
+                              },
+                              child: Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
                 ),
-              ),
-              // Results List
-              Expanded(
-                child: _isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF161A3E),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: filteredPOIs.length,
-                        itemBuilder: (context, index) {
-                          final poi = filteredPOIs[index];
-                          final textColor = const Color(0xFF161A3E);
+                // Results List
+                Expanded(
+                  child: _isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          itemCount: filteredPOIs.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final poi = filteredPOIs[index];
+                            const textColor = Colors.white;
 
-                          return ListTile(
-                            leading: Icon(
-                              _getCategoryIcon(poi.category),
-                              color: textColor,
-                            ),
-                            title: Text(
-                              poi.name,
-                              style: TextStyle(
-                                fontFamily: 'Gabarito',
-                                fontSize: 16,
-                                color: textColor,
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                ),
                               ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                            subtitle: Text(
-                              _getCategoryName(context, poi.category),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: textColor.withOpacity(0.6),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                leading: CircleAvatar(
+                                  backgroundColor: const Color(
+                                    0xFF929AD4,
+                                  ).withValues(alpha: 0.2),
+                                  child: Icon(
+                                    _getCategoryIcon(poi.category),
+                                    color: textColor,
+                                  ),
+                                ),
+                                title: Text(
+                                  poi.name,
+                                  style: TextStyle(
+                                    fontFamily: 'Gabarito',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: textColor,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                ),
+                                trailing: Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  color: Colors.white54,
+                                  size: 16,
+                                ),
+                                onTap: () {
+                                  _showPOIDetails(poi);
+                                },
                               ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                            onTap: () {
-                              _showPOIDetails(poi);
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         );
       },

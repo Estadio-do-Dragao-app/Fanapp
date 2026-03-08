@@ -6,7 +6,7 @@ import 'features/poi/presentation/navbar.dart';
 import 'features/hub/presentation/search_bar.dart';
 import 'features/hub/presentation/menu_button.dart';
 import 'features/map/presentation/filter_button.dart';
-import 'features/ticket/presentation/ticket_menu.dart';
+import 'features/poi/presentation/saved_places_sheet.dart';
 import 'features/map/data/services/congestion_service.dart';
 import 'features/map/data/services/waittime_cache.dart';
 import 'features/navigation/data/services/user_position_service.dart';
@@ -40,6 +40,14 @@ class _HomeState extends State<Home> {
   final GlobalKey<FilterButtonState> _filterButtonKey =
       GlobalKey<FilterButtonState>();
   bool _isFilterExpanded = false;
+  bool _isPOIPanelOpen = false;
+
+  void _openEmergencyTestFlow() {
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil('/emergency-alert', (route) => false);
+  }
 
   @override
   void initState() {
@@ -61,10 +69,7 @@ class _HomeState extends State<Home> {
     _alertSubscription = MqttService().alertsStream.listen((data) {
       if (!mounted) return;
       print('[Home] Received alert: $data');
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/emergency-alert',
-        (route) => false, // Remove todas as rotas anteriores da stack
-      );
+      _openEmergencyTestFlow(); // Remove todas as rotas anteriores da stack
     });
   }
 
@@ -145,6 +150,11 @@ class _HomeState extends State<Home> {
             },
             currentFloor: _currentFloor,
             avoidStairs: _avoidStairs,
+            onPOIPanelChanged: (isOpen) {
+              setState(() {
+                _isPOIPanelOpen = isOpen;
+              });
+            },
           ),
           // Invisible tap detector to close filter when tapping elsewhere
           if (_isFilterExpanded)
@@ -166,7 +176,6 @@ class _HomeState extends State<Home> {
             right: 0,
             child: Container(
               height: 240,
-              color: Colors.transparent,
               child: Navbar(
                 avoidStairs: _avoidStairs,
                 onNavigationEnd: () {
@@ -183,12 +192,6 @@ class _HomeState extends State<Home> {
               key: _filterButtonKey,
               showHeatmap: _showHeatmap,
               isHeatmapAvailable: _isHeatmapAvailable,
-              currentFloor: _currentFloor,
-              onFloorChanged: (floor) {
-                setState(() {
-                  _currentFloor = floor;
-                });
-              },
               onHeatmapChanged: (value) {
                 setState(() {
                   _showHeatmap = value;
@@ -212,93 +215,107 @@ class _HomeState extends State<Home> {
               },
             ),
           ),
-          Positioned(
-            bottom: 16,
-            left: 16,
-            right: 92,
-            child: GestureDetector(
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  useSafeArea: true,
-                  isDismissible: true,
-                  enableDrag: true,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(30),
-                      topRight: Radius.circular(30),
-                    ),
-                  ),
-                  builder: (context) {
-                    return SearchBarBottomSheet(
-                      avoidStairs: _avoidStairs,
-                      onPOISelected: (poi) {
-                        // Fazer zoom no POI após fechar a barra de pesquisa
-                        _mapPageKey.currentState?.zoomToPOI(poi);
-                      },
-                      onNavigationEnd: () {
-                        print(
-                          "[Home] Navigation from Search ended. Reloading position.",
-                        );
-                        _mapPageKey.currentState?.reloadUserPosition();
-                      },
-                    );
-                  },
-                );
-              },
-              child: Container(
-                height: 60,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161A3E),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 16),
-                    Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
-                      child: const Icon(
-                        Icons.search,
-                        color: Colors.white,
-                        size: 30,
+          if (!_isPOIPanelOpen)
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 92,
+              child: GestureDetector(
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    isDismissible: true,
+                    enableDrag: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        AppLocalizations.of(context)!.search,
-                        style: const TextStyle(
+                    builder: (context) {
+                      return SearchBarBottomSheet(
+                        avoidStairs: _avoidStairs,
+                        onPOISelected: (poi) {
+                          _mapPageKey.currentState?.openPOIDetails(poi);
+                        },
+                        onNavigationEnd: () {
+                          print(
+                            "[Home] Navigation from Search ended. Reloading position.",
+                          );
+                          _mapPageKey.currentState?.reloadUserPosition();
+                        },
+                      );
+                    },
+                  );
+                },
+                child: Container(
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161A3E),
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 16),
+                      Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
+                        child: const Icon(
+                          Icons.search,
                           color: Colors.white,
-                          fontFamily: 'Gabarito',
-                          fontSize: 20,
+                          size: 30,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          AppLocalizations.of(context)!.search,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Gabarito',
+                            fontSize: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            bottom: 16,
-            right: 16,
-            child: MenuButton(
-              onTap: () async {
-                await TicketMenu.show(context);
-                // Recarregar os dados do mapa quando o menu fecha (pode ter mudado o bilhete)
-                _mapPageKey.currentState?.reloadMapData();
-              },
+          if (!_isPOIPanelOpen)
+            Positioned(
+              bottom: 88,
+              right: 16,
+              child: MenuButton(
+                icon: Icons.warning_amber_rounded,
+                onTap: _openEmergencyTestFlow,
+              ),
             ),
-          ),
+          if (!_isPOIPanelOpen)
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: MenuButton(
+                icon: Icons.star,
+                onTap: () async {
+                  await SavedPlacesSheet.show(
+                    context,
+                    onPOISelected: (poi) {
+                      _mapPageKey.currentState?.openPOIDetails(poi);
+                    },
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );

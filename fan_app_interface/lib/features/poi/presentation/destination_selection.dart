@@ -112,6 +112,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     final category = backendCategory.toLowerCase();
     switch (category) {
       case 'bar':
+      case 'bar_p':
       case 'restaurant':
         return 'food';
       case 'restroom':
@@ -121,14 +122,24 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       case 'emergency_exit':
         return 'exit';
       case 'merchandise':
-        return 'merchandising';
+      case 'merchandising':
+      case 'store':
+        return 'shop';
+      case 'parking':
+      case 'parking_lot':
+      case 'parkinglot':
+      case 'car_park':
+      case 'carpark':
+      case 'park':
+        return 'parking';
       case 'first_aid':
       case 'firstaid':
       case 'first-aid':
         return 'first_aid';
       case 'information':
       case 'info':
-        return 'information';
+      case 'poi':
+        return 'poi';
       default:
         return category;
     }
@@ -393,6 +404,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
         return Icons.fastfood;
       case 'bar':
         return Icons.local_bar;
+      case 'parking':
+        return Icons.local_parking;
       case 'exit':
         return Icons.meeting_room;
       case 'first_aid':
@@ -679,26 +692,6 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            // Piso
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.indigo.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.white30),
-                              ),
-                              child: Text(
-                                'Piso ${item.poi.level}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
                             // Tempo de caminhada
                             Row(
                               mainAxisSize: MainAxisSize.min,

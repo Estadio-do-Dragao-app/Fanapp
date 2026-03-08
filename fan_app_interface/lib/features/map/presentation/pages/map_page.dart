@@ -11,6 +11,7 @@ class MapPage extends StatefulWidget {
   final MapController? mapController;
   final int currentFloor;
   final bool avoidStairs;
+  final ValueChanged<bool>? onPOIPanelChanged;
 
   const MapPage({
     super.key,
@@ -21,6 +22,7 @@ class MapPage extends StatefulWidget {
     this.onFloorChanged,
     this.currentFloor = 0,
     this.avoidStairs = false,
+    this.onPOIPanelChanged,
   });
 
   @override
@@ -34,6 +36,11 @@ class MapPageState extends State<MapPage> {
   // Public method to zoom to POI
   void zoomToPOI(poi) {
     _stadiumMapKey.currentState?.zoomToPOI(poi);
+  }
+
+  // Public method to open POI panel and preview route
+  void openPOIDetails(poi) {
+    _stadiumMapKey.currentState?.openPOIDetails(poi);
   }
 
   void reloadUserPosition() {
@@ -54,6 +61,7 @@ class MapPageState extends State<MapPage> {
       onFloorChanged: widget.onFloorChanged,
       initialFloor: widget.currentFloor,
       avoidStairs: widget.avoidStairs,
+      onPOIPanelChanged: widget.onPOIPanelChanged,
     );
   }
 }
