@@ -1,5 +1,6 @@
-import 'dart:math' as math;
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../features/navigation/data/services/user_position_service.dart';
 
 class GeographicUtils {
   static const Distance _distanceCalculator = Distance();
@@ -16,16 +17,19 @@ class GeographicUtils {
   /// Calculates the distance from a point to a segment (all in GPS coordinates)
   /// Returns distance in METERS
   static double pointToSegmentDistance(
-    double px, double py,
-    double x1, double y1,
-    double x2, double y2,
+    double px,
+    double py,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
   ) {
     // For path tracking, we use a hybrid approach:
     // 1. Project the point onto the segment in the coordinate plane (degrees)
     // 2. Calculate the Haversine distance from the point to that projection
-    
+
     final segLenSq = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-    
+
     if (segLenSq < 1e-12) {
       return calculateDistance(px, py, x1, y1);
     }
@@ -41,9 +45,12 @@ class GeographicUtils {
 
   /// Calculates progress (0.0 to 1.0) along a segment
   static double progressAlongSegment(
-    double px, double py,
-    double x1, double y1,
-    double x2, double y2,
+    double px,
+    double py,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
   ) {
     final segLenSq = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
     if (segLenSq < 1e-12) return 1.0;
@@ -56,5 +63,42 @@ class GeographicUtils {
   /// 1 degree is roughly 111,320 meters
   static double metersToDegrees(double meters) {
     return meters / 111320.0;
+  }
+
+  /// Gets the real GPS position of the user, falling back to saved position
+  static Future<({double x, double y, int level})>
+  getCurrentUserPosition() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw Exception('Location services are disabled.');
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception('Location permissions are denied');
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception('Location permissions are permanently denied');
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.bestForNavigation,
+      );
+
+      return (x: position.longitude, y: position.latitude, level: 0);
+    } catch (e) {
+      print('[GeographicUtils] Failed to get real GPS, using fallback: $e');
+      final savedPosition = await UserPositionService.getPosition();
+      return (
+        x: savedPosition.x,
+        y: savedPosition.y,
+        level: savedPosition.level,
+      );
+    }
   }
 }

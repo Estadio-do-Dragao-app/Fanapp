@@ -12,6 +12,8 @@ import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart'
 import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
 import 'package:fan_app_interface/features/navigation/data/services/user_position_service.dart';
 import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
+import 'package:fan_app_interface/core/utils/poi_style.dart';
+import 'package:fan_app_interface/core/utils/geographic_utils.dart';
 import 'dart:math';
 
 /// Simple MapPage implementation that shows a placeholder 'map' area and a
@@ -19,9 +21,14 @@ import 'dart:math';
 class Navbar extends StatefulWidget {
   final VoidCallback? onNavigationEnd;
   final bool avoidStairs;
+  final Widget? filterButton;
 
-  const Navbar({Key? key, this.onNavigationEnd, this.avoidStairs = false})
-    : super(key: key);
+  const Navbar({
+    Key? key,
+    this.onNavigationEnd,
+    this.avoidStairs = false,
+    this.filterButton,
+  }) : super(key: key);
 
   @override
   State<Navbar> createState() => _NavbarState();
@@ -34,7 +41,7 @@ class _NavbarState extends State<Navbar> {
   final RoutingService _routingService = RoutingService();
   int selected = 0;
 
-  // Posição fixa do utilizador (mesma do StadiumMapPage)
+  // Fallback ID de nó
   static const String userNodeId = 'N1';
 
   Future<void> _handleCategorySelect(
@@ -170,26 +177,11 @@ class _NavbarState extends State<Navbar> {
         allNodes,
       );
 
-      // Obter posição guardada do utilizador
-      final savedPosition = await UserPositionService.getPosition();
-      double startX;
-      double startY;
-      int startLevel;
-
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
-        startX = savedPosition.x;
-        startY = savedPosition.y;
-        startLevel = savedPosition.level;
-      } else {
-        // Fallback para N1
-        final userNode = allNodes.firstWhere(
-          (n) => n.id == userNodeId,
-          orElse: () => allNodes.first,
-        );
-        startX = userNode.x;
-        startY = userNode.y;
-        startLevel = userNode.level;
-      }
+      // Obter posição real do utilizador (GPS ou Saved)
+      final userPos = await GeographicUtils.getCurrentUserPosition();
+      double startX = userPos.x;
+      double startY = userPos.y;
+      int startLevel = userPos.level;
 
       // Calcular rota
       final route = await _routingService.getRouteToNode(
@@ -300,79 +292,82 @@ class _NavbarState extends State<Navbar> {
     return Stack(
       children: [
         // IgnorePointer so the map behind the gradient can receive touches
-        IgnorePointer(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFF929AD4),
-                  Color(0xFF929AD4).withOpacity(0.8),
-                  Color(0xFF929AD4).withOpacity(0.5),
-                  Colors.transparent,
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+        // Positioned.fill ensures the gradient matches the Stack's content size
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color.fromARGB(255, 110, 119, 207),
+                    Color.fromARGB(255, 110, 119, 207).withOpacity(0.9),
+                    Color.fromARGB(255, 110, 119, 207).withOpacity(0.7),
+                    Color.fromARGB(255, 110, 119, 207).withOpacity(0.4),
+                    Colors.transparent,
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
             ),
           ),
         ),
 
         // Top overlay: category buttons inside SafeArea
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Stack(
-              children: [
-                Align(
-                  alignment: Alignment.topLeft,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        localizations.whereToQuestion,
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontFamily: 'Gabarito',
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.left,
-                      ),
-                      const SizedBox(height: 16),
-                      CategoryButtons(
-                        labels: categories,
-                        selectedIndex: selected,
-                        onSelect: (i) =>
-                            _handleCategorySelect(i, localizations),
-                        iconBuilder: (label) {
-                          // Match against translated labels
-                          if (label == localizations.food) {
-                            return const Icon(
-                              Icons.fastfood,
-                              color: Colors.black,
-                            );
-                          } else if (label == localizations.firstAid) {
-                            return const Icon(
-                              Icons.local_hospital,
-                              color: Colors.black,
-                            );
-                          } else if (label == parkingLabel) {
-                            return const Icon(
-                              Icons.local_parking,
-                              color: Colors.black,
-                            );
-                          } else if (label == localizations.information) {
-                            return const Icon(Icons.place, color: Colors.black);
-                          } else {
-                            return const Icon(Icons.help, color: Colors.black);
-                          }
-                        },
-                      ),
-                    ],
+        // Align constrains this to only the top — otherwise SafeArea fills
+        // the entire Stack and swallows map touches below the buttons.
+        Align(
+          alignment: Alignment.topLeft,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    localizations.whereToQuestion,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontFamily: 'Gabarito',
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.left,
                   ),
-                ),
-                // Search button in top right
-              ],
+                  const SizedBox(height: 16),
+                  CategoryButtons(
+                    labels: categories,
+                    selectedIndex: selected,
+                    onSelect: (i) => _handleCategorySelect(i, localizations),
+                    iconBuilder: (label) {
+                      // Map translated label back to category ID
+                      String catId;
+                      if (label == localizations.food) {
+                        catId = 'food';
+                      } else if (label == localizations.firstAid) {
+                        catId = 'first_aid';
+                      } else if (label == parkingLabel) {
+                        catId = 'parking';
+                      } else if (label == localizations.information) {
+                        catId = 'department';
+                      } else {
+                        catId = label;
+                      }
+                      return Icon(
+                        POIStyle.getCategoryIcon(catId),
+                        color: Colors.black,
+                      );
+                    },
+                  ),
+                  if (widget.filterButton != null) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: widget.filterButton!,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),

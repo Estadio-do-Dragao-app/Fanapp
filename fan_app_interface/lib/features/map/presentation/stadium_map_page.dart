@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_compass/flutter_map_compass.dart';
+import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
-import 'dart:math' as math;
 import '../data/models/poi_model.dart';
 import '../data/models/node_model.dart';
 import '../data/models/edge_model.dart';
@@ -12,15 +14,15 @@ import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
 import '../data/services/saved_places_service.dart';
+import '../../../core/utils/poi_style.dart';
 
 import 'layers/floor_plan_layer.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
-import '../../navigation/data/services/user_position_service.dart';
 import '../../ticket/data/models/ticket_model.dart'; // Import TicketModel
 import '../../ticket/data/services/ticket_storage_service.dart'; // Import Storage
+
 import 'dart:async';
-import '../../../core/utils/geographic_utils.dart';
 import '../../../core/config/map_config.dart';
 
 /// Página principal do mapa interativo do estádio
@@ -90,9 +92,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
   double _userPositionX = 0.0;
   double _userPositionY = 0.0;
   int _userLevel = 0; // Guardar nível real do utilizador
-  String _userNodeId = 'N1';
-  bool _userPositionLoaded = false;
-
   // Estado
   int _currentFloor = 0;
   List<POIModel> _pois = [];
@@ -117,6 +116,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
   TicketModel? _userTicket;
   final TicketStorageService _ticketStorage = TicketStorageService();
 
+  // Stream para pedir ao plugin para centrar no GPS (parâmetro do CurrentLocationLayer)
+  final StreamController<double?> _alignPositionStreamController =
+      StreamController<double?>();
+
   @override
   void initState() {
     super.initState();
@@ -127,11 +130,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
     // Usar o piso inicial fornecido
     _currentFloor = widget.initialFloor;
     // Posição inicial: será carregada do UserPositionService
-    _userNodeId = 'N1';
     _userPositionX = 0.0;
     _userPositionY = 0.0;
     _userLevel = 0;
-    _userPositionLoaded = false;
 
     // Initialize blink animation for emergency mode
     _blinkController = AnimationController(
@@ -139,12 +140,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
       vsync: this,
     )..repeat(reverse: true);
 
+    // Initialize blink animation for emergency mode
+
     loadUserPosition(); // Carregar posição guardada
     _loadMapData();
   }
 
   @override
   void dispose() {
+    _alignPositionStreamController.close();
     _blinkController.dispose();
     _stopHeatmapUpdates();
     super.dispose();
@@ -165,19 +169,18 @@ class StadiumMapPageState extends State<StadiumMapPage>
         if (widget.isNavigating) return;
 
         print(
-          "[StadiumMapPage] ⚠️ Invalid position detected (${x}, ${y}). Resetting to center.",
+          "[StadiumMapPage] Invalid position detected (${x}, ${y}). Resetting to center.",
         );
         x = stadiumCenter.longitude;
         y = stadiumCenter.latitude;
       }
 
       print(
-        "[StadiumMapPage] 📥 Loading user position from service: $x, $y (Level ${position.level})",
+        "[StadiumMapPage] Loading user position from service: $x, $y (Level ${position.level})",
       );
       setState(() {
         _userPositionX = x;
         _userPositionY = y;
-        _userNodeId = position.nodeId;
         _userLevel = position.level; // Guardar nível real
 
         // Só atualizar _currentFloor a partir da posição guardada se solicitado E não estivermos em navegação
@@ -188,7 +191,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
             _loadMapData();
           }
         }
-        _userPositionLoaded = true;
       });
     }
   }
@@ -259,23 +261,23 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
   /// Public method to reload map data (called from parent)
   void reloadMapData() {
-    print("🔁 Reloading map data requested...");
+    print("Reloading map data requested...");
     _loadMapData();
   }
 
   Iterable<Marker> _buildTicketMarkers() sync* {
     print(
-      "🎫 Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}",
+      "Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}",
     );
     if (_userTicket == null || _userTicket!.seatNodeId == null) return;
 
     try {
-      print("🔍 Searching for seat node: ${_userTicket!.seatNodeId}");
+      print("Searching for seat node: ${_userTicket!.seatNodeId}");
       final seatNode = _nodes.firstWhere(
         (n) => n.id == _userTicket!.seatNodeId,
       );
       print(
-        "✅ Seat node found: ${seatNode.id} at level ${seatNode.level} (Current floor: $_currentFloor)",
+        "Seat node found: ${seatNode.id} at level ${seatNode.level} (Current floor: $_currentFloor)",
       );
 
       if (seatNode.level == _currentFloor) {
@@ -322,7 +324,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         );
       }
     } catch (e) {
-      print("❌ Error building ticket marker: $e");
+      print("Error building ticket marker: $e");
       // Ignore
     }
   }
@@ -354,7 +356,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
       // final savedPlaces = await SavedPlacesService.getSavedPlaces(); // Removed favorites
       final ticket = await _ticketStorage.getTicket(); // Carregar bilhete
       print(
-        "📥 Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
+        "Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
       );
 
       if (!mounted) return;
@@ -365,19 +367,19 @@ class StadiumMapPageState extends State<StadiumMapPage>
       // Se temos bilhete, carregar o nó do lugar especificamente (pois getAllNodes filtra seats)
       if (ticket != null && ticket.seatNodeId != null) {
         try {
-          print("💺 Fetching specific seat node: ${ticket.seatNodeId}");
+          print("Fetching specific seat node: ${ticket.seatNodeId}");
           final seatNode = await _mapService.getSeatById(ticket.seatNodeId!);
           if (seatNode != null) {
-            print("✅ Seat node fetched: ${seatNode.id}");
+            print("Seat node fetched: ${seatNode.id}");
             // Adicionar à lista de nós se ainda não existir
             if (!nodes.any((n) => n.id == seatNode.id)) {
               nodes.add(seatNode);
             }
           } else {
-            print("⚠️ Seat node not found in backend: ${ticket.seatNodeId}");
+            print("Seat node not found in backend: ${ticket.seatNodeId}");
           }
         } catch (e) {
-          print("❌ Error fetching seat node: $e");
+          print("Error fetching seat node: $e");
         }
       }
 
@@ -391,10 +393,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
         _isLoading = false;
       });
 
-      // Fazer zoom na posição do utilizador após carregar dados (apenas se não estiver em navegação)
-      if (!widget.isNavigating) {
-        _zoomToUserPosition();
-      }
+      // Centrar na posição GPS real via plugin (sempre, não só fora de navegação)
+      _zoomToUserPosition();
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -405,39 +405,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
   /// Faz zoom na posição atual do utilizador
   void _zoomToUserPosition() {
-    // Esperar um frame e um pequeno delay para garantir que o mapa está renderizado
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-
-      // Delay adicional para garantir que o FlutterMap está pronto
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (!mounted) return;
-
-      try {
-        // Se tem posição guardada válida (não é 0.0), usar essa
-        if (_userPositionLoaded &&
-            (_userPositionX != 0.0 || _userPositionY != 0.0)) {
-          final userLatLng = _convertToLatLng(_userPositionX, _userPositionY);
-
-          // Verificar se a posição carregada faz sentido no contexto atual
-          // Se for uma coordenada legada (ex: x=219.7, y=112.3 do estádio), ignoramos
-          if (stadiumBounds.contains(userLatLng)) {
-            _mapController.move(userLatLng, 20.0);
-          } else {
-            // Posicao antiga era do outro mapa - resetamos para o centro da UA
-            _mapController.move(stadiumCenter, 17.5);
-          }
-        } else if (_nodes.isNotEmpty) {
-          // Fallback: usar nó N1 ou primeiro nó
-          final userNode = _nodes.firstWhere(
-            (n) => n.id == _userNodeId,
-            orElse: () => _nodes.first,
-          );
-          final userLatLng = _convertToLatLng(userNode.x, userNode.y);
-          _mapController.move(userLatLng, 20.0);
-        }
-      } catch (e) {}
-    });
+    // Pede ao plugin para centrar na posição GPS real com zoom 18
+    _alignPositionStreamController.add(18);
   }
 
   /// Agora que o backend e Frontend usam GPS real, esta função
@@ -636,8 +605,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
                   children: [
                     IconButton(
                       tooltip: _isSelectedPOISaved
-                          ? 'Remover dos favoritos'
-                          : 'Adicionar aos favoritos',
+                          ? AppLocalizations.of(context)!.removeFromFavorites
+                          : AppLocalizations.of(context)!.addToFavorites,
                       onPressed: _toggleSelectedPOIFavorite,
                       icon: Icon(
                         _isSelectedPOISaved ? Icons.star : Icons.star_border,
@@ -648,7 +617,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Fechar',
+                      tooltip: AppLocalizations.of(context)!.close,
                       onPressed: _closePOIPanel,
                       icon: const Icon(
                         Icons.close,
@@ -664,8 +633,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
             // Route metrics
             if (isLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
                     SizedBox(
@@ -676,10 +645,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
                         color: Colors.white54,
                       ),
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
-                      'A calcular rota...',
-                      style: TextStyle(color: Colors.white54),
+                      AppLocalizations.of(context)!.calculatingRoute,
+                      style: const TextStyle(color: Colors.white54),
                     ),
                   ],
                 ),
@@ -691,11 +660,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
                 children: [
                   _buildInfoChip(
                     icon: Icons.directions_walk,
-                    label: '${(route.etaSeconds / 60).round()} min',
+                    label: AppLocalizations.of(
+                      context,
+                    )!.walkTime((route.etaSeconds / 60).round()),
                   ),
                   _buildInfoChip(
                     icon: Icons.straighten,
-                    label: '${route.distance.toStringAsFixed(0)} m',
+                    label: AppLocalizations.of(
+                      context,
+                    )!.distanceM(route.distance.round()),
                   ),
                   if ([
                         'wc',
@@ -708,7 +681,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
                       _selectedPOI!.name.toLowerCase().contains('farmácia'))
                     _buildInfoChip(
                       icon: Icons.group,
-                      label: '${route.waitTime?.round() ?? 0} min fila',
+                      label: AppLocalizations.of(
+                        context,
+                      )!.queueTime(route.waitTime?.round() ?? 0),
                     ),
                 ],
               ),
@@ -737,9 +712,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
                       }
                     : null,
                 icon: const Icon(Icons.navigation, color: Colors.white),
-                label: const Text(
-                  'Navegar',
-                  style: TextStyle(
+                label: Text(
+                  AppLocalizations.of(context)!.navigate,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -824,7 +799,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         minZoom: 14.0,
         maxZoom: 20.0,
         interactionOptions: const InteractionOptions(
-          flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+          flags: InteractiveFlag.all,
         ),
         onPositionChanged: widget.onPositionChanged,
       ),
@@ -863,35 +838,47 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
         // Camada de POIs (markers)
         _buildPOILayer(),
+
+        // Posição do utilizador (plugin gere GPS e permissões sozinho)
+        CurrentLocationLayer(
+          alignPositionStream: _alignPositionStreamController.stream,
+          alignPositionOnUpdate: widget.isNavigating
+              ? AlignOnUpdate.always
+              : AlignOnUpdate.never,
+          alignDirectionOnUpdate: AlignOnUpdate.never,
+        ),
+
+        // Compass do flutter_map_compass
+        if (!_isLoading && _errorMessage == null)
+          Positioned(
+            left: 16,
+            top: MediaQuery.of(context).padding.top + 130,
+            child: const MapCompass.cupertino(hideIfRotatedNorth: false),
+          ),
       ],
     );
   }
 
-  /// Camada de heatmap com retângulos coloridos baseados na congestão
+  /// Camada de heatmap usando o plugin flutter_map_heatmap
   Widget _buildHeatmapLayer() {
     if (_heatmapData == null || _heatmapData!.sections.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final polygons = <Polygon>[];
-    const cellSize =
-        50; // Tamanho da célula do grid (50x50 unidades, igual ao simulator)
+    final data = <WeightedLatLng>[];
 
     _heatmapData!.sections.forEach((cellId, cellData) {
       // Filtrar pelo piso atual
       if (cellData.level != _currentFloor) return;
 
-      // Extrair coordenadas do cellId
-      // Suporta formato antigo (cell_X_Y) e novo (cell_L_X_Y)
+      // Extrair coordenadas do cellId (cell_X_Y ou cell_L_X_Y)
       final parts = cellId.split('_');
       int? x, y;
 
       if (parts.length == 3 && parts[0] == 'cell') {
-        // Formato antigo: cell_X_Y
         x = int.tryParse(parts[1]);
         y = int.tryParse(parts[2]);
       } else if (parts.length == 4 && parts[0] == 'cell') {
-        // Novo formato: cell_L_X_Y
         x = int.tryParse(parts[2]);
         y = int.tryParse(parts[3]);
       } else {
@@ -900,94 +887,21 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
       if (x == null || y == null) return;
 
-      // Cor baseada no nível de congestão
-      final color = _getCongestionColor(cellData.congestionLevel);
-
-      // Criar retângulo para a célula (cantos do quadrado)
-      // Como agora x/y representam Lat/Lng
-      // cellsize deixa de ser 50(pixeis) -> 0.0005 graus (aprox ~50 metros)
-      const cellSizeLat = 0.0005;
-      const cellSizeLng = 0.0005;
-
-      final topLeft = LatLng(
-        y.toDouble() + cellSizeLat / 2,
-        x.toDouble() - cellSizeLng / 2,
-      );
-      final topRight = LatLng(
-        y.toDouble() + cellSizeLat / 2,
-        x.toDouble() + cellSizeLng / 2,
-      );
-      final bottomRight = LatLng(
-        y.toDouble() - cellSizeLat / 2,
-        x.toDouble() + cellSizeLng / 2,
-      );
-      final bottomLeft = LatLng(
-        y.toDouble() - cellSizeLat / 2,
-        x.toDouble() - cellSizeLng / 2,
-      );
-
-      polygons.add(
-        Polygon(
-          points: [topLeft, topRight, bottomRight, bottomLeft],
-          color: color.withOpacity(0.5),
-          borderColor: color.withOpacity(0.7),
-          borderStrokeWidth: 1,
+      // Ponto com peso = nível de congestão
+      data.add(
+        WeightedLatLng(
+          LatLng(y.toDouble(), x.toDouble()),
+          cellData.congestionLevel,
         ),
       );
     });
 
-    return PolygonLayer(polygons: polygons);
-  }
+    if (data.isEmpty) return const SizedBox.shrink();
 
-  /// Converte ID de célula (cell_X_Y ou cell_L_X_Y) para coordenadas LatLng
-  LatLng? _cellIdToLatLng(String cellId) {
-    // Formato esperado: cell_X_Y ou cell_L_X_Y
-    final parts = cellId.split('_');
-    int? x, y;
-
-    if (parts.length == 3 && parts[0] == 'cell') {
-      x = int.tryParse(parts[1]);
-      y = int.tryParse(parts[2]);
-    } else if (parts.length == 4 && parts[0] == 'cell') {
-      x = int.tryParse(parts[2]);
-      y = int.tryParse(parts[3]);
-    } else {
-      return null;
-    }
-
-    if (x == null || y == null) return null;
-
-    // As coordenadas X,Y já são absolutas (ex: 125, 425)
-    // Não precisa multiplicar, usar diretamente
-    return _convertToLatLng(x.toDouble(), y.toDouble());
-  }
-
-  /// Retorna cor baseada no nível de congestão (0.0-1.0)
-  /// Gradiente ajustado para valores realistas (0-30%):
-  /// verde → amarelo → laranja → vermelho
-  Color _getCongestionColor(double level) {
-    if (level <= 0.05) {
-      // 0-5%: Verde claro
-      return const Color(0xFF4CAF50);
-    } else if (level <= 0.10) {
-      // 5-10%: Verde amarelado
-      return const Color(0xFF8BC34A);
-    } else if (level <= 0.15) {
-      // 10-15%: Amarelo
-      return const Color(0xFFFFEB3B);
-    } else if (level <= 0.20) {
-      // 15-20%: Laranja claro
-      return const Color(0xFFFF9800);
-    } else if (level <= 0.25) {
-      // 20-25%: Laranja escuro
-      return const Color(0xFFFF5722);
-    } else if (level <= 0.30) {
-      // 25-30%: Vermelho
-      return const Color(0xFFF44336);
-    } else {
-      // >30%: Vermelho escuro
-      return const Color(0xFFB71C1C);
-    }
+    return HeatMapLayer(
+      heatMapDataSource: InMemoryHeatMapDataSource(data: data),
+      heatMapOptions: HeatMapOptions(radius: 30, minOpacity: 0.1),
+    );
   }
 
   Widget _buildRouteLayer() {
@@ -1065,12 +979,18 @@ class StadiumMapPageState extends State<StadiumMapPage>
           polylines: segments.map((points) {
             return Polyline(
               points: points,
-              strokeWidth: 4.0,
+              strokeWidth: 7.0,
               color: widget.isEmergency
-                  ? const Color(0xFFBD453D).withOpacity(opacity)
-                  : Colors.blue,
-              borderColor: Colors.white,
-              borderStrokeWidth: 1.0,
+                  ? Color.lerp(
+                      const Color(0xFFE53935),
+                      const Color(0xFFFF7043),
+                      opacity,
+                    )!
+                  : const Color(0xFF4285F4),
+              borderColor: widget.isEmergency
+                  ? const Color(0xFF8B1A1A)
+                  : const Color(0xFF1A56DB),
+              borderStrokeWidth: 2.0,
             );
           }).toList(),
         );
@@ -1099,9 +1019,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
       polylines: [
         Polyline(
           points: points,
-          strokeWidth: 5.0,
-          color: const Color(0xFF22C55E), // green-500
-          borderColor: Colors.white,
+          strokeWidth: 6.0,
+          color: const Color(0xFF22C55E),
+          borderColor: const Color(0xFF166534),
           borderStrokeWidth: 1.5,
         ),
       ],
@@ -1109,9 +1029,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   Widget _buildPOILayer() {
-    // Adicionar marcador da posição do utilizador (sempre visível)
-    final userMarkers = <Marker>[];
-
     // OTIMIZAÇÃO: Esconder POIs quando zoom está muito afastado (< 17.5)
     // Exceto durante navegação onde temos apenas o destino
     // NOTA: Usar try-catch porque o MapController pode não estar pronto na primeira renderização
@@ -1150,145 +1067,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
       }
     }
 
-    // Usar o userMarkers já definido acima
-
-    if (widget.isNavigating && widget.userPosition != null) {
-      // Modo Navegação: Usar posição dinâmica
-      // Só mostrar se o utilizador estiver no piso atual visualizado
-      // widget.initialFloor segue o nível do utilizador durante a navegação
-      if (widget.initialFloor == _currentFloor) {
-        // O mapa roda pelo heading, então precisamos contra-rodar o ícone
-        // para que a seta fique SEMPRE a apontar para CIMA no ecrã
-        final headingRadians = (widget.userHeading ?? 0) * (math.pi / 180.0);
-
-        userMarkers.add(
-          Marker(
-            point: widget.userPosition!,
-            width: 60,
-            height: 60,
-            child: AnimatedBuilder(
-              animation: _blinkController,
-              builder: (context, child) {
-                final double opacity = widget.isEmergency
-                    ? 0.7 + (_blinkController.value * 0.3)
-                    : 1.0;
-
-                return Transform.rotate(
-                  angle:
-                      -headingRadians +
-                      math.pi, // Contra-rodar + 180° para correção
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: widget.isEmergency
-                          ? const Color(0xFFBD453D).withOpacity(opacity)
-                          : Colors.blueAccent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.navigation,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      }
-    } else if ((_nodes.isNotEmpty || _userPositionLoaded) &&
-        _userLevel == _currentFloor) {
-      // Modo Estático: Usar posição guardada do utilizador APENAS no mesmo piso
-      LatLng userLatLng;
-
-      if (_userPositionLoaded &&
-          (_userPositionX != 0.0 || _userPositionY != 0.0)) {
-        // Usar posição guardada
-        userLatLng = _convertToLatLng(_userPositionX, _userPositionY);
-      } else {
-        // Fallback: usar nó
-        final userNode = _nodes.firstWhere(
-          (n) => n.id == _userNodeId,
-          orElse: () => _nodes.first,
-        );
-        // Verificar nível do nó também? Assume-se que _userLevel está correto.
-        userLatLng = _convertToLatLng(userNode.x, userNode.y);
-      }
-
-      userMarkers.add(
-        Marker(
-          point: userLatLng,
-          width: 50,
-          height: 50,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.blue,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.my_location, color: Colors.white, size: 30),
-          ),
-        ),
-      );
-    }
-
-    // Calcular posição do utilizador para detetar sobreposição
-    LatLng? currentUserLatLng;
-    if (widget.isNavigating && widget.userPosition != null) {
-      currentUserLatLng = widget.userPosition;
-    } else if (_userPositionLoaded &&
-        (_userPositionX != 0.0 || _userPositionY != 0.0)) {
-      currentUserLatLng = _convertToLatLng(_userPositionX, _userPositionY);
-    }
-
     final poiMarkers = poisToShow.map<Marker>((POIModel poi) {
       final position = _convertToLatLng(poi.x, poi.y);
       final isHighlighted = widget.highlightedPOI?.id == poi.id;
 
-      // Detetar sobreposição com o user (< 15m)
-      // e evitar deslocar POIs quando o utilizador está praticamente em cima do destino.
-      double? userDistanceMeters;
-      if (currentUserLatLng != null) {
-        userDistanceMeters = GeographicUtils.calculateDistance(
-          position.longitude,
-          position.latitude,
-          currentUserLatLng.longitude,
-          currentUserLatLng.latitude,
-        );
-      }
-
-      // Do not displace the active destination marker.
-      // A fixed pixel offset looks like the marker drifts when zooming out.
-      final isNearUser =
-          userDistanceMeters != null && userDistanceMeters < 15.0;
-      final isPracticallySameSpot =
-          userDistanceMeters != null && userDistanceMeters < 5.0;
-      final shouldShiftForOverlap =
-          isNearUser && !isHighlighted && !isPracticallySameSpot;
-
       return Marker(
         point: position,
         width: isHighlighted ? 60 : 50,
-        height: shouldShiftForOverlap ? 70 : (isHighlighted ? 60 : 50),
-        // Quando perto do user, desloca o POI para cima para não sobrepor
-        alignment: shouldShiftForOverlap
-            ? const Alignment(0.0, -1.5) // Sobe o marcador
-            : Alignment.center,
+        height: isHighlighted ? 60 : 50,
+        alignment: Alignment.center,
         child: GestureDetector(
           onTap: widget.isNavigating
               ? (widget.onTapPOI != null ? () => widget.onTapPOI!(poi) : null)
@@ -1299,7 +1086,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
               Container(
                 padding: EdgeInsets.all(isHighlighted ? 10 : 8),
                 decoration: BoxDecoration(
-                  color: _getPOIColor(poi.category),
+                  color: POIStyle.getColor(poi.category, name: poi.name),
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: isHighlighted ? Colors.yellow : Colors.white,
@@ -1314,32 +1101,24 @@ class StadiumMapPageState extends State<StadiumMapPage>
                   ],
                 ),
                 child: Icon(
-                  _getPOIIcon(poi.category),
+                  POIStyle.getIcon(poi.category, name: poi.name),
                   color: Colors.white,
                   size: isHighlighted ? 24 : 20,
                 ),
               ),
-              // Quando perto do user, mostra uma setinha a indicar a posição real
-              if (shouldShiftForOverlap)
-                const Icon(Icons.arrow_drop_down, color: Colors.grey, size: 16),
             ],
           ),
         ),
       );
     }).toList();
 
-    // Dois MarkerLayers separados:
-    // 1) User markers — rodam com o mapa (seta de navegação)
-    // 2) POI markers — ficam sempre alinhados ao ecrã (rotate: false)
     return Stack(
       children: [
-        // POIs: sempre verticais, alinhados ao ecrã
+        // POIs: sempre verticais, alinhados ao ecrã (rotate: true)
         MarkerLayer(
-          rotate: false,
+          rotate: true,
           markers: [..._buildTicketMarkers(), ...poiMarkers],
         ),
-        // User: roda com o mapa (navegação), renderizado por cima dos POIs
-        MarkerLayer(markers: userMarkers),
       ],
     );
   }
@@ -1374,83 +1153,5 @@ class StadiumMapPageState extends State<StadiumMapPage>
         ),
       ),
     );
-  }
-
-  Color _getPOIColor(String category) {
-    switch (category.toLowerCase()) {
-      case 'restroom':
-      case 'wc':
-        return Colors.blue.shade700;
-      case 'food':
-      case 'cafe':
-      case 'restaurant':
-        return Colors.orange.shade700;
-      case 'bar':
-        return Colors.purple.shade700;
-      case 'emergency_exit':
-        return Colors.red.shade700;
-      case 'first_aid':
-        return Colors.green.shade700;
-      case 'information':
-        return Colors.cyan.shade700;
-      case 'gate':
-        return Colors.indigo.shade700;
-      case 'merchandise':
-      case 'shop':
-        return Colors.pink.shade700;
-      case 'stairs':
-      case 'ramp':
-        return Colors.amber.shade700;
-      case 'entrance':
-        return Colors.teal.shade700;
-      case 'seat':
-        return Colors.green.shade700;
-      case 'library':
-        return Colors.brown.shade700;
-      case 'parking':
-        return Colors.blueGrey.shade700;
-      default:
-        return Colors.grey.shade700;
-    }
-  }
-
-  IconData _getPOIIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'restroom':
-      case 'wc':
-        return Icons.wc;
-      case 'food':
-      case 'restaurant':
-        return Icons.restaurant;
-      case 'cafe':
-        return Icons.local_cafe;
-      case 'bar':
-        return Icons.local_bar;
-      case 'emergency_exit':
-        return Icons.exit_to_app;
-      case 'first_aid':
-        return Icons.local_hospital;
-      case 'information':
-        return Icons.info;
-      case 'gate':
-        return Icons.door_front_door;
-      case 'merchandise':
-      case 'shop':
-        return Icons.store;
-      case 'stairs':
-        return Icons.stairs;
-      case 'ramp':
-        return Icons.accessible;
-      case 'entrance':
-        return Icons.login;
-      case 'seat':
-        return Icons.event_seat;
-      case 'library':
-        return Icons.local_library;
-      case 'parking':
-        return Icons.local_parking;
-      default:
-        return Icons.place;
-    }
   }
 }

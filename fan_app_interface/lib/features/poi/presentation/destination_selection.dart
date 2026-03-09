@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math';
 import '../../map/presentation/stadium_map_page.dart';
@@ -10,6 +10,8 @@ import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
+import '../../../core/utils/poi_style.dart';
+import '../../../core/utils/geographic_utils.dart';
 import '../../map/data/services/waittime_cache.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 
@@ -74,12 +76,11 @@ class DestinationSelectionPage extends StatefulWidget {
       _DestinationSelectionPageState();
 }
 
-class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
+class _DestinationSelectionPageState extends State<DestinationSelectionPage>
+    with TickerProviderStateMixin {
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
-  final MapController _mapController = MapController();
-
-  static const String userNodeId = 'N1';
+  late final AnimatedMapController _animatedMapController;
 
   int? selectedIndex;
   List<POIWithRoute> _poisWithRoutes = [];
@@ -105,7 +106,18 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
   @override
   void initState() {
     super.initState();
+    _animatedMapController = AnimatedMapController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
     _loadPOIs();
+  }
+
+  @override
+  void dispose() {
+    _animatedMapController.dispose();
+    super.dispose();
   }
 
   String _normalizeCategory(String backendCategory) {
@@ -162,28 +174,14 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       final allPois = await _mapService.getAllPOIs();
       final allNodes = await _mapService.getAllNodes();
 
-      // Carregar posição do utilizador do serviço
-      final savedPosition = await UserPositionService.getPosition();
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
-        _userX = savedPosition.x;
-        _userY = savedPosition.y;
-        _userLevel = savedPosition.level; // Usar nível guardado
-        print(
-          '[DestinationSelection] 📍 Usando posição guardada: ($_userX, $_userY, level=$_userLevel)',
-        );
-      } else {
-        // Fallback para N1
-        final userNode = allNodes.firstWhere(
-          (n) => n.id == userNodeId,
-          orElse: () => allNodes.first,
-        );
-        _userX = userNode.x;
-        _userY = userNode.y;
-        _userLevel = userNode.level;
-        print(
-          '[DestinationSelection] 📍 Fallback para N1: ($_userX, $_userY, level=$_userLevel)',
-        );
-      }
+      // Carregar posição real do utilizador (GPS ou Saved)
+      final userPos = await GeographicUtils.getCurrentUserPosition();
+      _userX = userPos.x;
+      _userY = userPos.y;
+      _userLevel = userPos.level;
+      print(
+        '[DestinationSelection] Usando posição real/guardada: ($_userX, $_userY, level=$_userLevel)',
+      );
 
       _allNodes = allNodes;
 
@@ -388,34 +386,12 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       if (maxDiff > 0.002) zoom = 16.5;
       if (maxDiff > 0.003) zoom = 16.0;
 
-      _mapController.move(LatLng(centerLat, centerLng), zoom);
+      _animatedMapController.animateTo(
+        dest: LatLng(centerLat, centerLng),
+        zoom: zoom,
+      );
     } catch (e) {
       print('[DestinationSelection] Erro ao fazer zoom: $e');
-    }
-  }
-
-  static IconData getCategoryIcon(String categoryId) {
-    switch (categoryId.toLowerCase()) {
-      case 'seat':
-        return Icons.event_seat;
-      case 'wc':
-        return Icons.wc;
-      case 'food':
-        return Icons.fastfood;
-      case 'bar':
-        return Icons.local_bar;
-      case 'parking':
-        return Icons.local_parking;
-      case 'exit':
-        return Icons.meeting_room;
-      case 'first_aid':
-        return Icons.local_hospital;
-      case 'information':
-        return Icons.info;
-      case 'merchandising':
-        return Icons.store;
-      default:
-        return Icons.place;
     }
   }
 
@@ -441,7 +417,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
             child: Stack(
               children: [
                 StadiumMapPage(
-                  mapController: _mapController,
+                  mapController: _animatedMapController.mapController,
                   highlightedRoute: _selectedRoute,
                   highlightedPOI: selectedPOI,
                   showAllPOIs: false,
@@ -669,7 +645,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
               child: Row(
                 children: [
                   Icon(
-                    getCategoryIcon(widget.categoryId),
+                    POIStyle.getCategoryIcon(widget.categoryId),
                     color: Colors.white,
                     size: 32,
                   ),

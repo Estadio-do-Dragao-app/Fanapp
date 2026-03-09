@@ -80,7 +80,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       }
 
       print(
-        '[EmergencyAlert] 📍 Posição do utilizador: ($startX, $startY, level=$startLevel)',
+        '[EmergencyAlert] Posição do utilizador: ($startX, $startY, level=$startLevel)',
       );
 
       // Encontrar saída de emergência mais próxima
@@ -93,7 +93,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
           .toList();
 
       if (exits.isEmpty) {
-        print('[EmergencyAlert] ⚠️ Nenhuma saída encontrada!');
+        print('[EmergencyAlert] Nenhuma saída encontrada!');
         Navigator.of(context).pushReplacementNamed('/map');
         return;
       }
@@ -113,7 +113,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         final totalDistance = distance + levelPenalty;
 
         print(
-          '[EmergencyAlert] 🚪 Saída ${exit.name} (${exit.id}): dist=$distance, level=${exit.level}, total=$totalDistance',
+          '[EmergencyAlert] Saída ${exit.name} (${exit.id}): dist=$distance, level=${exit.level}, total=$totalDistance',
         );
 
         if (totalDistance < minDistance) {
@@ -128,7 +128,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       }
 
       print(
-        '[EmergencyAlert] ✅ Saída mais próxima: ${nearestExit.name} (${nearestExit.id})',
+        '[EmergencyAlert] Saída mais próxima: ${nearestExit.name} (${nearestExit.id})',
       );
 
       final route = await _routingService.getRouteToPOI(
@@ -155,7 +155,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         );
       }
     } catch (e) {
-      print('[EmergencyAlert] ❌ Erro ao calcular rota: $e');
+      print('[EmergencyAlert] Erro ao calcular rota: $e');
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/map');
       }

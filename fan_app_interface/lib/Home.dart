@@ -186,7 +186,7 @@ class _HomeState extends State<Home> {
           ),
           // Filter button - top right below navbar
           Positioned(
-            top: MediaQuery.of(context).padding.top + 100,
+            top: MediaQuery.of(context).padding.top + 130,
             right: 16,
             child: FilterButton(
               key: _filterButtonKey,

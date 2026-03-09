@@ -142,5 +142,9 @@
   "defaultPoiDescription": "Ponto de interesse",
   "invalidQRFormat": "Formato de QR code inválido",
   "invalidQRSignature": "QR code inválido ou adulterado",
-  "connectionError": "Erro de conexão. Verifique a sua internet."
+  "connectionError": "Erro de conexão. Verifique a sua internet.",
+  "addToFavorites": "Adicionar aos favoritos",
+  "removeFromFavorites": "Remover dos favoritos",
+  "calculatingRoute": "A calcular rota...",
+  "close": "Fechar"
 }

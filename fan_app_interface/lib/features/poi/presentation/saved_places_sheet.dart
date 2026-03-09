@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../map/data/models/poi_model.dart';
+import '../../../core/utils/poi_style.dart';
 import '../../map/data/services/saved_places_service.dart';
 
 class SavedPlacesSheet extends StatefulWidget {
@@ -154,7 +155,10 @@ class _SavedPlacesSheetState extends State<SavedPlacesSheet> {
                                   0xFF929AD4,
                                 ).withValues(alpha: 0.2),
                                 child: Icon(
-                                  _getIconForCategory(poi.category),
+                                  POIStyle.getIcon(
+                                    poi.category,
+                                    name: poi.name,
+                                  ),
                                   color: Colors.white,
                                 ),
                               ),
@@ -187,26 +191,5 @@ class _SavedPlacesSheetState extends State<SavedPlacesSheet> {
         );
       },
     );
-  }
-
-  IconData _getIconForCategory(String category) {
-    switch (category) {
-      case 'wc':
-        return Icons.wc;
-      case 'food':
-      case 'restaurant':
-      case 'bar':
-      case 'bar_p':
-        return Icons.fastfood;
-      case 'store':
-      case 'shop':
-        return Icons.store;
-      case 'ticket':
-        return Icons.local_activity;
-      case 'seat':
-        return Icons.event_seat;
-      default:
-        return Icons.place;
-    }
   }
 }

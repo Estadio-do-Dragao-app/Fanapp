@@ -106,15 +106,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteTicket => 'Delete Ticket';
 
   @override
-  String get deleteTicketConfirm =>
-      'Are you sure you want to delete this ticket?';
+  String get deleteTicketConfirm => 'Are you sure you want to delete this ticket?';
 
   @override
   String get noTicketScanned => 'No ticket scanned';
 
   @override
-  String get noTicketScannedMessage =>
-      'Please scan your ticket QR code to navigate to your seat.';
+  String get noTicketScannedMessage => 'Please scan your ticket QR code to navigate to your seat.';
 
   @override
   String get scanNow => 'Scan Now';
@@ -237,4 +235,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectionError => 'Connection error. Check your internet.';
+
+  @override
+  String get addToFavorites => 'Add to favorites';
+
+  @override
+  String get removeFromFavorites => 'Remove from favorites';
+
+  @override
+  String get calculatingRoute => 'Calculating route...';
+
+  @override
+  String get close => 'Close';
 }

@@ -106,15 +106,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deleteTicket => 'Apagar Bilhete';
 
   @override
-  String get deleteTicketConfirm =>
-      'Tem a certeza que quer apagar este bilhete?';
+  String get deleteTicketConfirm => 'Tem a certeza que quer apagar este bilhete?';
 
   @override
   String get noTicketScanned => 'Nenhum bilhete digitalizado';
 
   @override
-  String get noTicketScannedMessage =>
-      'Por favor digitalize o código QR do seu bilhete para navegar até ao seu lugar.';
+  String get noTicketScannedMessage => 'Por favor digitalize o código QR do seu bilhete para navegar até ao seu lugar.';
 
   @override
   String get scanNow => 'Digitalizar Agora';
@@ -237,4 +235,16 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectionError => 'Erro de conexão. Verifique a sua internet.';
+
+  @override
+  String get addToFavorites => 'Adicionar aos favoritos';
+
+  @override
+  String get removeFromFavorites => 'Remover dos favoritos';
+
+  @override
+  String get calculatingRoute => 'A calcular rota...';
+
+  @override
+  String get close => 'Fechar';
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:latlong2/latlong.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
@@ -43,14 +43,8 @@ class NavigationPage extends StatefulWidget {
 class _NavigationPageState extends State<NavigationPage>
     with TickerProviderStateMixin {
   late NavigationController _controller;
-  final MapController _mapController = MapController();
+  late final AnimatedMapController _animatedMapController;
   final RoutingService _routingService = RoutingService();
-
-  // Controlador de animação para movimento suave do mapa
-  late AnimationController _animationController;
-  Animation<double>? _latAnimation;
-  Animation<double>? _lngAnimation;
-  Animation<double>? _rotAnimation;
 
   bool _showHeatmap = false;
 
@@ -71,13 +65,13 @@ class _NavigationPageState extends State<NavigationPage>
   void initState() {
     super.initState();
 
-    // FIX 2: AnimationControllers initialized before _controller so vsync is ready
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 100),
+    // Plugin: controlador com animações suaves
+    _animatedMapController = AnimatedMapController(
       vsync: this,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
     );
 
-    // FIX 3: _controller initialized BEFORE addListener (was the other way around)
     _controller = NavigationController(
       route: widget.route,
       destination: widget.destination,
@@ -87,19 +81,6 @@ class _NavigationPageState extends State<NavigationPage>
       initialLevel: widget.initialLevel,
     );
     _controller.addListener(_onNavigationUpdate);
-
-    // Configurar listener da animação
-    _animationController.addListener(() {
-      if (_latAnimation != null &&
-          _lngAnimation != null &&
-          _rotAnimation != null) {
-        _mapController.moveAndRotate(
-          LatLng(_latAnimation!.value, _lngAnimation!.value),
-          20.0,
-          _rotAnimation!.value,
-        );
-      }
-    });
 
     // Escutar eventos de reroute
     _controller.rerouteStream.listen((event) {
@@ -118,11 +99,9 @@ class _NavigationPageState extends State<NavigationPage>
 
   @override
   void dispose() {
-    // FIX 4: remove listener and dispose controller BEFORE disposing AnimationControllers
-    // to avoid callbacks firing on disposed vsync objects
     _controller.removeListener(_onNavigationUpdate);
     _controller.dispose();
-    _animationController.dispose();
+    _animatedMapController.dispose();
     super.dispose();
   }
 
@@ -167,40 +146,17 @@ class _NavigationPageState extends State<NavigationPage>
     final tracker = _controller.tracker;
     final userLat = tracker.currentY;
     final userLng = tracker.currentX;
+    final targetRot = _controller.heading - 180.0;
 
     try {
-      final targetRot = _controller.heading - 180.0;
-      _animateMapTo(LatLng(userLat, userLng), targetRot);
+      _animatedMapController.animateTo(
+        dest: LatLng(userLat, userLng),
+        zoom: 20.0,
+        rotation: targetRot,
+      );
     } catch (e) {
       // Mapa ainda não renderizado, ignorar
     }
-  }
-
-  void _animateMapTo(LatLng destLocation, double destRotation) {
-    if (!mounted) return;
-
-    final startLat = _mapController.camera.center.latitude;
-    final startLng = _mapController.camera.center.longitude;
-    final startRot = _mapController.camera.rotation;
-
-    double diff = (destRotation - startRot + 180) % 360 - 180;
-    final adjustedDestRot = startRot + diff;
-
-    _latAnimation = Tween<double>(begin: startLat, end: destLocation.latitude)
-        .animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.linear),
-        );
-    _lngAnimation = Tween<double>(begin: startLng, end: destLocation.longitude)
-        .animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.linear),
-        );
-    _rotAnimation = Tween<double>(begin: startRot, end: adjustedDestRot)
-        .animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-        );
-
-    _animationController.reset();
-    _animationController.forward();
   }
 
   Future<void> _endNavigation() async {
@@ -218,7 +174,7 @@ class _NavigationPageState extends State<NavigationPage>
     }
 
     // Pause movement immediately while user decides
-    _controller.pauseAutoNavigation();
+    _controller.pauseGpsTracking();
 
     RouteModel? route;
     try {
@@ -232,7 +188,7 @@ class _NavigationPageState extends State<NavigationPage>
     } catch (e) {}
 
     if (!mounted) {
-      _controller.resumeAutoNavigation();
+      _controller.resumeGpsTracking();
       return;
     }
 
@@ -273,7 +229,7 @@ class _NavigationPageState extends State<NavigationPage>
       // Sheet dismissed without navigating — clear preview and resume original
       if (mounted) {
         setState(() => _previewRoute = null);
-        _controller.resumeAutoNavigation();
+        _controller.resumeGpsTracking();
       }
     });
   }
@@ -307,7 +263,7 @@ class _NavigationPageState extends State<NavigationPage>
             StadiumMapPage(
               highlightedRoute: _controller.route,
               highlightedPOI: widget.destination,
-              mapController: _mapController,
+              mapController: _animatedMapController.mapController,
               isNavigating: true,
               userPosition: userPosition,
               userHeading: _controller.heading,
@@ -429,7 +385,7 @@ class _NavigationPageState extends State<NavigationPage>
                     }
 
                     try {
-                      _controller.pauseAutoNavigation();
+                      _controller.pauseGpsTracking();
 
                       final currentX = _controller.tracker.currentX;
                       final currentY = _controller.tracker.currentY;

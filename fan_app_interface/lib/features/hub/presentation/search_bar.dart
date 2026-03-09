@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import '../../map/data/models/poi_model.dart';
+import '../../../core/utils/poi_style.dart';
 import '../../map/data/services/map_service.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
@@ -36,12 +37,14 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
   Future<void> _loadPOIs() async {
     try {
       final pois = await _mapService.getAllPOIs();
+      if (!mounted) return;
       setState(() {
         _allPOIs = pois;
         _isLoading = false;
       });
     } catch (e) {
       print('[SearchBar] Erro ao carregar POIs: $e');
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
@@ -78,13 +81,33 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         return FractionallySizedBox(
           heightFactor: 1.0,
           child: Container(
-            color: const Color(0xFF161A3E),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF1E2352), Color(0xFF161A3E)],
+              ),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(30),
+                topRight: Radius.circular(30),
+              ),
+            ),
             child: Column(
               children: [
+                // Drag handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 4),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
                 // Search Bar
                 Container(
                   height: 68,
-                  margin: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  margin: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       begin: Alignment.topLeft,
@@ -220,7 +243,10 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                                     0xFF929AD4,
                                   ).withValues(alpha: 0.2),
                                   child: Icon(
-                                    _getCategoryIcon(poi.category),
+                                    POIStyle.getIcon(
+                                      poi.category,
+                                      name: poi.name,
+                                    ),
                                     color: textColor,
                                   ),
                                 ),
@@ -254,27 +280,6 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         );
       },
     );
-  }
-
-  IconData _getCategoryIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'restroom':
-        return Icons.wc;
-      case 'food':
-      case 'bar':
-      case 'restaurant':
-        return Icons.restaurant;
-      case 'emergency_exit':
-        return Icons.exit_to_app;
-      case 'first_aid':
-        return Icons.local_hospital;
-      case 'information':
-        return Icons.info;
-      case 'merchandise':
-        return Icons.shopping_bag;
-      default:
-        return Icons.place;
-    }
   }
 
   String _getCategoryName(BuildContext context, String category) {
