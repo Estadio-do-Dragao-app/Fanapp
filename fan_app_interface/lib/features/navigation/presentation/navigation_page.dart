@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:latlong2/latlong.dart';
@@ -61,6 +62,9 @@ class _NavigationPageState extends State<NavigationPage>
   // Preview route to show when selecting a new destination mid-navigation
   RouteModel? _previewRoute;
 
+  // Timer to resume user tracking after 5 seconds of inactivity
+  Timer? _idleTimer;
+
   @override
   void initState() {
     super.initState();
@@ -99,6 +103,7 @@ class _NavigationPageState extends State<NavigationPage>
 
   @override
   void dispose() {
+    _idleTimer?.cancel();
     _controller.removeListener(_onNavigationUpdate);
     _controller.dispose();
     _animatedMapController.dispose();
@@ -146,13 +151,11 @@ class _NavigationPageState extends State<NavigationPage>
     final tracker = _controller.tracker;
     final userLat = tracker.currentY;
     final userLng = tracker.currentX;
-    final targetRot = _controller.heading - 180.0;
 
     try {
       _animatedMapController.animateTo(
         dest: LatLng(userLat, userLng),
         zoom: 20.0,
-        rotation: targetRot,
       );
     } catch (e) {
       // Mapa ainda não renderizado, ignorar
@@ -265,6 +268,7 @@ class _NavigationPageState extends State<NavigationPage>
               highlightedPOI: widget.destination,
               mapController: _animatedMapController.mapController,
               isNavigating: true,
+              isFollowingUser: _isFollowingUser,
               userPosition: userPosition,
               userHeading: _controller.heading,
               routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
@@ -274,12 +278,30 @@ class _NavigationPageState extends State<NavigationPage>
               onTapPOI: widget.isEmergency ? null : _showSwitchDestinationSheet,
               previewRoute: _previewRoute,
               onPositionChanged: (camera, hasGesture) {
-                if (hasGesture && _isFollowingUser) {
-                  print(
-                    "[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.",
-                  );
-                  setState(() {
-                    _isFollowingUser = false;
+                if (hasGesture) {
+                  // Cancel any existing idle timer
+                  _idleTimer?.cancel();
+
+                  if (_isFollowingUser) {
+                    print(
+                      "[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.",
+                    );
+                    setState(() {
+                      _isFollowingUser = false;
+                    });
+                  }
+
+                  // Start a new 5-second timer to auto-recenter
+                  _idleTimer = Timer(const Duration(seconds: 5), () {
+                    if (mounted && !_isFollowingUser) {
+                      print(
+                        "[NavigationPage] ⏳ 5 seconds of inactivity. Auto-resuming follow mode.",
+                      );
+                      setState(() {
+                        _isFollowingUser = true;
+                      });
+                      _followUserPosition();
+                    }
                   });
                 }
               },

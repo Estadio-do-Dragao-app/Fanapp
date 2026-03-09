@@ -422,6 +422,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                   highlightedPOI: selectedPOI,
                   showAllPOIs: false,
                   showOtherPOIs: false,
+                  interactivePOIs: false,
                 ),
                 if (_isCalculatingSelectedRoute)
                   Positioned(

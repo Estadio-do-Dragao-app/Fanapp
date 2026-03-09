@@ -293,15 +293,6 @@ class _HomeState extends State<Home> {
             ),
           if (!_isPOIPanelOpen)
             Positioned(
-              bottom: 88,
-              right: 16,
-              child: MenuButton(
-                icon: Icons.warning_amber_rounded,
-                onTap: _openEmergencyTestFlow,
-              ),
-            ),
-          if (!_isPOIPanelOpen)
-            Positioned(
               bottom: 16,
               right: 16,
               child: MenuButton(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../map/presentation/stadium_map_page.dart';
 import '../../map/data/models/poi_model.dart';
-import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
@@ -9,6 +8,7 @@ import '../../navigation/data/services/user_position_service.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'dart:math';
 import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 
 class EmergencyAlertPage extends StatefulWidget {
   const EmergencyAlertPage({Key? key}) : super(key: key);
@@ -64,19 +64,23 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
 
       // PRIMEIRO: Obter posição atual do utilizador
       final savedPosition = await UserPositionService.getPosition();
-      double startX;
-      double startY;
-      int startLevel;
+      double startX = savedPosition.x;
+      double startY = savedPosition.y;
+      int startLevel = savedPosition.level;
 
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
-        startX = savedPosition.x;
-        startY = savedPosition.y;
-        startLevel = savedPosition.level;
-      } else {
-        // Fallback para Gate-21 (posição padrão)
-        startX = UserPositionService.defaultX;
-        startY = UserPositionService.defaultY;
-        startLevel = UserPositionService.defaultLevel;
+      // Se a posição gravada for o fallback, procurar no GPS real!
+      if (startX == UserPositionService.defaultX && startY == UserPositionService.defaultY) {
+         try {
+           final currentPos = await Geolocator.getCurrentPosition(
+             desiredAccuracy: LocationAccuracy.high,
+             timeLimit: const Duration(seconds: 4),
+           );
+           startX = currentPos.longitude;
+           startY = currentPos.latitude;
+           // assumir piso 0 ou o piso aproximado de outdoor
+         } catch (e) {
+           print('[EmergencyAlert] Erro no GPS: \$e');
+         }
       }
 
       print(
