@@ -48,7 +48,7 @@ class StadiumMapPage extends StatefulWidget {
   final void Function(MapCamera, bool)? onPositionChanged;
   final ValueChanged<bool>? onPOIPanelChanged;
   final RouteModel? previewRoute;
-  final bool interactivePOIs; // Allows disabling POI taps when shown in a menu 
+  final bool interactivePOIs; // Allows disabling POI taps when shown in a menu
   final bool isFollowingUser; // Indicates if map should rotate with gyro
 
   const StadiumMapPage({
@@ -463,7 +463,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
       startLevel = savedPos.level;
 
       // If position is the default one, try to get actual GPS position
-      if (startX == UserPositionService.defaultX && startY == UserPositionService.defaultY) {
+      if (startX == UserPositionService.defaultX &&
+          startY == UserPositionService.defaultY) {
         try {
           final currentPos = await Geolocator.getCurrentPosition(
             desiredAccuracy: LocationAccuracy.high,
@@ -471,7 +472,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
           );
           startX = currentPos.longitude;
           startY = currentPos.latitude;
-          startLevel = _currentFloor; // Assuming floor estimation or defaulting to current map floor
+          startLevel =
+              _currentFloor; // Assuming floor estimation or defaulting to current map floor
         } catch (e) {
           // Fallback to _userPositionX if GPS fails
           if (_userPositionX != 0.0) {
@@ -483,9 +485,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
       } else {
         // Not default, but might be 0.0
         if (startX == 0.0 && startY == 0.0) {
-           startX = _userPositionX;
-           startY = _userPositionY;
-           startLevel = _userLevel != 0 ? _userLevel : _currentFloor;
+          startX = _userPositionX;
+          startY = _userPositionY;
+          startLevel = _userLevel != 0 ? _userLevel : _currentFloor;
         }
       }
 
@@ -512,18 +514,23 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // Use the exact start location that the route actually used
         final userLatLng = _convertToLatLng(startX, startY);
         final poiLatLng = _convertToLatLng(poi.x, poi.y);
-        
+
         // Add all points from the route to ensure it's fully visible
         final allPoints = <LatLng>[userLatLng, poiLatLng];
         for (final wp in route.waypoints) {
           allPoints.add(_convertToLatLng(wp.x, wp.y));
         }
-        
+
         final bounds = LatLngBounds.fromPoints(allPoints);
         _mapController.fitCamera(
           CameraFit.bounds(
             bounds: bounds,
-            padding: const EdgeInsets.fromLTRB(40, 40, 40, 240), // Reduce excessive bottom/top padding
+            padding: const EdgeInsets.fromLTRB(
+              40,
+              40,
+              40,
+              240,
+            ), // Reduce excessive bottom/top padding
             maxZoom: 19.0, // Keep highest zoom high enough
           ),
         );
@@ -600,164 +607,167 @@ class StadiumMapPageState extends State<StadiumMapPage>
       left: 0,
       right: 0,
       bottom: 0,
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1E1E3F),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header: icon + name + actions (favorite/close)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.place, color: Colors.white70, size: 28),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    poi.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Gabarito',
-                    ),
+      child: Dismissible(
+        key: Key('poi_preview_${poi.id}'),
+        direction: DismissDirection.down,
+        onDismissed: (_) => _closePOIPanel(),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1E3F),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Swipe indicator pill
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: _isSelectedPOISaved
-                          ? AppLocalizations.of(context)!.removeFromFavorites
-                          : AppLocalizations.of(context)!.addToFavorites,
-                      onPressed: _toggleSelectedPOIFavorite,
-                      icon: Icon(
-                        _isSelectedPOISaved ? Icons.star : Icons.star_border,
-                        color: _isSelectedPOISaved
-                            ? Colors.amberAccent
-                            : Colors.white70,
-                        size: 24,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: AppLocalizations.of(context)!.close,
-                      onPressed: _closePOIPanel,
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white54,
-                        size: 22,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Route metrics
-            if (isLoading)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white54,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      AppLocalizations.of(context)!.calculatingRoute,
-                      style: const TextStyle(color: Colors.white54),
-                    ),
-                  ],
-                ),
-              )
-            else if (route != null)
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
+              ),
+              // Header: icon + name + actions (favorite)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildInfoChip(
-                    icon: Icons.directions_walk,
-                    label: AppLocalizations.of(
-                      context,
-                    )!.walkTime((route.etaSeconds / 60).round()),
-                  ),
-                  _buildInfoChip(
-                    icon: Icons.straighten,
-                    label: AppLocalizations.of(
-                      context,
-                    )!.distanceM(route.distance.round()),
-                  ),
-                  if ([
-                        'wc',
-                        'food',
-                        'ticket',
-                        'store',
-                        'bar',
-                        'bar_p',
-                      ].contains(_selectedPOI!.category) ||
-                      _selectedPOI!.name.toLowerCase().contains('farmácia'))
-                    _buildInfoChip(
-                      icon: Icons.group,
-                      label: AppLocalizations.of(
-                        context,
-                      )!.queueTime(route.waitTime?.round() ?? 0),
+                  const Icon(Icons.place, color: Colors.white70, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      poi.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Gabarito',
+                      ),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: _isSelectedPOISaved
+                        ? AppLocalizations.of(context)!.removeFromFavorites
+                        : AppLocalizations.of(context)!.addToFavorites,
+                    onPressed: _toggleSelectedPOIFavorite,
+                    icon: Icon(
+                      _isSelectedPOISaved ? Icons.star : Icons.star_border,
+                      color: _isSelectedPOISaved
+                          ? Colors.amberAccent
+                          : Colors.white70,
+                      size: 24,
+                    ),
+                  ),
                 ],
               ),
-            const SizedBox(height: 20),
+              const SizedBox(height: 12),
 
-            // Navigate button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: route != null
-                    ? () {
-                        _closePOIPanel();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => NavigationPage(
-                              route: route,
-                              destination: poi,
-                              nodes: _nodes,
-                              initialX: _userPositionX,
-                              initialY: _userPositionY,
-                              initialLevel: _userLevel,
-                            ),
-                          ),
-                        ).then((_) => loadUserPosition());
-                      }
-                    : null,
-                icon: const Icon(Icons.navigation, color: Colors.white),
-                label: Text(
-                  AppLocalizations.of(context)!.navigate,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+              // Route metrics
+              if (isLoading)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white54,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppLocalizations.of(context)!.calculatingRoute,
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    ],
                   ),
+                )
+              else if (route != null)
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _buildInfoChip(
+                      icon: Icons.directions_walk,
+                      label: AppLocalizations.of(
+                        context,
+                      )!.walkTime((route.etaSeconds / 60).round()),
+                    ),
+                    _buildInfoChip(
+                      icon: Icons.straighten,
+                      label: AppLocalizations.of(
+                        context,
+                      )!.distanceM(route.distance.round()),
+                    ),
+                    if ([
+                          'wc',
+                          'food',
+                          'ticket',
+                          'store',
+                          'bar',
+                          'bar_p',
+                        ].contains(_selectedPOI!.category) ||
+                        _selectedPOI!.name.toLowerCase().contains('farmácia'))
+                      _buildInfoChip(
+                        icon: Icons.group,
+                        label: AppLocalizations.of(
+                          context,
+                        )!.queueTime(route.waitTime?.round() ?? 0),
+                      ),
+                  ],
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(50),
+              const SizedBox(height: 20),
+
+              // Navigate button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: route != null
+                      ? () {
+                          _closePOIPanel();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NavigationPage(
+                                route: route,
+                                destination: poi,
+                                nodes: _nodes,
+                                initialX: _userPositionX,
+                                initialY: _userPositionY,
+                                initialLevel: _userLevel,
+                              ),
+                            ),
+                          ).then((_) => loadUserPosition());
+                        }
+                      : null,
+                  icon: const Icon(Icons.navigation, color: Colors.white),
+                  label: Text(
+                    AppLocalizations.of(context)!.navigate,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(50),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -780,7 +790,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
           _buildPOIPreviewPanel(),
 
         // Controlos de movimento (apenas na Home, não durante navegação, nem em sub-menus)
-        if (!widget.isNavigating && !_isLoading && _errorMessage == null && widget.interactivePOIs)
+        if (!widget.isNavigating &&
+            !_isLoading &&
+            _errorMessage == null &&
+            widget.interactivePOIs)
           Positioned(
             right: 16,
             bottom: _selectedPOI != null ? 280 : 110,
@@ -805,7 +818,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
                     await UserPositionService.resetToDefault();
                     await loadUserPosition();
                     _zoomToUserPosition();
-                    
+
                     if (mounted) {
                       Navigator.of(context).pushNamedAndRemoveUntil(
                         '/emergency-alert',
@@ -814,7 +827,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
                     }
                   },
                   tooltip: 'Emergência (Resetar Posição)',
-                  child: const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -837,6 +853,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
           flags: InteractiveFlag.all,
         ),
         onPositionChanged: widget.onPositionChanged,
+        onTap: (_, __) {
+          if (_selectedPOI != null && !widget.isNavigating) {
+            _closePOIPanel();
+          }
+        },
       ),
       children: [
         // Base layer: OSM tiles (outdoor) ou fundo vazio (indoor)
@@ -846,6 +867,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
                 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
             subdomains: const ['a', 'b', 'c', 'd'],
             userAgentPackageName: 'com.dragao.fanapp',
+            retinaMode: RetinaMode.isHighDensity(context),
           ),
 
         // Remove a atribuição padrão do flutter_map
@@ -1123,11 +1145,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
         height: isHighlighted ? 60 : 50,
         alignment: Alignment.center,
         child: GestureDetector(
-          onTap: !widget.interactivePOIs 
+          onTap: !widget.interactivePOIs
               ? null // Allow no interaction if set to false
               : widget.isNavigating
-                  ? (widget.onTapPOI != null ? () => widget.onTapPOI!(poi) : null)
-                  : () => _showPOIDetails(poi),
+              ? (widget.onTapPOI != null ? () => widget.onTapPOI!(poi) : null)
+              : () => _showPOIDetails(poi),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
