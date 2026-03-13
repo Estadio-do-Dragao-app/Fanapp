@@ -53,6 +53,10 @@ dependencies:
   # MQTT for real-time data from broker
   mqtt_client: ^10.0.0
 
+  # Location and Identity
+  geolocator: ^13.0.1
+  uuid: ^4.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
