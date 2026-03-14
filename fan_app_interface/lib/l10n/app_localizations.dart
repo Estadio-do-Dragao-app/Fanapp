@@ -538,6 +538,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Close'**
   String get close;
+
+  /// No description provided for @gpsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS Required'**
+  String get gpsRequired;
+
+  /// No description provided for @gpsRequiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot calculate route without GPS location.'**
+  String get gpsRequiredMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

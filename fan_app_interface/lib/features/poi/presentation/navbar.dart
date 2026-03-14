@@ -179,6 +179,19 @@ class _NavbarState extends State<Navbar> {
 
       // Obter posição real do utilizador (GPS ou Saved)
       final userPos = await GeographicUtils.getCurrentUserPosition();
+      
+      if (userPos == null) {
+        if (!mounted) return;
+        Navigator.of(context).pop(); // Fechar loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.gpsRequiredMessage),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
       double startX = userPos.x;
       double startY = userPos.y;
       int startLevel = userPos.level;

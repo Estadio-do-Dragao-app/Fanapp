@@ -14,13 +14,14 @@ import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
 import '../data/services/saved_places_service.dart';
-import 'package:geolocator/geolocator.dart';
 import '../../../core/utils/poi_style.dart';
 import 'layers/floor_plan_layer.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
 import '../../ticket/data/models/ticket_model.dart'; // Import TicketModel
 import '../../ticket/data/services/ticket_storage_service.dart'; // Import Storage
+import '../../../core/utils/geographic_utils.dart';
+import '../../../core/utils/cached_tile_provider.dart';
 
 import 'dart:async';
 import '../../../core/config/map_config.dart';
@@ -76,9 +77,13 @@ class StadiumMapPage extends StatefulWidget {
     this.previewRoute,
     this.interactivePOIs = true,
     this.isFollowingUser = true,
+    this.customPOIsToShow,
+    this.zoomOutToPOIs = false,
   });
 
   final bool isEmergency;
+  final List<POIModel>? customPOIsToShow;
+  final bool zoomOutToPOIs;
 
   @override
   State<StadiumMapPage> createState() => StadiumMapPageState();
@@ -161,6 +166,17 @@ class StadiumMapPageState extends State<StadiumMapPage>
   /// Carrega a posição guardada do utilizador
   Future<void> loadUserPosition({bool updateFloor = true}) async {
     final position = await UserPositionService.getPosition();
+    if (position == null) {
+      if (mounted) {
+        setState(() {
+          _userPositionX = 0.0;
+          _userPositionY = 0.0;
+          _userLevel = _currentFloor; 
+        });
+      }
+      return;
+    }
+    
     if (mounted) {
       double x = position.x;
       double y = position.y;
@@ -399,11 +415,34 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
       // Centrar na posição GPS real via plugin (sempre, não só fora de navegação)
       _zoomToUserPosition();
+      // Se pedirmos para focar nos POIs customizados
+      if (widget.customPOIsToShow != null && widget.zoomOutToPOIs && widget.customPOIsToShow!.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            try {
+              final coordinates = widget.customPOIsToShow!.map(
+                (poi) => _convertToLatLng(poi.x, poi.y)
+              ).toList();
+              
+              _mapController.fitCamera(
+                CameraFit.coordinates(
+                  coordinates: coordinates,
+                  padding: const EdgeInsets.all(50.0),
+                ),
+              );
+            } catch (e) {
+              print('Error fitting camera to POIs: $e');
+            }
+          }
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -452,52 +491,36 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
 
     RouteModel? route;
-    double startX = UserPositionService.defaultX;
-    double startY = UserPositionService.defaultY;
-    int startLevel = UserPositionService.defaultLevel;
+    double startX = 0;
+    double startY = 0;
+    int startLevel = 0;
 
     try {
-      final savedPos = await UserPositionService.getPosition();
-      startX = savedPos.x;
-      startY = savedPos.y;
-      startLevel = savedPos.level;
-
-      // If position is the default one, try to get actual GPS position
-      if (startX == UserPositionService.defaultX &&
-          startY == UserPositionService.defaultY) {
-        try {
-          final currentPos = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-            timeLimit: const Duration(seconds: 3),
+      final currentPos = await GeographicUtils.getCurrentUserPosition();
+      
+      if (currentPos == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.gpsRequiredMessage),
+              backgroundColor: Colors.orange,
+            ),
           );
-          startX = currentPos.longitude;
-          startY = currentPos.latitude;
-          startLevel =
-              _currentFloor; // Assuming floor estimation or defaulting to current map floor
-        } catch (e) {
-          // Fallback to _userPositionX if GPS fails
-          if (_userPositionX != 0.0) {
-            startX = _userPositionX;
-            startY = _userPositionY;
-            startLevel = _userLevel != 0 ? _userLevel : _currentFloor;
-          }
         }
+        // Não faz return nem fecha o painel - apenas deixa a rota a null para mostrar só os detalhes
       } else {
-        // Not default, but might be 0.0
-        if (startX == 0.0 && startY == 0.0) {
-          startX = _userPositionX;
-          startY = _userPositionY;
-          startLevel = _userLevel != 0 ? _userLevel : _currentFloor;
-        }
-      }
+        startX = currentPos.x;
+        startY = currentPos.y;
+        startLevel = currentPos.level;
 
-      route = await _routingService.getRouteToPOI(
-        startX: startX,
-        startY: startY,
-        startLevel: startLevel,
-        poiId: poi.id,
-        avoidStairs: widget.avoidStairs,
-      );
+        route = await _routingService.getRouteToPOI(
+          startX: startX,
+          startY: startY,
+          startLevel: startLevel,
+          poiId: poi.id,
+          avoidStairs: widget.avoidStairs,
+        );
+      }
     } catch (e) {}
 
     if (!mounted) return;
@@ -635,7 +658,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
               ),
               // Header: icon + name + actions (favorite)
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Icon(Icons.place, color: Colors.white70, size: 28),
                   const SizedBox(width: 12),
@@ -759,6 +782,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
+                    disabledBackgroundColor: Colors.grey[700], // Fundo cinzento quando indisponível
+                    disabledForegroundColor: Colors.white70, // Texto mais fraco
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(50),
@@ -815,7 +840,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
                   heroTag: 'emergency_reset_pos',
                   backgroundColor: Colors.redAccent,
                   onPressed: () async {
-                    await UserPositionService.resetToDefault();
+                    await UserPositionService.clearPosition();
                     await loadUserPosition();
                     _zoomToUserPosition();
 
@@ -846,9 +871,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
         initialCenter: widget.isNavigating && widget.userPosition != null
             ? widget.userPosition!
             : stadiumCenter,
-        initialZoom: widget.isNavigating ? 20.0 : 17.0,
+        initialZoom: widget.isNavigating ? 19.0 : 17.0,
         minZoom: 14.0,
-        maxZoom: 20.0,
+        maxZoom: 19.0,
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all,
         ),
@@ -861,13 +886,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
       ),
       children: [
         // Base layer: OSM tiles (outdoor) ou fundo vazio (indoor)
-        if (MapConfig.useOSMTiles)
+        if (MapConfig.useOSMTiles && !widget.simplifiedMode)
           TileLayer(
+            tileProvider: CachedTileProvider(),
             urlTemplate:
                 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
             subdomains: const ['a', 'b', 'c', 'd'],
             userAgentPackageName: 'com.dragao.fanapp',
             retinaMode: RetinaMode.isHighDensity(context),
+            maxNativeZoom: 19,
           ),
 
         // Remove a atribuição padrão do flutter_map
@@ -914,6 +941,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
           alignDirectionOnUpdate: widget.isNavigating && widget.isFollowingUser
               ? AlignOnUpdate.always
               : AlignOnUpdate.never,
+          indicators: const LocationMarkerIndicators(
+            serviceDisabled: SizedBox.shrink(),
+            permissionRequesting: SizedBox.shrink(),
+            permissionDenied: SizedBox.shrink(),
+          ),
         ),
 
         // Compass do flutter_map_compass
@@ -1112,10 +1144,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
     // Determinar quais POIs mostrar
     List<POIModel> poisToShow = [];
 
-    // 1. Mostrar POIs genéricos se o zoom permitir ou "Show All" estiver ativo
-    // MAS apenas se showOtherPOIs for true
-    if (widget.showOtherPOIs && (showGenericPOIs || widget.showAllPOIs)) {
-      poisToShow.addAll(_pois);
+    if (widget.customPOIsToShow != null) {
+      // Isolates specific POIs if given (like emergency exits)
+      poisToShow.addAll(widget.customPOIsToShow!);
+    } else {
+      // 1. Mostrar POIs genéricos se o zoom permitir ou "Show All" estiver ativo
+      // MAS apenas se showOtherPOIs for true
+      if (widget.showOtherPOIs && (showGenericPOIs || widget.showAllPOIs)) {
+        poisToShow.addAll(_pois);
+      }
     }
 
     // 2. Garantir que o POI destacado (Destino ou Seleção) é SEMPRE visível em modo Preview

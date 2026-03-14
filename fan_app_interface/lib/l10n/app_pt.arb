@@ -146,5 +146,7 @@
   "addToFavorites": "Adicionar aos favoritos",
   "removeFromFavorites": "Remover dos favoritos",
   "calculatingRoute": "A calcular rota...",
-  "close": "Fechar"
+  "close": "Fechar",
+  "gpsRequired": "GPS Necessário",
+  "gpsRequiredMessage": "Não é possível calcular a rota sem a sua localização (GPS)."
 }

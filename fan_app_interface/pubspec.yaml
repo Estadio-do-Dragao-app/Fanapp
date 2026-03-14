@@ -57,6 +57,7 @@ dependencies:
   flutter_map_animations: ^0.8.0
   flutter_map_heatmap: ^0.0.8
   geolocator: ^13.0.2
+  cached_network_image: ^3.4.1
 
 dev_dependencies:
   flutter_test:

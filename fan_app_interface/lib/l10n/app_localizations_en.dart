@@ -247,4 +247,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get close => 'Close';
+
+  @override
+  String get gpsRequired => 'GPS Required';
+
+  @override
+  String get gpsRequiredMessage => 'Cannot calculate route without GPS location.';
 }

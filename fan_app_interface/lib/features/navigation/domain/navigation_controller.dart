@@ -123,7 +123,7 @@ class NavigationController extends ChangeNotifier {
         startLevel = initialLevel!;
       } else {
         final savedPosition = await UserPositionService.getPosition();
-        startLevel = savedPosition.level;
+        startLevel = savedPosition?.level ?? _currentLevel;
       }
       print(
         '[NavigationController]  Usando posição fornecida: ($startX, $startY, level=$startLevel)',
@@ -131,7 +131,7 @@ class NavigationController extends ChangeNotifier {
     } else {
       // Carregar posição do UserPositionService
       final savedPosition = await UserPositionService.getPosition();
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+      if (savedPosition != null) {
         startX = savedPosition.x;
         startY = savedPosition.y;
         startLevel = savedPosition.level;
@@ -139,17 +139,9 @@ class NavigationController extends ChangeNotifier {
           '[NavigationController]  Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
         );
       } else {
-        // Fallback: usar entrada do instituto
-        final userNode = allNodes.firstWhere(
-          (n) => n.id == 'POI-reitoria',
-          orElse: () => allNodes.first,
-        );
-        startX = userNode.x;
-        startY = userNode.y;
-        startLevel = userNode.level;
-        print(
-          '[NavigationController]  Fallback para nó ${userNode.id}: ($startX, $startY, level=$startLevel)',
-        );
+        // Fallback: This should never be reached if UI checks work.
+        // If we reach here without GPS, throw an exception.
+        throw Exception("Cannot calculate route without GPS location. Ensure position is obtained before navigating.");
       }
     }
 

@@ -75,7 +75,7 @@ class _HomeState extends State<Home> {
 
   Future<void> _loadInitialFilter() async {
     final pos = await UserPositionService.getPosition();
-    if (mounted) {
+    if (mounted && pos != null) {
       setState(() {
         _currentFloor = pos.level;
       });

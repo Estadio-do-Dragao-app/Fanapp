@@ -102,6 +102,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
   double _userX = 0.0;
   double _userY = 0.0;
   int _userLevel = 0;
+  bool _hasValidLocation = true;
 
   @override
   void initState() {
@@ -176,9 +177,29 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
 
       // Carregar posição real do utilizador (GPS ou Saved)
       final userPos = await GeographicUtils.getCurrentUserPosition();
-      _userX = userPos.x;
-      _userY = userPos.y;
-      _userLevel = userPos.level;
+      
+      if (userPos == null) {
+        // Se não houver GPS, mostramos o aviso mas deixamos ver a lista
+        _userX = 0.0;
+        _userY = 0.0;
+        _userLevel = 0;
+        _hasValidLocation = false;
+        
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             SnackBar(
+               content: Text(AppLocalizations.of(context)!.gpsRequiredMessage),
+               backgroundColor: Colors.orange,
+             ),
+           );
+        }
+      } else {
+        _userX = userPos.x;
+        _userY = userPos.y;
+        _userLevel = userPos.level;
+        _hasValidLocation = true;
+      }
+      
       print(
         '[DestinationSelection] Usando posição real/guardada: ($_userX, $_userY, level=$_userLevel)',
       );
@@ -193,14 +214,19 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
 
       // Criar lista com distâncias estimadas (usando posição real do utilizador)
       List<POIWithRoute> poisWithRoutes = categoryPois.map((poi) {
-        final distance = _euclideanDistance(_userX, _userY, poi.x, poi.y);
+        final distance = _hasValidLocation ? _euclideanDistance(_userX, _userY, poi.x, poi.y) : 0.0;
         return POIWithRoute(poi: poi, estimatedDistance: distance);
       }).toList();
 
-      // Ordenar por distância euclidiana (aproximação inicial)
-      poisWithRoutes.sort(
-        (a, b) => a.estimatedDistance.compareTo(b.estimatedDistance),
-      );
+      if (_hasValidLocation) {
+        // Ordenar por distância euclidiana (aproximação inicial)
+        poisWithRoutes.sort(
+          (a, b) => a.estimatedDistance.compareTo(b.estimatedDistance),
+        );
+      } else {
+        // Sem GPS, ordenar alfabeticamente
+        poisWithRoutes.sort((a, b) => a.poi.name.compareTo(b.poi.name));
+      }
 
       setState(() {
         _poisWithRoutes = poisWithRoutes;
@@ -216,7 +242,16 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
 
       // Calcular rota do primeiro selecionado imediatamente
       if (_poisWithRoutes.isNotEmpty) {
-        _calculateRouteForSelected(0);
+        if (_hasValidLocation) {
+          _calculateRouteForSelected(0);
+        } else {
+          // Sem GPS, fazer zoom para o primeiro POI (atrasar para garantir que o mapa está pronto)
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _zoomToPOI(_poisWithRoutes[0].poi);
+            }
+          });
+        }
       }
     } catch (e) {
       setState(() {
@@ -228,7 +263,14 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
 
   /// Calcula todas as rotas em paralelo no background
   Future<void> _calculateAllRoutesInBackground() async {
-    if (_poisWithRoutes.isEmpty) return;
+    if (_poisWithRoutes.isEmpty || !_hasValidLocation) {
+      if (mounted && !_hasValidLocation) {
+        setState(() {
+          _allRoutesCalculated = true;
+        });
+      }
+      return;
+    }
 
     setState(() {
       _isCalculatingAllRoutes = true;
@@ -257,10 +299,12 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       await Future.wait(futures);
 
       if (mounted) {
-        // Reordenar a lista pelo tempo total (Menor tempo primeiro)
-        _poisWithRoutes.sort(
-          (a, b) => a.totalEtaMinutes.compareTo(b.totalEtaMinutes),
-        );
+        if (_hasValidLocation) {
+          // Reordenar a lista pelo tempo total (Menor tempo primeiro)
+          _poisWithRoutes.sort(
+            (a, b) => a.totalEtaMinutes.compareTo(b.totalEtaMinutes),
+          );
+        }
 
         // Como ordenámos, o mais rápido é o primeiro (índice 0)
         int fastestIdx = 0;
@@ -309,6 +353,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       _zoomToRoute(item.route!);
       return;
     }
+
+    if (!_hasValidLocation) return;
 
     setState(() {
       _isCalculatingSelectedRoute = true;
@@ -392,6 +438,18 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       );
     } catch (e) {
       print('[DestinationSelection] Erro ao fazer zoom: $e');
+    }
+  }
+
+  /// Faz zoom para um POI específico (usado quando não há GPS)
+  void _zoomToPOI(POIModel poi) {
+    try {
+      _animatedMapController.animateTo(
+        dest: _convertToLatLng(poi.x, poi.y),
+        zoom: 18.0,
+      );
+    } catch (e) {
+      print('[DestinationSelection] Erro ao fazer zoom para POI: $e');
     }
   }
 
@@ -534,10 +592,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
               right: 24,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      (selectedIndex != null && _selectedRoute != null)
-                      ? Colors.indigo[200]
-                      : Colors.grey[600],
+                  backgroundColor: Colors.indigo[200],
+                  disabledBackgroundColor: Colors.grey[700], // Fundo cinzento quando indisponível
+                  disabledForegroundColor: Colors.white70, // Texto mais fraco
                   minimumSize: const Size(double.infinity, 48),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -624,10 +681,21 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                 _selectedRoute = item.route;
               });
               if (item.hasRoute) {
-                // Já tem rota - fazer zoom imediatamente
-                _zoomToRoute(item.route!);
+                // Já tem rota - fazer zoom (atrasar para evitar conflito com build)
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _zoomToRoute(item.route!);
+                  }
+                });
+              } else if (!_hasValidLocation) {
+                // Sem GPS - fazer zoom apenas para o POI
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _zoomToPOI(item.poi);
+                  }
+                });
               } else {
-                // Calcular rota (zoom será feito após cálculo)
+                // Calcular rota (zoom será feito após cálculo no _calculateRouteForSelected)
                 _calculateRouteForSelected(index);
               }
             },
@@ -680,11 +748,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  item.hasRoute
-                                      ? '${item.walkingMinutes} min'
-                                      : '~${item.walkingMinutes} min',
+                                  (!_hasValidLocation || !item.hasRoute)
+                                      ? '-- min'
+                                      : '${item.walkingMinutes} min',
                                   style: TextStyle(
-                                    color: item.hasRoute
+                                    color: (item.hasRoute && _hasValidLocation)
                                         ? Colors.white
                                         : Colors.white70,
                                   ),
@@ -735,7 +803,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                     ),
                   ),
                   Text(
-                    '${item.distance.toStringAsFixed(0)}m',
+                    (!_hasValidLocation || !item.hasRoute)
+                        ? '-- m'
+                        : '${item.distance.toStringAsFixed(0)}m',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,

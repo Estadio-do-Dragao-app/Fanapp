@@ -247,4 +247,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get close => 'Fechar';
+
+  @override
+  String get gpsRequired => 'GPS Necessário';
+
+  @override
+  String get gpsRequiredMessage => 'Não é possível calcular a rota sem a sua localização (GPS).';
 }

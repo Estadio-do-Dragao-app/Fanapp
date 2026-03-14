@@ -4,11 +4,11 @@ import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
-import '../../navigation/data/services/user_position_service.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
+import 'package:fan_app_interface/core/utils/geographic_utils.dart';
 import 'dart:math';
 import 'dart:async';
-import 'package:geolocator/geolocator.dart';
+import 'dart:ui';
 
 class EmergencyAlertPage extends StatefulWidget {
   const EmergencyAlertPage({Key? key}) : super(key: key);
@@ -24,13 +24,35 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
 
   int _remainingSeconds = 3;
   Timer? _redirectTimer;
+  List<POIModel>? _exits;
 
   @override
   void initState() {
     super.initState();
 
+    _loadExits();
     // Auto-redirect timer
     _startedirectTimer();
+  }
+
+  Future<void> _loadExits() async {
+    try {
+      final pois = await _mapService.getAllPOIs();
+      final exits = pois
+          .where(
+            (poi) =>
+                poi.category.toLowerCase() == 'emergency_exit' ||
+                poi.category.toLowerCase() == 'exit',
+          )
+          .toList();
+      if (mounted) {
+        setState(() {
+          _exits = exits;
+        });
+      }
+    } catch (e) {
+      print('[EmergencyAlert] Erro ao carregar saídas para o fundo: $e');
+    }
   }
 
   void _startedirectTimer() {
@@ -62,33 +84,8 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       final pois = await _mapService.getAllPOIs();
       final nodes = await _mapService.getAllNodes();
 
-      // PRIMEIRO: Obter posição atual do utilizador
-      final savedPosition = await UserPositionService.getPosition();
-      double startX = savedPosition.x;
-      double startY = savedPosition.y;
-      int startLevel = savedPosition.level;
-
-      // Se a posição gravada for o fallback, procurar no GPS real!
-      if (startX == UserPositionService.defaultX && startY == UserPositionService.defaultY) {
-         try {
-           final currentPos = await Geolocator.getCurrentPosition(
-             desiredAccuracy: LocationAccuracy.high,
-             timeLimit: const Duration(seconds: 4),
-           );
-           startX = currentPos.longitude;
-           startY = currentPos.latitude;
-           // assumir piso 0 ou o piso aproximado de outdoor
-         } catch (e) {
-           print('[EmergencyAlert] Erro no GPS: \$e');
-         }
-      }
-
-      print(
-        '[EmergencyAlert] Posição do utilizador: ($startX, $startY, level=$startLevel)',
-      );
-
-      // Encontrar saída de emergência mais próxima
-      final exits = pois
+      // PRIMEIRO: Encontrar saídas de emergência
+      final exits = _exits ?? pois
           .where(
             (poi) =>
                 poi.category.toLowerCase() == 'emergency_exit' ||
@@ -101,6 +98,37 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         Navigator.of(context).pushReplacementNamed('/map');
         return;
       }
+
+      // SEGUNDO: Obter posição atual do utilizador
+      final savedPosition = await GeographicUtils.getCurrentUserPosition();
+      
+      if (savedPosition == null) {
+         if (!mounted) return;
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(
+             content: Text(AppLocalizations.of(context)!.gpsRequiredMessage),
+             backgroundColor: Colors.orange,
+           ),
+         );
+         Navigator.of(context).pushReplacement(
+           MaterialPageRoute(
+             builder: (context) => StadiumMapPage(
+               customPOIsToShow: exits,
+               zoomOutToPOIs: true,
+               isEmergency: true,
+             ),
+           ),
+         );
+         return;
+      }
+      
+      double startX = savedPosition.x;
+      double startY = savedPosition.y;
+      int startLevel = savedPosition.level;
+
+      print(
+        '[EmergencyAlert] Posição do utilizador: ($startX, $startY, level=$startLevel)',
+      );
 
       // Encontrar saída mais próxima usando a posição REAL do utilizador
       POIModel? nearestExit;
@@ -176,7 +204,17 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
           return Stack(
             children: [
               // Fundo (mapa)
-              Positioned.fill(child: StadiumMapPage()),
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                  child: StadiumMapPage(
+                    customPOIsToShow: _exits ?? [],
+                    zoomOutToPOIs: _exits != null && _exits!.isNotEmpty,
+                    isEmergency: true,
+                    interactivePOIs: false,
+                  ),
+                ),
+              ),
               // Conteúdo respeita SafeArea — a BORDA NÃO
               SafeArea(
                 child: Stack(
@@ -230,13 +268,11 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
                             color: const Color(0xFFBD453D),
                             borderRadius: BorderRadius.circular(15),
                           ),
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-
-                              children: [
-                                const SizedBox(height: 20),
-                                Text(
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Center(
+                                child: Text(
                                   localizations.map,
                                   style: const TextStyle(
                                     fontSize: 36,
@@ -245,8 +281,10 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
                                     fontFamily: 'Gabarito',
                                   ),
                                 ),
-
-                                Text(
+                              ),
+                              Positioned(
+                                bottom: 8,
+                                child: Text(
                                   '${_remainingSeconds}s',
                                   style: const TextStyle(
                                     fontSize: 16,
@@ -255,8 +293,8 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
                                     color: Colors.white70,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

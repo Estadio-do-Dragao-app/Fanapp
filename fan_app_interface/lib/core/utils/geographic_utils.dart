@@ -65,8 +65,8 @@ class GeographicUtils {
     return meters / 111320.0;
   }
 
-  /// Gets the real GPS position of the user, falling back to saved position
-  static Future<({double x, double y, int level})>
+  /// Gets the real GPS position of the user, falling back to saved position if existent
+  static Future<({double x, double y, int level})?>
   getCurrentUserPosition() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -92,8 +92,9 @@ class GeographicUtils {
 
       return (x: position.longitude, y: position.latitude, level: 0);
     } catch (e) {
-      print('[GeographicUtils] Failed to get real GPS, using fallback: $e');
+      print('[GeographicUtils] Failed to get real GPS, trying fallback: $e');
       final savedPosition = await UserPositionService.getPosition();
+      if (savedPosition == null) return null;
       return (
         x: savedPosition.x,
         y: savedPosition.y,
