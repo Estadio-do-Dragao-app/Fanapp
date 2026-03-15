@@ -143,6 +143,8 @@
   "invalidQRFormat": "Formato de QR code inválido",
   "invalidQRSignature": "QR code inválido ou adulterado",
   "connectionError": "Erro de conexão. Verifique a sua internet.",
+  "internetDisconnected": "Ligação à internet perdida.",
+  "internetReconnected": "Ligação à internet restabelecida.",
   "addToFavorites": "Adicionar aos favoritos",
   "removeFromFavorites": "Remover dos favoritos",
   "calculatingRoute": "A calcular rota...",

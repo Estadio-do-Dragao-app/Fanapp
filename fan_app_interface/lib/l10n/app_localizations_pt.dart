@@ -237,6 +237,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get connectionError => 'Erro de conexão. Verifique a sua internet.';
 
   @override
+  String get internetDisconnected => 'Ligação à internet perdida.';
+
+  @override
+  String get internetReconnected => 'Ligação à internet restabelecida.';
+
+  @override
   String get addToFavorites => 'Adicionar aos favoritos';
 
   @override

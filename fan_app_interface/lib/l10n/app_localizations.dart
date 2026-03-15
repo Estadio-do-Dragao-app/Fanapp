@@ -515,6 +515,18 @@ abstract class AppLocalizations {
   /// **'Connection error. Check your internet.'**
   String get connectionError;
 
+  /// No description provided for @internetDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Internet connection lost.'**
+  String get internetDisconnected;
+
+  /// No description provided for @internetReconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Internet connection restored.'**
+  String get internetReconnected;
+
   /// No description provided for @addToFavorites.
   ///
   /// In en, this message translates to:

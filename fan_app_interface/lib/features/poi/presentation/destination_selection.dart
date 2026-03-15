@@ -794,45 +794,28 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             // Tempo de caminhada
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.directions_walk,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  (!_hasValidLocation || !item.hasRoute)
-                                      ? '-- min'
-                                      : '${item.walkingMinutes} min',
-                                  style: TextStyle(
-                                    color: (item.hasRoute && _hasValidLocation)
-                                        ? Colors.white
-                                        : Colors.white70,
-                                  ),
-                                ),
-                              ],
+                            _buildInfoChip(
+                              icon: Icons.directions_walk,
+                              label: (!_hasValidLocation || !item.hasRoute)
+                                  ? '-- min'
+                                  : localizations.walkTime(item.walkingMinutes),
+                              faded: !(item.hasRoute && _hasValidLocation),
                             ),
-                            // Tempo de espera (se existir)
-                            if (item.waitMinutes > 0)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.hourglass_bottom,
-                                    color: Colors.orange,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '+${item.waitMinutes} min',
-                                    style: const TextStyle(
-                                      color: Colors.orange,
-                                    ),
-                                  ),
-                                ],
+                            // Tempo de fila (apenas categorias com fila)
+                            if ([
+                              'wc',
+                              'food',
+                              'store',
+                              'bar',
+                              'bar_p',
+                            ].contains(item.poi.category) ||
+                                item.poi.name
+                                    .toLowerCase()
+                                    .contains('farmácia'))
+                              _buildInfoChip(
+                                icon: Icons.group,
+                                label: localizations
+                                    .queueTime(item.waitMinutes),
                               ),
                             // Badge "Mais rápido"
                             if (isFastest)
@@ -874,6 +857,34 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildInfoChip({
+    required IconData icon,
+    required String label,
+    bool faded = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF252A5E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: faded ? Colors.white54 : Colors.white, size: 14),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: faded ? Colors.white54 : Colors.white,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

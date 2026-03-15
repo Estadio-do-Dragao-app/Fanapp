@@ -50,6 +50,8 @@ dependencies:
   hive_flutter: ^1.1.0
   path_provider: ^2.1.5
   
+  connectivity_plus: ^6.1.4
+
   # MQTT for real-time data from broker
   mqtt_client: ^10.0.0
   flutter_map_compass: ^1.1.1
