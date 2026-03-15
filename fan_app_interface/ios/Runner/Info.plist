@@ -47,7 +47,5 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Esta aplicação precisa de aceder à sua localização para mostrar a sua posição no mapa do estádio e ajudar a evitar zonas congestionadas.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>A sua localização é usada de forma anónima para monitorizar a lotação do estádio em tempo real.</string>
 </dict>
 </plist>
