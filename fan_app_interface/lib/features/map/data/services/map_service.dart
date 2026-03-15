@@ -6,16 +6,46 @@ import '../models/poi_model.dart';
 import '../models/gate_model.dart';
 import '../models/tile_model.dart';
 import 'local_map_cache.dart';
+import '../../../../core/config/api_config.dart';
+import '../../../../core/config/map_config.dart';
 
 /// Service para comunicar com o Map-Service
 /// Backend: https://github.com/Estadio-do-Dragao-app/Map-Service
 class MapService {
-  static const String baseUrl =
-      'http://localhost:8000'; // Alterar para produção
+  static const String baseUrl = ApiConfig.mapService;
+
+  static const Set<String> _forcedEmergencyExitNames = {
+    'nave desportiva da ua',
+    'universidade - antiga reitoria b',
+    'universidade - antiga reuturia b',
+  };
+
+  POIModel _applyForcedEmergencyExit(POIModel poi) {
+    final normalizedName = poi.name.trim().toLowerCase();
+    if (!_forcedEmergencyExitNames.contains(normalizedName)) {
+      return poi;
+    }
+
+    if (poi.category.toLowerCase() == 'emergency_exit') {
+      return poi;
+    }
+
+    return POIModel(
+      id: poi.id,
+      name: poi.name,
+      category: 'emergency_exit',
+      description: poi.description,
+      x: poi.x,
+      y: poi.y,
+      level: poi.level,
+    );
+  }
 
   /// GET /map - Retorna mapa completo (nodes, edges, closures)
   Future<Map<String, dynamic>> getCompleteMap() async {
-    final response = await http.get(Uri.parse('$baseUrl/map'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/map'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -33,13 +63,23 @@ class MapService {
     }
 
     try {
-      final response = await http.get(Uri.parse('$baseUrl/nodes'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/nodes'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        final nodes = data.map((json) => NodeModel.fromJson(json)).toList();
+        // PERFORMANCE: Filtrar seats - são ~6000+ nodes que não precisamos para navegação
+        // Seats são usados apenas para routing (endpoint /route), não para renderização/posição
+        final nodes = data
+            .map((json) => NodeModel.fromJson(json))
+            .where((node) => node.type != 'seat')
+            .toList();
 
-        // Salva no cache
+        // Meter Seats
+        // final nodes = data.map((json) => NodeModel.fromJson(json)).toList();
+
+        // Salva no cache (sem seats para performance)
         await LocalMapCache.saveNodes(nodes);
 
         return nodes;
@@ -63,7 +103,9 @@ class MapService {
     }
 
     try {
-      final response = await http.get(Uri.parse('$baseUrl/edges'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/edges'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -102,23 +144,65 @@ class MapService {
       'poi', // Tipo genérico
       'entrance',
       'shop',
+      'wc',
+      'library',
+      'parking',
+      'cafe',
+      'restaurant',
     ];
 
-    final response = await http.get(Uri.parse('$baseUrl/nodes'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/nodes'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
+    List<POIModel> staticPois = [];
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
-      // Filtrar apenas nós que são POIs
-      final pois = data
+      staticPois = data
           .where((node) => poiTypes.contains(node['type']))
           .map((json) => POIModel.fromJson(json))
           .toList();
       print(
-        '[MapService] ${pois.length} POIs carregados de ${data.length} nós',
+        '[MapService] ${staticPois.length} POIs estáticos carregados de ${data.length} nós',
       );
-      return pois;
+    }
+
+    // Merge com POIs dinâmicos do OSM (apenas em modo outdoor)
+    if (MapConfig.useOSMPOIs) {
+      try {
+        final osmPois = await getOSMPOIs();
+        final existingNames = staticPois
+            .map((p) => p.name.toLowerCase())
+            .toSet();
+        final newOsmPois = osmPois
+            .where((p) => !existingNames.contains(p.name.toLowerCase()))
+            .toList();
+        staticPois.addAll(newOsmPois);
+        print(
+          '[MapService] +${newOsmPois.length} POIs do OSM (${osmPois.length} total, ${osmPois.length - newOsmPois.length} duplicados)',
+        );
+      } catch (e) {
+        print(
+          '[MapService] ⚠️ Falha ao buscar POIs OSM: $e (usando apenas estáticos)',
+        );
+      }
+    }
+
+    return staticPois.map(_applyForcedEmergencyExit).toList();
+  }
+
+  /// GET /pois/osm - Buscar POIs dinâmicos do OpenStreetMap
+  Future<List<POIModel>> getOSMPOIs() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/pois/osm'))
+        .timeout(const Duration(seconds: 35)); // Overpass pode demorar
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final List<dynamic> pois = data['pois'] ?? [];
+      return pois.map((json) => POIModel.fromJson(json)).toList();
     } else {
-      throw Exception('Failed to load POIs: ${response.statusCode}');
+      throw Exception('Failed to load OSM POIs: ${response.statusCode}');
     }
   }
 
@@ -130,7 +214,9 @@ class MapService {
 
   /// GET /gates - Todos os portões/entradas
   Future<List<GateModel>> getAllGates() async {
-    final response = await http.get(Uri.parse('$baseUrl/gates'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/gates'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
@@ -142,7 +228,9 @@ class MapService {
 
   /// GET /closures - Corredores fechados (para emergências)
   Future<List<Map<String, dynamic>>> getClosures() async {
-    final response = await http.get(Uri.parse('$baseUrl/closures'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/closures'))
+        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {
       return List<Map<String, dynamic>>.from(json.decode(response.body));
@@ -171,7 +259,9 @@ class MapService {
   Future<List<dynamic>> getAllSeats() async {
     try {
       // Nota: Endpoint é /seats diretamente, não /api/seats
-      final response = await http.get(Uri.parse('$baseUrl/seats'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/seats'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         // Formato esperado: {"seats": [...]} ou [...]
@@ -196,7 +286,9 @@ class MapService {
   /// Usado para obter coordenadas do lugar do utilizador
   Future<NodeModel?> getSeatById(String seatId) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/seats/$seatId'));
+      final response = await http
+          .get(Uri.parse('$baseUrl/seats/$seatId'))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -220,7 +312,9 @@ class MapService {
       final url = level != null
           ? '$baseUrl/maps/grid/tiles?level=$level'
           : '$baseUrl/maps/grid/tiles';
-      final response = await http.get(Uri.parse(url));
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

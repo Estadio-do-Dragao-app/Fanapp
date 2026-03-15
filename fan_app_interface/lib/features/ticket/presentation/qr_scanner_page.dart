@@ -62,17 +62,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
     } on InvalidQRFormatException {
       setState(() {
         _isProcessing = false;
-        _errorMessage = 'Formato de QR code inválido';
+        _errorMessage = AppLocalizations.of(context)!.invalidQRFormat;
       });
     } on InvalidQRSignatureException {
       setState(() {
         _isProcessing = false;
-        _errorMessage = 'QR code inválido ou adulterado';
+        _errorMessage = AppLocalizations.of(context)!.invalidQRSignature;
       });
     } on TicketNotFoundException {
       setState(() {
         _isProcessing = false;
-        _errorMessage = 'Bilhete não encontrado';
+        _errorMessage = AppLocalizations.of(context)!.ticketNotFound;
       });
     } on TicketServiceException catch (e) {
       setState(() {
@@ -82,7 +82,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _errorMessage = 'Erro de conexão. Verifique a sua internet.';
+        _errorMessage = AppLocalizations.of(context)!.connectionError;
       });
     }
   }

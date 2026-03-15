@@ -212,7 +212,7 @@ abstract class AppLocalizations {
   /// No description provided for @time.
   ///
   /// In en, this message translates to:
-  /// **'hrs'**
+  /// **'min'**
   String get time;
 
   /// No description provided for @distance.
@@ -328,6 +328,246 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Merchandising'**
   String get merchandising;
+
+  /// No description provided for @filter.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter'**
+  String get filter;
+
+  /// No description provided for @floor.
+  ///
+  /// In en, this message translates to:
+  /// **'Floor'**
+  String get floor;
+
+  /// No description provided for @heatmap.
+  ///
+  /// In en, this message translates to:
+  /// **'Heat map'**
+  String get heatmap;
+
+  /// No description provided for @accessibility.
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility'**
+  String get accessibility;
+
+  /// No description provided for @connectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed'**
+  String get connectionFailed;
+
+  /// No description provided for @newDestinationFound.
+  ///
+  /// In en, this message translates to:
+  /// **'NEW DESTINATION FOUND'**
+  String get newDestinationFound;
+
+  /// No description provided for @lessQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'{place} has less queue'**
+  String lessQueue(String place);
+
+  /// No description provided for @change.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get change;
+
+  /// No description provided for @no.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get no;
+
+  /// No description provided for @durationMin.
+  ///
+  /// In en, this message translates to:
+  /// **'{time}'**
+  String durationMin(String time);
+
+  /// No description provided for @distanceM.
+  ///
+  /// In en, this message translates to:
+  /// **'{dist} m'**
+  String distanceM(int dist);
+
+  /// No description provided for @yourSeat.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Seat'**
+  String get yourSeat;
+
+  /// No description provided for @ticketId.
+  ///
+  /// In en, this message translates to:
+  /// **'Ticket: {id}'**
+  String ticketId(int id);
+
+  /// No description provided for @navigate.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigate'**
+  String get navigate;
+
+  /// No description provided for @floorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Floor {level}'**
+  String floorLabel(int level);
+
+  /// No description provided for @queueTime.
+  ///
+  /// In en, this message translates to:
+  /// **'{min} min queue'**
+  String queueTime(int min);
+
+  /// No description provided for @walkTime.
+  ///
+  /// In en, this message translates to:
+  /// **'{min} min'**
+  String walkTime(int min);
+
+  /// No description provided for @removeSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get removeSaved;
+
+  /// No description provided for @savePlace.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get savePlace;
+
+  /// No description provided for @ticketNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Ticket not found'**
+  String get ticketNotFound;
+
+  /// No description provided for @seatDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Your reserved seat'**
+  String get seatDescription;
+
+  /// No description provided for @foodDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Food and snacks'**
+  String get foodDescription;
+
+  /// No description provided for @barDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Drinks available'**
+  String get barDescription;
+
+  /// No description provided for @restroomDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Public restrooms'**
+  String get restroomDescription;
+
+  /// No description provided for @exitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency exit'**
+  String get exitDescription;
+
+  /// No description provided for @firstAidDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Medical assistance'**
+  String get firstAidDescription;
+
+  /// No description provided for @infoDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Information desk'**
+  String get infoDescription;
+
+  /// No description provided for @defaultPoiDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Point of interest'**
+  String get defaultPoiDescription;
+
+  /// No description provided for @invalidQRFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid QR code format'**
+  String get invalidQRFormat;
+
+  /// No description provided for @invalidQRSignature.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid or tampered QR code'**
+  String get invalidQRSignature;
+
+  /// No description provided for @connectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection error. Check your internet.'**
+  String get connectionError;
+
+  /// No description provided for @internetDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Internet connection lost.'**
+  String get internetDisconnected;
+
+  /// No description provided for @internetReconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Internet connection restored.'**
+  String get internetReconnected;
+
+  /// No description provided for @addToFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to favorites'**
+  String get addToFavorites;
+
+  /// No description provided for @removeFromFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from favorites'**
+  String get removeFromFavorites;
+
+  /// No description provided for @calculatingRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Calculating route...'**
+  String get calculatingRoute;
+
+  /// No description provided for @tryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get tryAgain;
+
+  /// No description provided for @close.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get close;
+
+  /// No description provided for @gpsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS Required'**
+  String get gpsRequired;
+
+  /// No description provided for @gpsRequiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot calculate route without GPS location.'**
+  String get gpsRequiredMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

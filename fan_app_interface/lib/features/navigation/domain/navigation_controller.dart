@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../../../core/services/mqtt_service.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
 import '../data/models/navigation_instruction.dart';
 import '../data/services/user_position_service.dart';
+import 'models/reroute_event.dart';
 import 'route_tracker.dart';
 import 'dynamic_route_manager.dart';
+import '../../../core/utils/geographic_utils.dart';
 
 /// Controlador principal da navegação
 /// Gerencia o estado da navegação, tracking de posição e instruções
@@ -22,11 +26,20 @@ class NavigationController extends ChangeNotifier {
   late RouteModel route;
   late RouteTracker _tracker;
   late DynamicRouteManager _routeManager;
-  Timer? _updateTimer;
+  StreamSubscription<Position>? _gpsSubscription;
 
   // Stream para monitorizar posição
   final StreamController<({double x, double y})> _positionStream =
       StreamController.broadcast();
+
+  // Stream para eventos de reroute (ex: melhor rota encontrada)
+  final StreamController<RerouteEvent> _rerouteStream =
+      StreamController.broadcast();
+  Stream<RerouteEvent> get rerouteStream => _rerouteStream.stream;
+  bool _isDisposed = false;
+
+  // Subscription para MQTT routing stream
+  StreamSubscription<Map<String, dynamic>>? _mqttSubscription;
 
   bool _isNavigating = true;
   NavigationInstruction? _currentInstruction;
@@ -61,19 +74,23 @@ class NavigationController extends ChangeNotifier {
 
     // Callback quando rota é recalculada
     _routeManager.onRouteUpdated = (newRoute) {
-      print('[NavigationController] 🔄 Rota atualizada!');
+      print('[NavigationController]  Rota atualizada!');
       route = newRoute;
       // CRÍTICO: Preservar posição atual antes de recriar tracker
       final currentX = _tracker.currentX;
       final currentY = _tracker.currentY;
       _tracker = RouteTracker(route: newRoute, allNodes: allNodes);
-      _tracker.updateUserPosition(currentX, currentY);
+      // CORREÇÃO: Passar o nível atual para não perder contexto
+      _tracker.updateUserPosition(currentX, currentY, level: _currentLevel);
       _updateInstruction();
       notifyListeners();
     };
 
     // Iniciar monitorização
     _routeManager.startMonitoring(_positionStream.stream);
+
+    // Escutar eventos MQTT (Reroute) e guardar subscription
+    _mqttSubscription = MqttService().routingStream.listen(_onMqttEvent);
 
     _initialize();
   }
@@ -106,164 +123,101 @@ class NavigationController extends ChangeNotifier {
         startLevel = initialLevel!;
       } else {
         final savedPosition = await UserPositionService.getPosition();
-        startLevel = savedPosition.level;
+        startLevel = savedPosition?.level ?? _currentLevel;
       }
       print(
-        '[NavigationController] 📍 Usando posição fornecida: ($startX, $startY, level=$startLevel)',
+        '[NavigationController]  Usando posição fornecida: ($startX, $startY, level=$startLevel)',
       );
     } else {
       // Carregar posição do UserPositionService
       final savedPosition = await UserPositionService.getPosition();
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
+      if (savedPosition != null) {
         startX = savedPosition.x;
         startY = savedPosition.y;
         startLevel = savedPosition.level;
         print(
-          '[NavigationController] 📍 Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
+          '[NavigationController]  Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
         );
       } else {
-        // Fallback: usar N1
-        final userNode = allNodes.firstWhere(
-          (n) => n.id == 'N1',
-          orElse: () => allNodes.first,
-        );
-        startX = userNode.x;
-        startY = userNode.y;
-        startLevel = userNode.level;
-        print(
-          '[NavigationController] 📍 Fallback para nó ${userNode.id}: ($startX, $startY, level=$startLevel)',
-        );
+        // Fallback: This should never be reached if UI checks work.
+        // If we reach here without GPS, throw an exception.
+        throw Exception("Cannot calculate route without GPS location. Ensure position is obtained before navigating.");
       }
     }
 
     // Usar nível do utilizador (não do primeiro waypoint!)
     _currentLevel = startLevel;
-    print('[NavigationController] 🏢 Nível inicial: $_currentLevel');
+    print('[NavigationController]  Nível inicial: $_currentLevel');
 
     _tracker.updateUserPosition(startX, startY, level: _currentLevel);
     _updateInstruction();
     notifyListeners();
 
-    // Iniciar navegação automática
-    _startAutoNavigation();
-  }
+    print(
+      '[NavigationController]  Start check: RouteLen=${route.waypoints.length}, HasArrived=${_tracker.hasArrived}',
+    );
 
-  // Timer para navegação automática
-  Timer? _autoNavTimer;
-  int _targetWaypointIndex = 0;
-
-  /// Inicia navegação automática ao longo da rota
-  void _startAutoNavigation() {
-    if (route.waypoints.isEmpty) return;
-
-    _targetWaypointIndex = 0;
-
-    // Mover a cada 100ms para movimento suave
-    _autoNavTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (!_isNavigating || _tracker.hasArrived) {
-        timer.cancel();
-        return;
-      }
-
-      _moveTowardsNextWaypoint();
-    });
-  }
-
-  /// Move o utilizador gradualmente em direção ao próximo waypoint
-  void _moveTowardsNextWaypoint() {
-    if (route.waypoints.isEmpty) return;
-
-    // Obter coordenadas corretas do waypoint alvo
-    final nodesMap = {for (var n in allNodes) n.id: n};
-
-    // Encontrar o próximo waypoint que ainda não foi atingido
-    while (_targetWaypointIndex < route.waypoints.length) {
-      final targetWp = route.waypoints[_targetWaypointIndex];
-      final node = nodesMap[targetWp.nodeId];
-      final targetX = node?.x ?? targetWp.x;
-      final targetY = node?.y ?? targetWp.y;
-      final targetLevel = node?.level ?? targetWp.level;
-
-      final currentX = _tracker.currentX;
-      final currentY = _tracker.currentY;
-
-      final dx = targetX - currentX;
-      final dy = targetY - currentY;
-      final distance = math.sqrt(dx * dx + dy * dy);
-
-      // Se chegou ao waypoint atual (menos de 1.5 unidades), passar para o próximo
-      if (distance < 1.5) {
-        // Verificar mudança de piso ao atingir waypoint de escadas/rampa
-        if (targetLevel != _currentLevel) {
-          print(
-            '[NavigationController] 🪜 Mudança de piso: $_currentLevel -> $targetLevel',
-          );
-          _currentLevel = targetLevel;
-          // Atualizar nível no tracker também!
-          _tracker.updateUserPosition(
-            _tracker.currentX,
-            _tracker.currentY,
-            level: _currentLevel,
-          );
-          notifyListeners(); // Notificar UI para mudar o piso do mapa
-        }
-        _targetWaypointIndex++;
-        continue;
-      }
-
-      // Velocidade de caminhada: ~2 unidades por tick (mais lento e natural)
-      const speed = 2.0;
-
-      // Calcular movimento normalizado
-      final moveX = (dx / distance) * math.min(speed, distance);
-      final moveY = (dy / distance) * math.min(speed, distance);
-
-      // Calcular heading para a direção do movimento
-      // atan2(dy, dx) retorna ângulo em radianos onde 0 = direita
-      // Convertemos para sistema onde 0 = cima (norte)
-      // O ícone Icons.navigation aponta para CIMA por defeito
-      _heading = math.atan2(dx, -dy) * (180.0 / math.pi);
-      // Normalizar para 0-360
-      if (_heading < 0) _heading += 360;
-
-      // Mover utilizador
-      moveUser(moveX, moveY);
+    // Check for immediate arrival (e.g. route to current location)
+    if (_tracker.hasArrived) {
+      print('[NavigationController]  Immediate arrival detected at start.');
+      _onArrival();
       return;
     }
 
-    // Chegou ao destino
-    _autoNavTimer?.cancel();
+    // Iniciar navegação real baseada em GPS
+    _startGpsTracking();
   }
 
-  /// Roda o utilizador em graus (positivo = horário)
-  void rotateUser(double degrees) {
-    _heading += degrees;
-    // Normalizar para 0-360
-    _heading = _heading % 360;
-    if (_heading < 0) _heading += 360;
-    notifyListeners();
+  Future<void> _startGpsTracking() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return;
+    }
+
+    if (permission == LocationPermission.deniedForever) return;
+
+    final locationSettings = const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 2, // Update events when user moves 2 meters
+    );
+
+    _gpsSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (Position position) {
+            if (!_isNavigating || _isDisposed) return;
+
+            // Update heading based on device movement
+            if (position.heading > 0) {
+              _heading = position.heading;
+            }
+
+            // Update position on map/tracker
+            updateUserPosition(position.longitude, position.latitude);
+
+            // Emit to trigger dynamic route manager updates
+            _positionStream.add((x: position.longitude, y: position.latitude));
+          },
+        );
   }
 
-  /// Move para a frente na direção do heading atual
-  void moveForward(double meters) {
-    // Converter heading para radianos
-    // Sistema de Navegação (Bearing):
-    // 0 graus = Norte/Cima (Eixo Y negativo)
-    // 90 graus = Este/Direita (Eixo X positivo)
-    // 180 graus = Sul/Baixo (Eixo Y positivo)
-    final rad = _heading * (math.pi / 180.0);
+  /// Pausar GPS tracking (ex: antes de recalcular rota)
+  void pauseGpsTracking() {
+    _gpsSubscription?.pause();
+    print('[NavigationController] ⏸ GPS tracking paused');
+  }
 
-    // Bearing formulas for screen coordinates (Y is Down):
-    // dX = meters * sin(theta)
-    // dY = meters * -cos(theta)
-
-    // Check: 0 deg -> sin(0)=0, -cos(0)=-1 -> (0, -1) -> Up. Correct.
-    // Check: 90 deg -> sin(90)=1, -cos(90)=0 -> (1, 0) -> Right. Correct.
-
-    final deltaX = meters * math.sin(rad);
-    final deltaY = meters * -math.cos(rad);
-
-    moveUser(deltaX, deltaY);
+  /// Retomar GPS tracking após pausa
+  void resumeGpsTracking() {
+    if (_isNavigating &&
+        _gpsSubscription != null &&
+        _gpsSubscription!.isPaused) {
+      print('[NavigationController] ▶ GPS tracking resumed');
+      _gpsSubscription?.resume();
+    }
   }
 
   /// Atualiza a instrução atual
@@ -272,7 +226,7 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Atualiza posição manualmente (para integração com GPS real)
+  /// Atualiza posição (para integração com GPS real)
   void updateUserPosition(double x, double y) {
     _tracker.updateUserPosition(x, y);
     _updateInstruction();
@@ -282,52 +236,10 @@ class NavigationController extends ChangeNotifier {
     }
   }
 
-  /// Move utilizador de forma incremental (para controlos manuais)
-  void moveUser(double deltaX, double deltaY) {
-    final newX = _tracker.currentX + deltaX;
-    final newY = _tracker.currentY + deltaY;
-    _tracker.updateUserPosition(newX, newY);
-
-    // Só atualizar instrução se ainda não chegou
-    if (!_tracker.hasArrived) {
-      _updateInstruction();
-    }
-
-    // Emitir posição para monitorização de rota
-    _positionStream.add((x: newX, y: newY));
-
-    if (_tracker.hasArrived) {
-      _onArrival();
-    }
-  }
-
-  void goToNextWaypoint() {
-    final nextIndex = _tracker.currentWaypointIndex + 1;
-    if (nextIndex < route.waypoints.length) {
-      final waypoint = route.waypoints[nextIndex];
-      _tracker.updateUserPosition(waypoint.x, waypoint.y);
-      _updateInstruction();
-
-      if (_tracker.hasArrived) {
-        _onArrival();
-      }
-    }
-  }
-
-  /// Volta ao waypoint anterior (controlo manual para emulador)
-  void goToPreviousWaypoint() {
-    final prevIndex = _tracker.currentWaypointIndex - 1;
-    if (prevIndex >= 0) {
-      final waypoint = route.waypoints[prevIndex];
-      _tracker.updateUserPosition(waypoint.x, waypoint.y);
-      _updateInstruction();
-    }
-  }
-
   /// Chamado quando utilizador chega ao destino
   void _onArrival() async {
     _isNavigating = false;
-    _updateTimer?.cancel();
+    _gpsSubscription?.cancel();
 
     // Guardar posição final como nova posição do usuário
     final finalX = _tracker.currentX;
@@ -350,7 +262,7 @@ class NavigationController extends ChangeNotifier {
   /// Termina a navegação manualmente
   Future<void> endNavigation() async {
     _isNavigating = false;
-    _updateTimer?.cancel();
+    _gpsSubscription?.cancel();
 
     // Guardar posição atual antes de sair
     final finalX = _tracker.currentX;
@@ -370,11 +282,203 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Utiliza IDs de nós para reconstruir rota completa
+  void applyNewRoute(List<String> nodeIds) {
+    if (nodeIds.isEmpty) return;
+
+    print(
+      '[NavigationController]  Applying new route with ${nodeIds.length} nodes',
+    );
+
+    // Mapear IDs para NodeModels
+    final nodesMap = {for (var n in allNodes) n.id: n};
+    final newPath = <PathNode>[];
+    double cumulativeDist = 0;
+    double cumulativeTime = 0;
+
+    for (int i = 0; i < nodeIds.length; i++) {
+      final id = nodeIds[i];
+      final node = nodesMap[id];
+      if (node == null) continue;
+
+      if (i > 0) {
+        final prevNode = nodesMap[nodeIds[i - 1]];
+        if (prevNode != null) {
+          final dist = GeographicUtils.calculateDistance(
+            prevNode.x,
+            prevNode.y,
+            node.x,
+            node.y,
+          );
+          cumulativeDist += dist;
+          cumulativeTime += dist / 1.4; // 1.4 m/s walking speed
+        }
+      }
+
+      newPath.add(
+        PathNode(
+          nodeId: id,
+          x: node.x,
+          y: node.y,
+          level: node.level,
+          distanceFromStart: cumulativeDist,
+          estimatedTime: cumulativeTime,
+        ),
+      );
+    }
+
+    // Criar novo RouteModel
+    final newRouteModel = RouteModel(
+      path: newPath,
+      totalDistance: cumulativeDist,
+      estimatedTime: cumulativeTime,
+      congestionLevel: 0, // Desconhecido nesta fase
+      warnings: [],
+    );
+
+    // Atualizar rota no manager e tracker
+    route = newRouteModel;
+    _routeManager.updateRoute(newRouteModel);
+
+    // Resetar tracker mas manter posição atual logicamente
+    final currentX = _tracker.currentX;
+    final currentY = _tracker.currentY;
+    _tracker = RouteTracker(route: newRouteModel, allNodes: allNodes);
+    _tracker.updateUserPosition(currentX, currentY);
+    _updateInstruction();
+
+    // Reiniciar navegação automática
+    // Resumir navegação baseada no GPS
+    _isNavigating = true;
+    resumeGpsTracking();
+
+    print('[NavigationController]  New route applied');
+
+    notifyListeners();
+  }
+
+  /// Processa eventos recebidos via MQTT
+  void _onMqttEvent(Map<String, dynamic> event) {
+    if (_isDisposed) {
+      // Controller disposed, ignore any incoming MQTT events
+      print('[NavigationController]  Ignoring MQTT event after dispose');
+      return;
+    }
+
+    final eventType = event['type'] as String?;
+
+    // Handle evacuation routes (emergency)
+    if (eventType == 'evacuation') {
+      print('[NavigationController]  EVACUATION route received!');
+      try {
+        final routeIds = List<String>.from(event['route'] ?? []);
+        if (routeIds.isNotEmpty) {
+          print(
+            '[NavigationController]  Applying evacuation route with  24{routeIds.length} nodes',
+          );
+          print(
+            '[NavigationController]  Keeping user at current position: ( 24{_tracker.currentX},  24{_tracker.currentY})',
+          );
+
+          // STOP GPS tracking temporarily
+          pauseGpsTracking();
+          _isNavigating = false;
+
+          // applyNewRoute preserves current position (X, Y coordinates)
+          applyNewRoute(routeIds);
+
+          // DO NOT restart auto-navigation - user keeps current position
+          // The route is now displayed and user can follow it manually
+        }
+      } catch (e) {
+        print('[NavigationController]  Error applying evacuation route: $e');
+      }
+      return;
+    }
+
+    // Handle reroute suggestions
+    if (eventType == 'reroute_suggestion') {
+      print('[NavigationController]  MQTT Reroute Suggestion received: $event');
+      try {
+        // Parse payload (flat structure from backend)
+        final improvement = event['improvement'] as Map<String, dynamic>?;
+        final newRoute = List<String>.from(event['new_route'] ?? []);
+
+        // Calcular novos valores baseados na melhoria
+        final timeSavedSeconds =
+            (improvement?['time_saved_seconds'] as num?)?.toInt() ?? 0;
+        // Nova duração = Duração atual - Tempo poupado
+        final currentRemainingSeconds = remainingTimeSeconds;
+        final newDurationSeconds = (currentRemainingSeconds - timeSavedSeconds)
+            .clamp(60, 86400); // Mínimo 1 min
+
+        // Formatar nova duração
+        final newDurationMinutes = (newDurationSeconds / 60).ceil();
+        final newDurationDisplay = newDurationMinutes < 60
+            ? '$newDurationMinutes min'
+            : '${newDurationMinutes ~/ 60}h ${newDurationMinutes % 60}m';
+
+        // Calcular nova hora de chegada
+        final now = DateTime.now();
+        final newArrival = now.add(Duration(seconds: newDurationSeconds));
+        final newArrivalDisplay =
+            '${newArrival.hour}:${newArrival.minute.toString().padLeft(2, '0')}';
+
+        // Calcular distância da nova rota
+        double newRouteDistance = 0;
+        if (newRoute.isNotEmpty) {
+          final nodesMap = {for (var n in allNodes) n.id: n};
+          for (int i = 0; i < newRoute.length - 1; i++) {
+            final nodeA = nodesMap[newRoute[i]];
+            final nodeB = nodesMap[newRoute[i + 1]];
+            if (nodeA != null && nodeB != null) {
+              final dx = nodeA.x - nodeB.x;
+              final dy = nodeA.y - nodeB.y;
+              newRouteDistance += math.sqrt(dx * dx + dy * dy);
+            }
+          }
+        }
+
+        final rerouteEvent = RerouteEvent(
+          arrivalTime: newArrivalDisplay, // "14:30"
+          duration: newDurationDisplay, // "15 min"
+          distance: newRouteDistance.round(), // Distância real calculada
+          locationName: event['new_destination'] ?? "Better Route Found",
+          newDestinationId:
+              event['new_destination'] ?? '', // O novo POI de destino
+          category:
+              event['category']
+                  as String?, // POI category for nearest_category lookup
+          reason: event['reason'] ?? 'Better route found',
+          newRouteIds: newRoute,
+        );
+        if (!_isDisposed) {
+          _rerouteStream.add(rerouteEvent);
+        } else {
+          print(
+            '[NavigationController]  Tried to add reroute event after dispose',
+          );
+        }
+      } catch (e) {
+        print('[NavigationController]  Error parsing reroute event: $e');
+      }
+    }
+  }
+
   @override
   void dispose() {
-    _updateTimer?.cancel();
+    print('[NavigationController]  Disposing controller...');
+    _isDisposed = true;
+    if (_mqttSubscription != null) {
+      print('[NavigationController]  Cancelling MQTT subscription');
+      _mqttSubscription?.cancel();
+      _mqttSubscription = null;
+    }
+    _gpsSubscription?.cancel();
     _positionStream.close();
+    _rerouteStream.close();
     _routeManager.dispose();
+    print('[NavigationController]  Dispose complete');
     super.dispose();
   }
 
@@ -408,9 +512,7 @@ class NavigationController extends ChangeNotifier {
     double minDistance = double.infinity;
 
     for (final node in allNodes) {
-      final dx = node.x - x;
-      final dy = node.y - y;
-      final distance = (dx * dx + dy * dy);
+      final distance = GeographicUtils.calculateDistance(x, y, node.x, node.y);
 
       if (distance < minDistance) {
         minDistance = distance;

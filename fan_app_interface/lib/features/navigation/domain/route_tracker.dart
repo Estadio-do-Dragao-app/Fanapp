@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
+import '../../../core/utils/geographic_utils.dart';
 import '../data/models/navigation_instruction.dart';
 
 /// Responsável por rastrear a posição do utilizador na rota
@@ -55,27 +56,36 @@ class RouteTracker {
 
   /// Verifica se utilizador chegou ao destino
   /// Considera X, Y E nível - só chegou se estiver no piso certo!
+  /// Requer que o user tenha progredido na rota (evita arrival prematuro em rotas curtas)
   bool get hasArrived {
-    if (route.waypoints.isEmpty) return false;
+    // Se a rota está vazia, já chegamos (ou não há para onde ir)
+    if (route.waypoints.isEmpty) return true;
     final lastWaypoint = route.waypoints.last;
     final lastCoords = getCorrectWaypointCoords(lastWaypoint);
     final destinationLevel = _getWaypointLevel(lastWaypoint);
 
-    final distToLast = _calculateDistance(
+    final distToLast = GeographicUtils.calculateDistance(
       _userX,
       _userY,
       lastCoords.x,
       lastCoords.y,
     );
 
-    // Chegou se está a menos de 3 metros E no mesmo nível
-    final arrived = distToLast < 3.0 && _userLevel == destinationLevel;
-    if (!arrived && distToLast < 3.0) {
-      print(
-        '[RouteTracker] ⚠️ Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
-      );
+    // Raio de chegada: 5 metros
+    if (distToLast < 5.0 && _userLevel == destinationLevel) {
+      // Para rotas curtas: só considerar "arrived" se o user já progrediu
+      // na rota (pelo menos 60% dos waypoints ultrapassados)
+      // Isto evita que a navegação termine antes de começar
+      final minProgress = route.waypoints.length <= 3
+          ? 0.5  // Rotas muito curtas: pelo menos metade
+          : 0.3; // Rotas normais: 30%
+      if (progress < minProgress) {
+        return false;
+      }
+      return true;
     }
-    return arrived;
+
+    return false;
   }
 
   /// Obtém o nível de um waypoint (do Map Service ou do próprio waypoint)
@@ -93,7 +103,7 @@ class RouteTracker {
     // Distância do utilizador até o próximo waypoint
     final nextWaypoint = route.waypoints[_currentWaypointIndex];
     final nextCoords = getCorrectWaypointCoords(nextWaypoint);
-    double total = _calculateDistance(
+    double total = GeographicUtils.calculateDistance(
       _userX,
       _userY,
       nextCoords.x,
@@ -106,7 +116,7 @@ class RouteTracker {
       final next = route.waypoints[i + 1];
       final currentCoords = getCorrectWaypointCoords(current);
       final nextCoordsLoop = getCorrectWaypointCoords(next);
-      total += _calculateDistance(
+      total += GeographicUtils.calculateDistance(
         currentCoords.x,
         currentCoords.y,
         nextCoordsLoop.x,
@@ -135,7 +145,7 @@ class RouteTracker {
     // Verificar se chegou ao destino
     final lastWaypoint = route.waypoints.last;
     final lastCoords = getCorrectWaypointCoords(lastWaypoint);
-    final distToLast = _calculateDistance(
+    final distToLast = GeographicUtils.calculateDistance(
       _userX,
       _userY,
       lastCoords.x,
@@ -146,9 +156,9 @@ class RouteTracker {
     final destinationLevel = _getWaypointLevel(lastWaypoint);
     final sameLevel = _userLevel == destinationLevel;
 
-    if (distToLast < 5.0 && sameLevel) {
+    if (distToLast < 5.0 && sameLevel && progress >= 0.3) {
       print(
-        '[RouteTracker] 🎯 Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m, nível: $_userLevel',
+        '[RouteTracker]  Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m, nível: $_userLevel',
       );
       return NavigationInstruction(
         type: 'arrive',
@@ -160,7 +170,7 @@ class RouteTracker {
     // Se está perto em X,Y mas no nível errado, mostrar instrução para escadas/rampa
     if (distToLast < 10.0 && !sameLevel) {
       print(
-        '[RouteTracker] 🪜 Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
+        '[RouteTracker] Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
       );
       // Continuar navegação normal para encontrar escadas
     }
@@ -175,7 +185,7 @@ class RouteTracker {
     // Distância da posição atual até o waypoint atual
     final currentWp = route.waypoints[_currentWaypointIndex];
     final currentCoords = getCorrectWaypointCoords(currentWp);
-    totalDistance += _calculateDistance(
+    totalDistance += GeographicUtils.calculateDistance(
       _userX,
       _userY,
       currentCoords.x,
@@ -188,7 +198,7 @@ class RouteTracker {
       final wp2 = route.waypoints[i + 1];
       final coords1 = getCorrectWaypointCoords(wp1);
       final coords2 = getCorrectWaypointCoords(wp2);
-      totalDistance += _calculateDistance(
+      totalDistance += GeographicUtils.calculateDistance(
         coords1.x,
         coords1.y,
         coords2.x,
@@ -209,7 +219,7 @@ class RouteTracker {
     }
 
     print(
-      '[RouteTracker] 📍 Instrução: "$turnType" em ${totalDistance.toStringAsFixed(1)}m '
+      '[RouteTracker] Instrução: "$turnType" em ${totalDistance.toStringAsFixed(1)}m '
       '(waypoints $_currentWaypointIndex→$nextTurnIndex de ${route.waypoints.length})',
     );
 
@@ -259,7 +269,7 @@ class RouteTracker {
     // Verificar se os vetores são válidos (não-zero)
     final len1 = sqrt(dx1 * dx1 + dy1 * dy1);
     final len2 = sqrt(dx2 * dx2 + dy2 * dy2);
-    if (len1 < 0.001 || len2 < 0.001) {
+    if (len1 < 1e-12 || len2 < 1e-12) {
       return 'straight';
     }
 
@@ -271,7 +281,7 @@ class RouteTracker {
     final angleDegrees = acos(dotProduct.clamp(-1.0, 1.0)) * 180 / pi;
 
     print(
-      '[RouteTracker] 🧭 Curva em WP$waypointIndex: ângulo=${angleDegrees.toStringAsFixed(1)}° cross=${crossProduct.toStringAsFixed(0)}',
+      '[RouteTracker] Curva em WP$waypointIndex: ângulo=${angleDegrees.toStringAsFixed(1)}° cross=${crossProduct.toStringAsFixed(0)}',
     );
 
     // Se o ângulo é pequeno, é praticamente reto
@@ -289,28 +299,110 @@ class RouteTracker {
     }
   }
 
-  /// Atualiza o waypoint atual baseado na posição do utilizador
+  /// Atualiza o waypoint atual baseado na posição do utilizador.
+  ///
+  /// Lógica estilo Google Maps:
+  /// 1. Se o user está perto de um waypoint (< 4m), avança
+  /// 2. Se o user progrediu > 90% no segmento atual, avança
+  /// 3. FORWARD-PROJECTION: Se o user está mais perto do PRÓXIMO waypoint
+  ///    do que do ATUAL, avança (skips waypoints ultrapassados)
   void _updateCurrentWaypoint() {
-    for (int i = _currentWaypointIndex; i < route.waypoints.length; i++) {
-      final waypoint = route.waypoints[i];
-      final coords = getCorrectWaypointCoords(waypoint);
-      final distance = _calculateDistance(_userX, _userY, coords.x, coords.y);
+    if (_currentWaypointIndex >= route.waypoints.length) return;
 
-      // Se está a menos de 5 metros do waypoint, avançar para o próximo
-      // (aumentado de 2m para evitar mudanças prematuras de instrução)
-      if (distance < 5.0 && i < route.waypoints.length - 1) {
-        _currentWaypointIndex = i + 1;
-      } else {
-        break;
+    bool advanced = true;
+
+    // Continuar a avançar enquanto houver waypoints para saltar
+    while (advanced && _currentWaypointIndex < route.waypoints.length) {
+      advanced = false;
+
+      final currentIdx = _currentWaypointIndex;
+      final waypoint = route.waypoints[currentIdx];
+      final coords = getCorrectWaypointCoords(waypoint);
+      final pointDist = GeographicUtils.calculateDistance(
+        _userX, _userY, coords.x, coords.y,
+      );
+
+      // Debug log
+      print(
+        '[RouteTracker] WP$currentIdx (${waypoint.nodeId}): '
+        'dist=${pointDist.toStringAsFixed(1)}m',
+      );
+
+      // === CHECK 1: Proximidade direta ao nó (< 4m) ===
+      if (pointDist < 4.0) {
+        _currentWaypointIndex = currentIdx + 1;
+        print(
+          '[RouteTracker] WP$currentIdx atingido por proximidade '
+          '(${pointDist.toStringAsFixed(1)}m)',
+        );
+        advanced = true;
+        continue;
+      }
+
+      // === CHECK 2: Snap-to-edge — progresso no segmento ===
+      if (currentIdx > 0) {
+        final prevWp = route.waypoints[currentIdx - 1];
+        final prevCoords = getCorrectWaypointCoords(prevWp);
+
+        final segDist = GeographicUtils.pointToSegmentDistance(
+          _userX, _userY,
+          prevCoords.x, prevCoords.y,
+          coords.x, coords.y,
+        );
+        final progress = GeographicUtils.progressAlongSegment(
+          _userX, _userY,
+          prevCoords.x, prevCoords.y,
+          coords.x, coords.y,
+        );
+
+        print(
+          '[RouteTracker] Seg WP${currentIdx - 1}→WP$currentIdx: '
+          'segDist=${segDist.toStringAsFixed(1)}m, '
+          'progress=${(progress * 100).toStringAsFixed(0)}%',
+        );
+
+        // Se está perto do segmento E progrediu > 90%, avança
+        if (segDist < 8.0 && progress > 0.90) {
+          _currentWaypointIndex = currentIdx + 1;
+          print(
+            '[RouteTracker] WP$currentIdx atingido por snap-to-edge '
+            '(progress=${(progress * 100).toStringAsFixed(0)}%)',
+          );
+          advanced = true;
+          continue;
+        }
+      }
+
+      // === CHECK 3: FORWARD-PROJECTION (estilo Google Maps) ===
+      // Se o user está mais perto do PRÓXIMO waypoint do que do ATUAL,
+      // significa que já ultrapassou o atual sem passar perto.
+      // Isto resolve o caso de cortar uma curva ou caminhar paralelo.
+      if (currentIdx + 1 < route.waypoints.length) {
+        final nextWp = route.waypoints[currentIdx + 1];
+        final nextCoords = getCorrectWaypointCoords(nextWp);
+        final distToNext = GeographicUtils.calculateDistance(
+          _userX, _userY, nextCoords.x, nextCoords.y,
+        );
+
+        // Distância entre o waypoint atual e o próximo
+        final segmentLen = GeographicUtils.calculateDistance(
+          coords.x, coords.y, nextCoords.x, nextCoords.y,
+        );
+
+        // Se o user está mais perto do próximo E a distância ao atual
+        // é maior que metade do segmento → claramente ultrapassou
+        if (distToNext < pointDist && pointDist > segmentLen * 0.4) {
+          _currentWaypointIndex = currentIdx + 1;
+          print(
+            '[RouteTracker] WP$currentIdx skipped (forward-projection): '
+            'distCurrent=${pointDist.toStringAsFixed(1)}m > '
+            'distNext=${distToNext.toStringAsFixed(1)}m',
+          );
+          advanced = true;
+          continue;
+        }
       }
     }
-  }
-
-  /// Calcula distância euclidiana entre dois pontos
-  double _calculateDistance(double x1, double y1, double x2, double y2) {
-    final dx = x2 - x1;
-    final dy = y2 - y1;
-    return sqrt(dx * dx + dy * dy);
   }
 
   /// Retorna o progresso da rota (0.0 a 1.0)
@@ -319,3 +411,4 @@ class RouteTracker {
     return _currentWaypointIndex / route.waypoints.length;
   }
 }
+

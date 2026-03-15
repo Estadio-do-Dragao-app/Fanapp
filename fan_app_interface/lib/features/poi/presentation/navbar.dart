@@ -1,76 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:fan_app_interface/core/widgets/category_buttons.dart';
 import 'package:fan_app_interface/features/poi/presentation/destination_selection.dart';
-import 'package:fan_app_interface/features/ticket/data/services/ticket_storage_service.dart';
-import 'package:fan_app_interface/features/ticket/presentation/ticket_menu.dart';
+// import 'package:fan_app_interface/features/ticket/data/services/ticket_storage_service.dart';
+// import 'package:fan_app_interface/features/ticket/presentation/ticket_menu.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
-import 'package:fan_app_interface/features/map/data/services/map_service.dart';
-import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
-import 'package:fan_app_interface/features/map/data/models/node_model.dart';
-import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
-import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
-import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
-import 'package:fan_app_interface/features/navigation/data/services/user_position_service.dart';
-import 'dart:math';
+// import 'package:fan_app_interface/features/map/data/services/map_service.dart';
+// import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
+// import 'package:fan_app_interface/features/map/data/models/node_model.dart';
+// import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
+// import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
+// import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
+// import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
+import 'package:fan_app_interface/core/utils/poi_style.dart';
+// import 'package:fan_app_interface/core/utils/geographic_utils.dart';
+// import 'package:fan_app_interface/core/utils/top_feedback.dart';
+// import 'dart:math';
 
 /// Simple MapPage implementation that shows a placeholder 'map' area and a
 /// horizontal row of category buttons overlayed at the top.
 class Navbar extends StatefulWidget {
   final VoidCallback? onNavigationEnd;
+  final bool avoidStairs;
+  final Widget? filterButton;
 
-  const Navbar({Key? key, this.onNavigationEnd}) : super(key: key);
+  const Navbar({
+    Key? key,
+    this.onNavigationEnd,
+    this.avoidStairs = false,
+    this.filterButton,
+  }) : super(key: key);
 
   @override
   State<Navbar> createState() => _NavbarState();
 }
 
 class _NavbarState extends State<Navbar> {
-  final List<String> categoryIds = ['seat', 'wc', 'food', 'exit'];
+  final List<String> categoryIds = ['food', 'first_aid', 'wc', 'poi'];
+  /*
   final TicketStorageService _ticketStorage = TicketStorageService();
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
+  */
   int selected = 0;
+  /*
 
-  // Posição fixa do utilizador (mesma do StadiumMapPage)
+  // Fallback ID de nó
   static const String userNodeId = 'N1';
-
+  */
   Future<void> _handleCategorySelect(
     int i,
     AppLocalizations localizations,
   ) async {
     setState(() => selected = i);
 
-    // Caso especial para o botão "seat"
-    if (categoryIds[i] == 'seat') {
-      // Verificar se tem bilhete digitalizado
-      final ticket = await _ticketStorage.getTicket();
-      if (ticket == null) {
-        // Não tem bilhete - mostrar diálogo
-        if (!mounted) return;
-        _showNoTicketDialog(localizations);
-        return;
-      }
-
-      // Tem bilhete - navegar diretamente para o lugar
-      if (!mounted) return;
-      await _navigateToSeat(ticket, localizations);
-      if (mounted) widget.onNavigationEnd?.call();
-      return;
-    }
+    // TICKET FEATURE (temporariamente desativada)
+    // O fluxo abaixo foi preservado mas comentado para não executar:
+    // if (categoryIds[i] == 'seat') {
+    //   final ticket = await _ticketStorage.getTicket();
+    //   if (ticket == null) {
+    //     if (!mounted) return;
+    //     _showNoTicketDialog(localizations);
+    //     return;
+    //   }
+    //
+    //   if (!mounted) return;
+    //   await _navigateToSeat(ticket, localizations);
+    //   if (mounted) widget.onNavigationEnd?.call();
+    //   return;
+    // }
 
     // Para outras categorias, comportamento normal
     Navigator.push(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            DestinationSelectionPage(categoryId: categoryIds[i]),
+            DestinationSelectionPage(
+              categoryId: categoryIds[i],
+              avoidStairs: widget.avoidStairs,
+            ),
         transitionsBuilder: _buildSlideTransition,
       ),
     ).then((_) {
       if (mounted) widget.onNavigationEnd?.call();
     });
   }
-
+/*
   /// Encontra o nó mais próximo de uma coordenada
   String _findNearestNode(
     double x,
@@ -164,26 +178,19 @@ class _NavbarState extends State<Navbar> {
         allNodes,
       );
 
-      // Obter posição guardada do utilizador
-      final savedPosition = await UserPositionService.getPosition();
-      double startX;
-      double startY;
-      int startLevel;
+      // Obter posição real do utilizador (GPS ou Saved)
+      final userPos = await GeographicUtils.getCurrentUserPosition();
 
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
-        startX = savedPosition.x;
-        startY = savedPosition.y;
-        startLevel = savedPosition.level;
-      } else {
-        // Fallback para N1
-        final userNode = allNodes.firstWhere(
-          (n) => n.id == userNodeId,
-          orElse: () => allNodes.first,
-        );
-        startX = userNode.x;
-        startY = userNode.y;
-        startLevel = userNode.level;
+      if (userPos == null) {
+        if (!mounted) return;
+        Navigator.of(context).pop(); // Fechar loading
+        AppTopFeedback.showWarning(context, localizations.gpsRequiredMessage);
+        return;
       }
+
+      double startX = userPos.x;
+      double startY = userPos.y;
+      int startLevel = userPos.level;
 
       // Calcular rota
       final route = await _routingService.getRouteToNode(
@@ -191,6 +198,7 @@ class _NavbarState extends State<Navbar> {
         startY: startY,
         startLevel: startLevel,
         nodeId: nearestNodeId,
+        avoidStairs: widget.avoidStairs,
       );
 
       if (!mounted) return;
@@ -201,11 +209,16 @@ class _NavbarState extends State<Navbar> {
         context,
         poi: seatPOI,
         route: route,
+        allNodes: allNodes,
         onNavigate: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('A navegar para ${seatPOI.name}'),
-              backgroundColor: const Color(0xFF161A3E),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NavigationPage(
+                route: route,
+                destination: seatPOI,
+                nodes: allNodes,
+              ),
             ),
           );
         },
@@ -223,7 +236,7 @@ class _NavbarState extends State<Navbar> {
       );
     }
   }
-
+*/
   Widget _buildSlideTransition(
     BuildContext context,
     Animation<double> animation,
@@ -238,6 +251,8 @@ class _NavbarState extends State<Navbar> {
     return SlideTransition(position: offsetAnimation, child: child);
   }
 
+  /*
+  // TICKET FEATURE (temporariamente desativada)
   void _showNoTicketDialog(AppLocalizations localizations) {
     showDialog(
       context: context,
@@ -271,100 +286,101 @@ class _NavbarState extends State<Navbar> {
       ),
     );
   }
+  */
 
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
     final categories = [
-      localizations.seat,
-      localizations.wc,
       localizations.food,
-      localizations.exit,
+      localizations.firstAid,
+      localizations.wc,
+      localizations.information,
     ];
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFF929AD4),
-                  Color(0xFF929AD4).withOpacity(0.8),
-                  Color(0xFF929AD4).withOpacity(0.5),
-                  Colors.transparent,
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+    return Stack(
+      children: [
+        // IgnorePointer so the map behind the gradient can receive touches
+        // Positioned.fill ensures the gradient matches the Stack's content size
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color.fromARGB(255, 110, 119, 207),
+                    Color.fromARGB(255, 110, 119, 207).withOpacity(0.9),
+                    Color.fromARGB(255, 110, 119, 207).withOpacity(0.7),
+                    Color.fromARGB(255, 110, 119, 207).withOpacity(0.4),
+                    Colors.transparent,
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
             ),
           ),
+        ),
 
-          // Top overlay: category buttons inside SafeArea
-          SafeArea(
+        // Top overlay: category buttons inside SafeArea
+        // Align constrains this to only the top — otherwise SafeArea fills
+        // the entire Stack and swallows map touches below the buttons.
+        Align(
+          alignment: Alignment.topLeft,
+          child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              child: Stack(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Align(
-                    alignment: Alignment.topLeft,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          localizations.whereToQuestion,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontFamily: 'Gabarito',
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.left,
-                        ),
-                        const SizedBox(height: 16),
-                        CategoryButtons(
-                          labels: categories,
-                          selectedIndex: selected,
-                          onSelect: (i) =>
-                              _handleCategorySelect(i, localizations),
-                          iconBuilder: (label) {
-                            // Match against translated labels
-                            if (label == localizations.seat) {
-                              return const Icon(
-                                Icons.event_seat,
-                                color: Colors.black,
-                              );
-                            } else if (label == localizations.wc) {
-                              return const Icon(Icons.wc, color: Colors.black);
-                            } else if (label == localizations.food) {
-                              return const Icon(
-                                Icons.fastfood,
-                                color: Colors.black,
-                              );
-                            } else if (label == localizations.exit) {
-                              return const Icon(
-                                Icons.meeting_room,
-                                color: Colors.black,
-                              );
-                            } else {
-                              return const Icon(
-                                Icons.help,
-                                color: Colors.black,
-                              );
-                            }
-                          },
-                        ),
-                      ],
+                  Text(
+                    localizations.whereToQuestion,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontFamily: 'Gabarito',
+                      fontWeight: FontWeight.bold,
                     ),
+                    textAlign: TextAlign.left,
                   ),
-                  // Search button in top right
+                  const SizedBox(height: 16),
+                  CategoryButtons(
+                    labels: categories,
+                    selectedIndex: selected,
+                    onSelect: (i) => _handleCategorySelect(i, localizations),
+                    iconBuilder: (label) {
+                      // Map translated label back to category ID
+                      String catId;
+                      if (label == localizations.food) {
+                        catId = 'food';
+                      } else if (label == localizations.firstAid) {
+                        catId = 'first_aid';
+                      } else if (label == localizations.wc) {
+                        catId = 'wc';
+                      } else if (label == localizations.information) {
+                        catId = 'department';
+                      } else {
+                        catId = label;
+                      }
+                      return Icon(
+                        POIStyle.getCategoryIcon(catId),
+                        color: Colors.black,
+                      );
+                    },
+                  ),
+                  if (widget.filterButton != null) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: widget.filterButton!,
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

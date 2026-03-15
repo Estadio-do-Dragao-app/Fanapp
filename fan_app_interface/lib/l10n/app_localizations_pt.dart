@@ -70,7 +70,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get arrival => 'chegada';
 
   @override
-  String get time => 'hrs';
+  String get time => 'min';
 
   @override
   String get distance => 'm';
@@ -128,4 +128,138 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get merchandising => 'Loja';
+
+  @override
+  String get filter => 'Filtro';
+
+  @override
+  String get floor => 'Piso';
+
+  @override
+  String get heatmap => 'Mapa de calor';
+
+  @override
+  String get accessibility => 'Acessibilidade';
+
+  @override
+  String get connectionFailed => 'Falha de conexão';
+
+  @override
+  String get newDestinationFound => 'NOVO DESTINO ENCONTRADO';
+
+  @override
+  String lessQueue(String place) {
+    return '$place tem menos fila';
+  }
+
+  @override
+  String get change => 'Trocar';
+
+  @override
+  String get no => 'Não';
+
+  @override
+  String durationMin(String time) {
+    return '$time';
+  }
+
+  @override
+  String distanceM(int dist) {
+    return '$dist m';
+  }
+
+  @override
+  String get yourSeat => 'O Seu Lugar';
+
+  @override
+  String ticketId(int id) {
+    return 'Bilhete: $id';
+  }
+
+  @override
+  String get navigate => 'Navegar';
+
+  @override
+  String floorLabel(int level) {
+    return 'Piso $level';
+  }
+
+  @override
+  String queueTime(int min) {
+    return '$min min fila';
+  }
+
+  @override
+  String walkTime(int min) {
+    return '$min min';
+  }
+
+  @override
+  String get removeSaved => 'Remover';
+
+  @override
+  String get savePlace => 'Guardar';
+
+  @override
+  String get ticketNotFound => 'Bilhete não encontrado';
+
+  @override
+  String get seatDescription => 'O seu lugar reservado';
+
+  @override
+  String get foodDescription => 'Comida e snacks';
+
+  @override
+  String get barDescription => 'Bebidas disponíveis';
+
+  @override
+  String get restroomDescription => 'Casas de banho';
+
+  @override
+  String get exitDescription => 'Saída de emergência';
+
+  @override
+  String get firstAidDescription => 'Assistência médica';
+
+  @override
+  String get infoDescription => 'Balcão de informações';
+
+  @override
+  String get defaultPoiDescription => 'Ponto de interesse';
+
+  @override
+  String get invalidQRFormat => 'Formato de QR code inválido';
+
+  @override
+  String get invalidQRSignature => 'QR code inválido ou adulterado';
+
+  @override
+  String get connectionError => 'Erro de conexão. Verifique a sua internet.';
+
+  @override
+  String get internetDisconnected => 'Ligação à internet perdida.';
+
+  @override
+  String get internetReconnected => 'Ligação à internet restabelecida.';
+
+  @override
+  String get addToFavorites => 'Adicionar aos favoritos';
+
+  @override
+  String get removeFromFavorites => 'Remover dos favoritos';
+
+  @override
+  String get calculatingRoute => 'A calcular rota...';
+
+  @override
+  String get tryAgain => 'Tentar novamente';
+
+  @override
+  String get close => 'Fechar';
+
+  @override
+  String get gpsRequired => 'GPS Necessário';
+
+  @override
+  String get gpsRequiredMessage => 'Não é possível calcular a rota sem a sua localização (GPS).';
 }

@@ -70,7 +70,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get arrival => 'arrival';
 
   @override
-  String get time => 'hrs';
+  String get time => 'min';
 
   @override
   String get distance => 'm';
@@ -128,4 +128,138 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get merchandising => 'Merchandising';
+
+  @override
+  String get filter => 'Filter';
+
+  @override
+  String get floor => 'Floor';
+
+  @override
+  String get heatmap => 'Heat map';
+
+  @override
+  String get accessibility => 'Accessibility';
+
+  @override
+  String get connectionFailed => 'Connection failed';
+
+  @override
+  String get newDestinationFound => 'NEW DESTINATION FOUND';
+
+  @override
+  String lessQueue(String place) {
+    return '$place has less queue';
+  }
+
+  @override
+  String get change => 'Change';
+
+  @override
+  String get no => 'No';
+
+  @override
+  String durationMin(String time) {
+    return '$time';
+  }
+
+  @override
+  String distanceM(int dist) {
+    return '$dist m';
+  }
+
+  @override
+  String get yourSeat => 'Your Seat';
+
+  @override
+  String ticketId(int id) {
+    return 'Ticket: $id';
+  }
+
+  @override
+  String get navigate => 'Navigate';
+
+  @override
+  String floorLabel(int level) {
+    return 'Floor $level';
+  }
+
+  @override
+  String queueTime(int min) {
+    return '$min min queue';
+  }
+
+  @override
+  String walkTime(int min) {
+    return '$min min';
+  }
+
+  @override
+  String get removeSaved => 'Remove';
+
+  @override
+  String get savePlace => 'Save';
+
+  @override
+  String get ticketNotFound => 'Ticket not found';
+
+  @override
+  String get seatDescription => 'Your reserved seat';
+
+  @override
+  String get foodDescription => 'Food and snacks';
+
+  @override
+  String get barDescription => 'Drinks available';
+
+  @override
+  String get restroomDescription => 'Public restrooms';
+
+  @override
+  String get exitDescription => 'Emergency exit';
+
+  @override
+  String get firstAidDescription => 'Medical assistance';
+
+  @override
+  String get infoDescription => 'Information desk';
+
+  @override
+  String get defaultPoiDescription => 'Point of interest';
+
+  @override
+  String get invalidQRFormat => 'Invalid QR code format';
+
+  @override
+  String get invalidQRSignature => 'Invalid or tampered QR code';
+
+  @override
+  String get connectionError => 'Connection error. Check your internet.';
+
+  @override
+  String get internetDisconnected => 'Internet connection lost.';
+
+  @override
+  String get internetReconnected => 'Internet connection restored.';
+
+  @override
+  String get addToFavorites => 'Add to favorites';
+
+  @override
+  String get removeFromFavorites => 'Remove from favorites';
+
+  @override
+  String get calculatingRoute => 'Calculating route...';
+
+  @override
+  String get tryAgain => 'Try again';
+
+  @override
+  String get close => 'Close';
+
+  @override
+  String get gpsRequired => 'GPS Required';
+
+  @override
+  String get gpsRequiredMessage => 'Cannot calculate route without GPS location.';
 }
