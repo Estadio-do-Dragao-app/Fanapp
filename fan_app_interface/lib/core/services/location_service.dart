@@ -81,7 +81,7 @@ class LocationService {
         timeLimit: const Duration(seconds: 5),
       );
 
-      print('[LocationService] Position: ${position.latitude}, ${position.longitude}');
+      print('[LocationService] Position updated');
       
       // Publish to MQTT
       MqttService().publishLocation(
