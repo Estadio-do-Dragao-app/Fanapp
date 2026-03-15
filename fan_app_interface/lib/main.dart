@@ -19,7 +19,12 @@ void main() async {
   // Iniciar tracking GPS anónimo
   final locationService = LocationService();
   await locationService.init();
-  locationService.startTracking();
+  try {
+    await locationService.startTracking();
+  } catch (e, stackTrace) {
+    debugPrint('Error starting GPS tracking: $e');
+    debugPrint('Stack trace: $stackTrace');
+  }
 
   await UserPositionService.clearPosition(); // Limpar posições
   runApp(const MyApp());
