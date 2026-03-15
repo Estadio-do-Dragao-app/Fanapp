@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'mqtt_service.dart';
 
@@ -15,17 +14,11 @@ class LocationService {
   Timer? _timer;
   bool _isTracking = false;
 
-  /// Initializes the service and creates an anonymous ID if it doesn't exist
+  /// Initializes the service and creates an in-memory anonymous ID for this session
   Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    _userId = prefs.getString(_keyUserId);
-    if (_userId == null) {
-      _userId = const Uuid().v4();
-      await prefs.setString(_keyUserId, _userId!);
-      print('[LocationService] Generated new anonymous ID: $_userId');
-    } else {
-      print('[LocationService] Using existing anonymous ID: $_userId');
-    }
+    // Generate a new anonymous ID for each app session without persisting it
+    _userId = const Uuid().v4();
+    print('[LocationService] Generated new session anonymous ID: $_userId');
   }
 
   /// Starts periodic GPS tracking and publishing to MQTT
