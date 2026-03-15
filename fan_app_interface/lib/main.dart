@@ -9,12 +9,26 @@ import 'l10n/app_localizations.dart';
 import 'Home.dart';
 import 'features/map/data/services/local_map_cache.dart';
 import 'features/navigation/data/services/user_position_service.dart';
+import 'core/services/location_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalMapCache.init();
+  
+  
+  // Iniciar tracking GPS anónimo
+  final locationService = LocationService();
+  await locationService.init();
+  try {
+    await locationService.startTracking();
+  } catch (e, stackTrace) {
+    debugPrint('Error starting GPS tracking: $e');
+    debugPrint('Stack trace: $stackTrace');
+  }
+
   await UserPositionService.clearPosition(); // Limpar posições
   runApp(const MyApp());
+
 }
 
 class MyApp extends StatefulWidget {
