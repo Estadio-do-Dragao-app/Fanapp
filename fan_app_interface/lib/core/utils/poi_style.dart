@@ -58,8 +58,8 @@ class POIStyle {
         return Icons.local_library;
       case 'parking':
         return Icons.local_parking;
-      case 'ticket':
-        return Icons.local_activity;
+      // case 'ticket':
+      //   return Icons.local_activity; // Ticket feature temporarily disabled
       default:
         return Icons.place;
     }

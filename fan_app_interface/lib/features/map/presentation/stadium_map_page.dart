@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_compass/flutter_map_compass.dart';
 import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import '../data/models/poi_model.dart';
@@ -18,10 +20,11 @@ import '../../../core/utils/poi_style.dart';
 import 'layers/floor_plan_layer.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
-import '../../ticket/data/models/ticket_model.dart'; // Import TicketModel
-import '../../ticket/data/services/ticket_storage_service.dart'; // Import Storage
+// import '../../ticket/data/models/ticket_model.dart'; // Ticket feature disabled
+// import '../../ticket/data/services/ticket_storage_service.dart'; // Ticket feature disabled
 import '../../../core/utils/geographic_utils.dart';
 import '../../../core/utils/cached_tile_provider.dart';
+import '../../../core/utils/top_feedback.dart';
 
 import 'dart:async';
 import '../../../core/config/map_config.dart';
@@ -51,6 +54,9 @@ class StadiumMapPage extends StatefulWidget {
   final RouteModel? previewRoute;
   final bool interactivePOIs; // Allows disabling POI taps when shown in a menu
   final bool isFollowingUser; // Indicates if map should rotate with gyro
+  final VoidCallback? onToggleNavigationHeatmap;
+  final VoidCallback? onRecenterNavigation;
+  final double? navigationControlsBottomInset;
 
   const StadiumMapPage({
     super.key,
@@ -77,6 +83,9 @@ class StadiumMapPage extends StatefulWidget {
     this.previewRoute,
     this.interactivePOIs = true,
     this.isFollowingUser = true,
+    this.onToggleNavigationHeatmap,
+    this.onRecenterNavigation,
+    this.navigationControlsBottomInset,
     this.customPOIsToShow,
     this.zoomOutToPOIs = false,
   });
@@ -91,6 +100,13 @@ class StadiumMapPage extends StatefulWidget {
 
 class StadiumMapPageState extends State<StadiumMapPage>
     with SingleTickerProviderStateMixin {
+  static const double _controlsCardRightInset = 20;
+  static const double _controlsCardBottomInset = 100;
+  static const double _controlsCardHeight = 116;
+  static const double _controlsCardGapAbovePanel = 16;
+  static const double _emergencyButtonGap = 12;
+  static const double _emergencyButtonSize = 50;
+
   late final MapController _mapController;
   late final AnimationController _blinkController;
   final MapService _mapService = MapService();
@@ -121,13 +137,15 @@ class StadiumMapPageState extends State<StadiumMapPage>
   StadiumHeatmapData? _heatmapData;
   Timer? _heatmapTimer;
 
-  // Ticket data
-  TicketModel? _userTicket;
-  final TicketStorageService _ticketStorage = TicketStorageService();
+  // Ticket data (temporariamente desativado)
+  // TicketModel? _userTicket;
+  // final TicketStorageService _ticketStorage = TicketStorageService();
 
   // Stream para pedir ao plugin para centrar no GPS (parâmetro do CurrentLocationLayer)
   final StreamController<double?> _alignPositionStreamController =
       StreamController<double?>();
+  bool _isLocationLayerAvailable = false;
+  bool _isUserPositionLocked = false;
 
   @override
   void initState() {
@@ -151,8 +169,35 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
     // Initialize blink animation for emergency mode
 
+    _checkLocationLayerAvailability();
     loadUserPosition(); // Carregar posição guardada
     _loadMapData();
+  }
+
+  Future<void> _checkLocationLayerAvailability() async {
+    try {
+      await Geolocator.checkPermission();
+      if (mounted) {
+        setState(() {
+          _isLocationLayerAvailable = true;
+        });
+      }
+    } on MissingPluginException catch (e) {
+      print('[StadiumMapPage] Geolocator plugin unavailable: $e');
+      if (mounted) {
+        setState(() {
+          _isLocationLayerAvailable = false;
+          _isUserPositionLocked = false;
+        });
+      }
+    } catch (_) {
+      // Plugin exists but permission/service may still fail later; keep layer enabled.
+      if (mounted) {
+        setState(() {
+          _isLocationLayerAvailable = true;
+        });
+      }
+    }
   }
 
   @override
@@ -171,12 +216,12 @@ class StadiumMapPageState extends State<StadiumMapPage>
         setState(() {
           _userPositionX = 0.0;
           _userPositionY = 0.0;
-          _userLevel = _currentFloor; 
+          _userLevel = _currentFloor;
         });
       }
       return;
     }
-    
+
     if (mounted) {
       double x = position.x;
       double y = position.y;
@@ -286,6 +331,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   Iterable<Marker> _buildTicketMarkers() sync* {
+    /*
     print(
       "Building ticket markers. Ticket: $_userTicket, SeatNodeId: ${_userTicket?.seatNodeId}",
     );
@@ -347,6 +393,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
       print("Error building ticket marker: $e");
       // Ignore
     }
+    */
+    // Ticket markers disabled on purpose.
+    return;
   }
 
   // Coordenadas da Universidade de Aveiro
@@ -374,16 +423,19 @@ class StadiumMapPageState extends State<StadiumMapPage>
       final tiles = await _mapService.getAllTiles(level: floorToLoad);
 
       // final savedPlaces = await SavedPlacesService.getSavedPlaces(); // Removed favorites
-      final ticket = await _ticketStorage.getTicket(); // Carregar bilhete
-      print(
-        "Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
-      );
+      // Ticket feature disabled:
+      // final ticket = await _ticketStorage.getTicket();
+      // print(
+      //   "Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
+      // );
 
       if (!mounted) return;
       if (_currentFloor != floorToLoad) {
         return;
       }
 
+      /*
+      // Ticket feature disabled:
       // Se temos bilhete, carregar o nó do lugar especificamente (pois getAllNodes filtra seats)
       if (ticket != null && ticket.seatNodeId != null) {
         try {
@@ -402,6 +454,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
           print("Error fetching seat node: $e");
         }
       }
+      */
 
       setState(() {
         _pois = pois;
@@ -409,21 +462,23 @@ class StadiumMapPageState extends State<StadiumMapPage>
         _edges = edges;
         _tiles = tiles;
         // _savedPlaces = savedPlaces; // Removed favorites
-        _userTicket = ticket;
+        // _userTicket = ticket; // Ticket feature disabled
         _isLoading = false;
       });
 
       // Centrar na posição GPS real via plugin (sempre, não só fora de navegação)
       _zoomToUserPosition();
       // Se pedirmos para focar nos POIs customizados
-      if (widget.customPOIsToShow != null && widget.zoomOutToPOIs && widget.customPOIsToShow!.isNotEmpty) {
+      if (widget.customPOIsToShow != null &&
+          widget.zoomOutToPOIs &&
+          widget.customPOIsToShow!.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             try {
-              final coordinates = widget.customPOIsToShow!.map(
-                (poi) => _convertToLatLng(poi.x, poi.y)
-              ).toList();
-              
+              final coordinates = widget.customPOIsToShow!
+                  .map((poi) => _convertToLatLng(poi.x, poi.y))
+                  .toList();
+
               _mapController.fitCamera(
                 CameraFit.coordinates(
                   coordinates: coordinates,
@@ -448,6 +503,21 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
   /// Faz zoom na posição atual do utilizador
   void _zoomToUserPosition() {
+    if (!_isLocationLayerAvailable) {
+      if (mounted && _isUserPositionLocked) {
+        setState(() {
+          _isUserPositionLocked = false;
+        });
+      }
+      return;
+    }
+
+    if (mounted && !_isUserPositionLocked) {
+      setState(() {
+        _isUserPositionLocked = true;
+      });
+    }
+
     // Pede ao plugin para centrar na posição GPS real com zoom 18
     _alignPositionStreamController.add(18);
   }
@@ -497,14 +567,12 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
     try {
       final currentPos = await GeographicUtils.getCurrentUserPosition();
-      
+
       if (currentPos == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLocalizations.of(context)!.gpsRequiredMessage),
-              backgroundColor: Colors.orange,
-            ),
+          AppTopFeedback.showWarning(
+            context,
+            AppLocalizations.of(context)!.gpsRequiredMessage,
           );
         }
         // Não faz return nem fecha o painel - apenas deixa a rota a null para mostrar só os detalhes
@@ -620,6 +688,167 @@ class StadiumMapPageState extends State<StadiumMapPage>
     );
   }
 
+  Widget _buildCompassButton() {
+    return Transform.scale(
+      scale: 0.8,
+      child: const MapCompass.cupertino(
+        hideIfRotatedNorth: false,
+        alignment: Alignment.center,
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  void _handleRecenterButtonPressed() {
+    if (!_isLocationLayerAvailable) {
+      AppTopFeedback.showWarning(
+        context,
+        AppLocalizations.of(context)!.gpsRequiredMessage,
+      );
+      return;
+    }
+
+    _zoomToUserPosition();
+  }
+
+  Widget _buildRecenterButton() {
+    final bool isActive = _isLocationLayerAvailable && _isUserPositionLocked;
+    final Color iconColor = isActive
+        ? Colors.blue
+        : (_isLocationLayerAvailable
+              ? const Color(0xFF6B7280)
+              : const Color(0xFF9CA3AF));
+    final IconData icon = isActive
+        ? Icons.my_location
+        : Icons.my_location_outlined;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(23),
+      onTap: _handleRecenterButtonPressed,
+      child: SizedBox(
+        width: 50,
+        height: 50,
+        child: Center(child: Icon(icon, color: iconColor, size: 24)),
+      ),
+    );
+  }
+
+  Widget _buildMapControlsCard() {
+    return Material(
+      color: Colors.white,
+      elevation: 8,
+      borderRadius: BorderRadius.circular(30),
+      child: Container(
+        width: 50,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 50,
+              height: 50,
+              child: Center(child: _buildCompassButton()),
+            ),
+            Container(width: 35, height: 2, color: Colors.black12),
+            _buildRecenterButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigationControlButton({
+    IconData? icon,
+    Color iconColor = const Color(0xFF6B7280),
+    VoidCallback? onTap,
+    Widget? child,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(23),
+      onTap: onTap,
+      child: SizedBox(
+        width: 50,
+        height: 50,
+        child: Center(child: child ?? Icon(icon, color: iconColor, size: 24)),
+      ),
+    );
+  }
+
+  Widget _buildNavigationControlsCard() {
+    return Material(
+      color: Colors.white,
+      elevation: 8,
+      borderRadius: BorderRadius.circular(30),
+      child: Container(
+        width: 50,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 50,
+              height: 50,
+              child: Center(child: _buildCompassButton()),
+            ),
+            Container(width: 35, height: 2, color: Colors.black12),
+            _buildNavigationControlButton(
+              icon: Icons.local_fire_department_rounded,
+              iconColor: widget.showHeatmap
+                  ? Colors.deepOrange
+                  : const Color(0xFF6B7280),
+              onTap: widget.onToggleNavigationHeatmap,
+            ),
+            Container(width: 35, height: 2, color: Colors.black12),
+            _buildNavigationControlButton(
+              icon: widget.isFollowingUser
+                  ? Icons.my_location
+                  : Icons.my_location_outlined,
+              iconColor: widget.isFollowingUser
+                  ? Colors.blue
+                  : const Color(0xFF6B7280),
+              onTap: widget.onRecenterNavigation,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmergencySimulationButton() {
+    return Material(
+      color: Colors.redAccent,
+      elevation: 8,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () async {
+          await UserPositionService.clearPosition();
+          await loadUserPosition();
+          _zoomToUserPosition();
+
+          if (mounted) {
+            Navigator.of(
+              context,
+            ).pushNamedAndRemoveUntil('/emergency-alert', (route) => false);
+          }
+        },
+        child: const SizedBox(
+          width: _emergencyButtonSize,
+          height: _emergencyButtonSize,
+          child: Icon(Icons.warning_amber_rounded, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
   /// Constrói o painel inline de detalhes do POI
   Widget _buildPOIPreviewPanel() {
     final poi = _selectedPOI!;
@@ -634,165 +863,194 @@ class StadiumMapPageState extends State<StadiumMapPage>
         key: Key('poi_preview_${poi.id}'),
         direction: DismissDirection.down,
         onDismissed: (_) => _closePOIPanel(),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1E1E3F),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Swipe indicator pill
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF1E1E3F),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
-              // Header: icon + name + actions (favorite)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.place, color: Colors.white70, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      poi.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Gabarito',
+                  // Swipe indicator pill
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: _isSelectedPOISaved
-                        ? AppLocalizations.of(context)!.removeFromFavorites
-                        : AppLocalizations.of(context)!.addToFavorites,
-                    onPressed: _toggleSelectedPOIFavorite,
-                    icon: Icon(
-                      _isSelectedPOISaved ? Icons.star : Icons.star_border,
-                      color: _isSelectedPOISaved
-                          ? Colors.amberAccent
-                          : Colors.white70,
-                      size: 24,
+                  // Header: icon + name + actions (favorite)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.place, color: Colors.white70, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          poi.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Gabarito',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: _isSelectedPOISaved
+                            ? AppLocalizations.of(context)!.removeFromFavorites
+                            : AppLocalizations.of(context)!.addToFavorites,
+                        onPressed: _toggleSelectedPOIFavorite,
+                        icon: Icon(
+                          _isSelectedPOISaved ? Icons.star : Icons.star_border,
+                          color: _isSelectedPOISaved
+                              ? Colors.amberAccent
+                              : Colors.white70,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Route metrics
+                  if (isLoading)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white54,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            AppLocalizations.of(context)!.calculatingRoute,
+                            style: const TextStyle(color: Colors.white54),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (route != null)
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _buildInfoChip(
+                          icon: Icons.directions_walk,
+                          label: AppLocalizations.of(
+                            context,
+                          )!.walkTime((route.etaSeconds / 60).round()),
+                        ),
+                        _buildInfoChip(
+                          icon: Icons.straighten,
+                          label: AppLocalizations.of(
+                            context,
+                          )!.distanceM(route.distance.round()),
+                        ),
+                        if ([
+                              'wc',
+                              'food',
+                              'ticket',
+                              'store',
+                              'bar',
+                              'bar_p',
+                            ].contains(_selectedPOI!.category) ||
+                            _selectedPOI!.name.toLowerCase().contains(
+                              'farmácia',
+                            ))
+                          _buildInfoChip(
+                            icon: Icons.group,
+                            label: AppLocalizations.of(
+                              context,
+                            )!.queueTime(route.waitTime?.round() ?? 0),
+                          ),
+                      ],
+                    ),
+                  const SizedBox(height: 20),
+
+                  // Navigate button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isCalculatingPreviewRoute
+                          ? null
+                          : () {
+                              if (route == null) {
+                                AppTopFeedback.showWarning(
+                                  context,
+                                  AppLocalizations.of(
+                                    context,
+                                  )!.gpsRequiredMessage,
+                                );
+                                return;
+                              }
+
+                              _closePOIPanel();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => NavigationPage(
+                                    route: route,
+                                    destination: poi,
+                                    nodes: _nodes,
+                                    initialX: _userPositionX,
+                                    initialY: _userPositionY,
+                                    initialLevel: _userLevel,
+                                  ),
+                                ),
+                              ).then((_) => loadUserPosition());
+                            },
+                      icon: const Icon(Icons.navigation, color: Colors.white),
+                      label: Text(
+                        AppLocalizations.of(context)!.navigate,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        disabledBackgroundColor: Colors
+                            .grey[700], // Fundo cinzento quando indisponível
+                        disabledForegroundColor:
+                            Colors.white70, // Texto mais fraco
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(50),
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-
-              // Route metrics
-              if (isLoading)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white54,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        AppLocalizations.of(context)!.calculatingRoute,
-                        style: const TextStyle(color: Colors.white54),
-                      ),
-                    ],
-                  ),
-                )
-              else if (route != null)
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _buildInfoChip(
-                      icon: Icons.directions_walk,
-                      label: AppLocalizations.of(
-                        context,
-                      )!.walkTime((route.etaSeconds / 60).round()),
-                    ),
-                    _buildInfoChip(
-                      icon: Icons.straighten,
-                      label: AppLocalizations.of(
-                        context,
-                      )!.distanceM(route.distance.round()),
-                    ),
-                    if ([
-                          'wc',
-                          'food',
-                          'ticket',
-                          'store',
-                          'bar',
-                          'bar_p',
-                        ].contains(_selectedPOI!.category) ||
-                        _selectedPOI!.name.toLowerCase().contains('farmácia'))
-                      _buildInfoChip(
-                        icon: Icons.group,
-                        label: AppLocalizations.of(
-                          context,
-                        )!.queueTime(route.waitTime?.round() ?? 0),
-                      ),
-                  ],
-                ),
-              const SizedBox(height: 20),
-
-              // Navigate button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: route != null
-                      ? () {
-                          _closePOIPanel();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => NavigationPage(
-                                route: route,
-                                destination: poi,
-                                nodes: _nodes,
-                                initialX: _userPositionX,
-                                initialY: _userPositionY,
-                                initialLevel: _userLevel,
-                              ),
-                            ),
-                          ).then((_) => loadUserPosition());
-                        }
-                      : null,
-                  icon: const Icon(Icons.navigation, color: Colors.white),
-                  label: Text(
-                    AppLocalizations.of(context)!.navigate,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    disabledBackgroundColor: Colors.grey[700], // Fundo cinzento quando indisponível
-                    disabledForegroundColor: Colors.white70, // Texto mais fraco
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+            Positioned(
+              right: _controlsCardRightInset,
+              top: -(_controlsCardHeight + _controlsCardGapAbovePanel),
+              child: _buildMapControlsCard(),
+            ),
+            Positioned(
+              right: _controlsCardRightInset,
+              top: -_controlsCardGapAbovePanel + _emergencyButtonGap,
+              child: _buildEmergencySimulationButton(),
+            ),
+          ],
         ),
       ),
     );
@@ -809,57 +1067,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
           _buildLoadingState()
         else
           _buildMap(),
-
-        // Inline POI preview panel (non-modal, allows map interaction)
-        if (_selectedPOI != null && !widget.isNavigating)
-          _buildPOIPreviewPanel(),
-
-        // Controlos de movimento (apenas na Home, não durante navegação, nem em sub-menus)
-        if (!widget.isNavigating &&
-            !_isLoading &&
-            _errorMessage == null &&
-            widget.interactivePOIs)
-          Positioned(
-            right: 16,
-            bottom: _selectedPOI != null ? 280 : 110,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Recenter
-                FloatingActionButton(
-                  heroTag: 'recenter',
-                  backgroundColor: Colors.white,
-                  onPressed: _zoomToUserPosition,
-                  tooltip: 'Ir para minha posição',
-                  child: const Icon(Icons.my_location, color: Colors.blue),
-                ),
-                const SizedBox(height: 12),
-
-                // Emergency Reset Pos
-                FloatingActionButton(
-                  heroTag: 'emergency_reset_pos',
-                  backgroundColor: Colors.redAccent,
-                  onPressed: () async {
-                    await UserPositionService.clearPosition();
-                    await loadUserPosition();
-                    _zoomToUserPosition();
-
-                    if (mounted) {
-                      Navigator.of(context).pushNamedAndRemoveUntil(
-                        '/emergency-alert',
-                        (route) => false,
-                      );
-                    }
-                  },
-                  tooltip: 'Emergência (Resetar Posição)',
-                  child: const Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }
@@ -877,7 +1084,14 @@ class StadiumMapPageState extends State<StadiumMapPage>
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all,
         ),
-        onPositionChanged: widget.onPositionChanged,
+        onPositionChanged: (camera, hasGesture) {
+          if (hasGesture && _isUserPositionLocked) {
+            setState(() {
+              _isUserPositionLocked = false;
+            });
+          }
+          widget.onPositionChanged?.call(camera, hasGesture);
+        },
         onTap: (_, __) {
           if (_selectedPOI != null && !widget.isNavigating) {
             _closePOIPanel();
@@ -933,28 +1147,61 @@ class StadiumMapPageState extends State<StadiumMapPage>
         _buildPOILayer(),
 
         // Posição do utilizador (plugin gere GPS e permissões sozinho)
-        CurrentLocationLayer(
-          alignPositionStream: _alignPositionStreamController.stream,
-          alignPositionOnUpdate: widget.isNavigating && widget.isFollowingUser
-              ? AlignOnUpdate.always
-              : AlignOnUpdate.never,
-          alignDirectionOnUpdate: widget.isNavigating && widget.isFollowingUser
-              ? AlignOnUpdate.always
-              : AlignOnUpdate.never,
-          indicators: const LocationMarkerIndicators(
-            serviceDisabled: SizedBox.shrink(),
-            permissionRequesting: SizedBox.shrink(),
-            permissionDenied: SizedBox.shrink(),
+        if (_isLocationLayerAvailable)
+          CurrentLocationLayer(
+            alignPositionStream: _alignPositionStreamController.stream,
+            alignPositionOnUpdate: widget.isNavigating && widget.isFollowingUser
+                ? AlignOnUpdate.always
+                : AlignOnUpdate.never,
+            alignDirectionOnUpdate:
+                widget.isNavigating && widget.isFollowingUser
+                ? AlignOnUpdate.always
+                : AlignOnUpdate.never,
+            indicators: const LocationMarkerIndicators(
+              serviceDisabled: SizedBox.shrink(),
+              permissionRequesting: SizedBox.shrink(),
+              permissionDenied: SizedBox.shrink(),
+            ),
           ),
-        ),
 
-        // Compass do flutter_map_compass
-        if (!_isLoading && _errorMessage == null && widget.interactivePOIs)
+        // Card de controlos (compass + reposicionar) sem painel POI
+        if (!widget.isNavigating &&
+            !_isLoading &&
+            _errorMessage == null &&
+            widget.interactivePOIs &&
+            _selectedPOI == null)
           Positioned(
-            left: 16,
-            top: MediaQuery.of(context).padding.top + 130,
-            child: const MapCompass.cupertino(hideIfRotatedNorth: false),
+            right: _controlsCardRightInset,
+            bottom: _controlsCardBottomInset,
+            child: _buildMapControlsCard(),
           ),
+
+        if (!widget.isNavigating &&
+            !_isLoading &&
+            _errorMessage == null &&
+            widget.interactivePOIs &&
+            _selectedPOI == null)
+          Positioned(
+            right: _controlsCardRightInset,
+            bottom:
+                _controlsCardBottomInset -
+                _emergencyButtonSize -
+                _emergencyButtonGap,
+            child: _buildEmergencySimulationButton(),
+          ),
+
+        if (widget.isNavigating && !_isLoading && _errorMessage == null)
+          Positioned(
+            right: _controlsCardRightInset,
+            bottom:
+                widget.navigationControlsBottomInset ??
+                _controlsCardBottomInset,
+            child: _buildNavigationControlsCard(),
+          ),
+
+        // Inline POI preview panel (non-modal, allows map interaction)
+        if (_selectedPOI != null && !widget.isNavigating)
+          _buildPOIPreviewPanel(),
       ],
     );
   }

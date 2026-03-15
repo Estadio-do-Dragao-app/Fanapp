@@ -6,6 +6,8 @@ import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'package:fan_app_interface/core/utils/geographic_utils.dart';
+import 'package:fan_app_interface/core/utils/top_feedback.dart';
+import 'package:fan_app_interface/Home.dart';
 import 'dart:math';
 import 'dart:async';
 import 'dart:ui';
@@ -25,6 +27,39 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
   int _remainingSeconds = 3;
   Timer? _redirectTimer;
   List<POIModel>? _exits;
+
+  Widget _buildNoGpsEmergencyMap(BuildContext pageContext, List<POIModel> exits) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: StadiumMapPage(
+              customPOIsToShow: exits,
+              zoomOutToPOIs: exits.isNotEmpty,
+              isEmergency: true,
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(pageContext).padding.top + 8,
+            left: 16,
+            child: Material(
+              color: const Color(0xCC161A3E),
+              shape: const CircleBorder(),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () {
+                  Navigator.of(pageContext).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const Home()),
+                    (route) => false,
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -101,27 +136,21 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
 
       // SEGUNDO: Obter posição atual do utilizador
       final savedPosition = await GeographicUtils.getCurrentUserPosition();
-      
+
       if (savedPosition == null) {
-         if (!mounted) return;
-         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(
-             content: Text(AppLocalizations.of(context)!.gpsRequiredMessage),
-             backgroundColor: Colors.orange,
-           ),
-         );
-         Navigator.of(context).pushReplacement(
-           MaterialPageRoute(
-             builder: (context) => StadiumMapPage(
-               customPOIsToShow: exits,
-               zoomOutToPOIs: true,
-               isEmergency: true,
-             ),
-           ),
-         );
-         return;
+        if (!mounted) return;
+        AppTopFeedback.showWarning(
+          context,
+          AppLocalizations.of(context)!.gpsRequiredMessage,
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (pageContext) => _buildNoGpsEmergencyMap(pageContext, exits),
+          ),
+        );
+        return;
       }
-      
+
       double startX = savedPosition.x;
       double startY = savedPosition.y;
       int startLevel = savedPosition.level;
@@ -175,7 +204,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => NavigationPage(
-              route: route!,
+              route: route,
               destination: nearestExit!,
               nodes: nodes,
               isEmergency: true,

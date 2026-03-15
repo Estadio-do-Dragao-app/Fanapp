@@ -246,6 +246,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get calculatingRoute => 'Calculating route...';
 
   @override
+  String get tryAgain => 'Try again';
+
+  @override
   String get close => 'Close';
 
   @override

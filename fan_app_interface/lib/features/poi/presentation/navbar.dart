@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:fan_app_interface/core/widgets/category_buttons.dart';
 import 'package:fan_app_interface/features/poi/presentation/destination_selection.dart';
-import 'package:fan_app_interface/features/ticket/data/services/ticket_storage_service.dart';
-import 'package:fan_app_interface/features/ticket/presentation/ticket_menu.dart';
+// import 'package:fan_app_interface/features/ticket/data/services/ticket_storage_service.dart';
+// import 'package:fan_app_interface/features/ticket/presentation/ticket_menu.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
-import 'package:fan_app_interface/features/map/data/services/map_service.dart';
-import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
-import 'package:fan_app_interface/features/map/data/models/node_model.dart';
-import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
-import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
-import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
-import 'package:fan_app_interface/features/navigation/data/services/user_position_service.dart';
-import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
+// import 'package:fan_app_interface/features/map/data/services/map_service.dart';
+// import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
+// import 'package:fan_app_interface/features/map/data/models/node_model.dart';
+// import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
+// import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
+// import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
+// import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
 import 'package:fan_app_interface/core/utils/poi_style.dart';
-import 'package:fan_app_interface/core/utils/geographic_utils.dart';
-import 'dart:math';
+// import 'package:fan_app_interface/core/utils/geographic_utils.dart';
+// import 'package:fan_app_interface/core/utils/top_feedback.dart';
+// import 'dart:math';
 
 /// Simple MapPage implementation that shows a placeholder 'map' area and a
 /// horizontal row of category buttons overlayed at the top.
@@ -35,38 +35,39 @@ class Navbar extends StatefulWidget {
 }
 
 class _NavbarState extends State<Navbar> {
-  final List<String> categoryIds = ['food', 'first_aid', 'parking', 'poi'];
+  final List<String> categoryIds = ['food', 'first_aid', 'wc', 'poi'];
+  /*
   final TicketStorageService _ticketStorage = TicketStorageService();
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
+  */
   int selected = 0;
+  /*
 
   // Fallback ID de nó
   static const String userNodeId = 'N1';
-
+  */
   Future<void> _handleCategorySelect(
     int i,
     AppLocalizations localizations,
   ) async {
     setState(() => selected = i);
 
-    // Caso especial para o botão "seat"
-    if (categoryIds[i] == 'seat') {
-      // Verificar se tem bilhete digitalizado
-      final ticket = await _ticketStorage.getTicket();
-      if (ticket == null) {
-        // Não tem bilhete - mostrar diálogo
-        if (!mounted) return;
-        _showNoTicketDialog(localizations);
-        return;
-      }
-
-      // Tem bilhete - navegar diretamente para o lugar
-      if (!mounted) return;
-      await _navigateToSeat(ticket, localizations);
-      if (mounted) widget.onNavigationEnd?.call();
-      return;
-    }
+    // TICKET FEATURE (temporariamente desativada)
+    // O fluxo abaixo foi preservado mas comentado para não executar:
+    // if (categoryIds[i] == 'seat') {
+    //   final ticket = await _ticketStorage.getTicket();
+    //   if (ticket == null) {
+    //     if (!mounted) return;
+    //     _showNoTicketDialog(localizations);
+    //     return;
+    //   }
+    //
+    //   if (!mounted) return;
+    //   await _navigateToSeat(ticket, localizations);
+    //   if (mounted) widget.onNavigationEnd?.call();
+    //   return;
+    // }
 
     // Para outras categorias, comportamento normal
     Navigator.push(
@@ -83,7 +84,7 @@ class _NavbarState extends State<Navbar> {
       if (mounted) widget.onNavigationEnd?.call();
     });
   }
-
+/*
   /// Encontra o nó mais próximo de uma coordenada
   String _findNearestNode(
     double x,
@@ -179,16 +180,11 @@ class _NavbarState extends State<Navbar> {
 
       // Obter posição real do utilizador (GPS ou Saved)
       final userPos = await GeographicUtils.getCurrentUserPosition();
-      
+
       if (userPos == null) {
         if (!mounted) return;
         Navigator.of(context).pop(); // Fechar loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(localizations.gpsRequiredMessage),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        AppTopFeedback.showWarning(context, localizations.gpsRequiredMessage);
         return;
       }
 
@@ -240,7 +236,7 @@ class _NavbarState extends State<Navbar> {
       );
     }
   }
-
+*/
   Widget _buildSlideTransition(
     BuildContext context,
     Animation<double> animation,
@@ -255,6 +251,8 @@ class _NavbarState extends State<Navbar> {
     return SlideTransition(position: offsetAnimation, child: child);
   }
 
+  /*
+  // TICKET FEATURE (temporariamente desativada)
   void _showNoTicketDialog(AppLocalizations localizations) {
     showDialog(
       context: context,
@@ -288,17 +286,15 @@ class _NavbarState extends State<Navbar> {
       ),
     );
   }
+  */
 
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
-    final parkingLabel = Localizations.localeOf(context).languageCode == 'pt'
-        ? 'Estacionamento'
-        : 'Parking';
     final categories = [
       localizations.food,
       localizations.firstAid,
-      parkingLabel,
+      localizations.wc,
       localizations.information,
     ];
 
@@ -359,8 +355,8 @@ class _NavbarState extends State<Navbar> {
                         catId = 'food';
                       } else if (label == localizations.firstAid) {
                         catId = 'first_aid';
-                      } else if (label == parkingLabel) {
-                        catId = 'parking';
+                      } else if (label == localizations.wc) {
+                        catId = 'wc';
                       } else if (label == localizations.information) {
                         catId = 'department';
                       } else {

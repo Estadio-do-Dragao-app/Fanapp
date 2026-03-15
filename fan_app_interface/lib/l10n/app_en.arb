@@ -146,6 +146,7 @@
   "addToFavorites": "Add to favorites",
   "removeFromFavorites": "Remove from favorites",
   "calculatingRoute": "Calculating route...",
+  "tryAgain": "Try again",
   "close": "Close",
   "gpsRequired": "GPS Required",
   "gpsRequiredMessage": "Cannot calculate route without GPS location."

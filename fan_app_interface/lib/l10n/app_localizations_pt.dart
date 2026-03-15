@@ -246,6 +246,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get calculatingRoute => 'A calcular rota...';
 
   @override
+  String get tryAgain => 'Tentar novamente';
+
+  @override
   String get close => 'Fechar';
 
   @override

@@ -9,9 +9,9 @@ import '../../map/data/models/route_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
-import '../../navigation/data/services/user_position_service.dart';
 import '../../../core/utils/poi_style.dart';
 import '../../../core/utils/geographic_utils.dart';
+import '../../../core/utils/top_feedback.dart';
 import '../../map/data/services/waittime_cache.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 
@@ -103,6 +103,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
   double _userY = 0.0;
   int _userLevel = 0;
   bool _hasValidLocation = true;
+  bool _didAutoZoomDefaultPOI = false;
+  bool _isAutoZoomingDefaultPOI = false;
 
   @override
   void initState() {
@@ -162,6 +164,47 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
   }
 
+  /// Sem GPS, garante que o POI selecionado por defeito (índice 0) também faz zoom.
+  /// O segundo zoom curto cobre casos em que o mapa ainda está a terminar o carregamento.
+  void _scheduleDefaultPOIAutoZoom() {
+    if (_hasValidLocation || _poisWithRoutes.isEmpty || selectedIndex != 0)
+      return;
+    if (_didAutoZoomDefaultPOI || _isAutoZoomingDefaultPOI) return;
+
+    _isAutoZoomingDefaultPOI = true;
+    final defaultPoi = _poisWithRoutes[0].poi;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _isAutoZoomingDefaultPOI = false;
+        return;
+      }
+
+      if (_hasValidLocation || _poisWithRoutes.isEmpty || selectedIndex != 0) {
+        _isAutoZoomingDefaultPOI = false;
+        return;
+      }
+
+      _zoomToPOI(defaultPoi);
+
+      Future.delayed(const Duration(milliseconds: 450), () {
+        if (!mounted) {
+          _isAutoZoomingDefaultPOI = false;
+          return;
+        }
+
+        if (!_hasValidLocation &&
+            _poisWithRoutes.isNotEmpty &&
+            selectedIndex == 0) {
+          _zoomToPOI(defaultPoi);
+        }
+
+        _didAutoZoomDefaultPOI = true;
+        _isAutoZoomingDefaultPOI = false;
+      });
+    });
+  }
+
   /// Carrega POIs e inicia cálculo de rotas em background
   Future<void> _loadPOIs() async {
     setState(() {
@@ -169,6 +212,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       _errorMessage = null;
       _allRoutesCalculated = false;
       _fastestIndex = null;
+      _didAutoZoomDefaultPOI = false;
+      _isAutoZoomingDefaultPOI = false;
     });
 
     try {
@@ -177,21 +222,19 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
 
       // Carregar posição real do utilizador (GPS ou Saved)
       final userPos = await GeographicUtils.getCurrentUserPosition();
-      
+
       if (userPos == null) {
         // Se não houver GPS, mostramos o aviso mas deixamos ver a lista
         _userX = 0.0;
         _userY = 0.0;
         _userLevel = 0;
         _hasValidLocation = false;
-        
+
         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(
-               content: Text(AppLocalizations.of(context)!.gpsRequiredMessage),
-               backgroundColor: Colors.orange,
-             ),
-           );
+          AppTopFeedback.showWarning(
+            context,
+            AppLocalizations.of(context)!.gpsRequiredMessage,
+          );
         }
       } else {
         _userX = userPos.x;
@@ -199,7 +242,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
         _userLevel = userPos.level;
         _hasValidLocation = true;
       }
-      
+
       print(
         '[DestinationSelection] Usando posição real/guardada: ($_userX, $_userY, level=$_userLevel)',
       );
@@ -214,7 +257,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
 
       // Criar lista com distâncias estimadas (usando posição real do utilizador)
       List<POIWithRoute> poisWithRoutes = categoryPois.map((poi) {
-        final distance = _hasValidLocation ? _euclideanDistance(_userX, _userY, poi.x, poi.y) : 0.0;
+        final distance = _hasValidLocation
+            ? _euclideanDistance(_userX, _userY, poi.x, poi.y)
+            : 0.0;
         return POIWithRoute(poi: poi, estimatedDistance: distance);
       }).toList();
 
@@ -245,12 +290,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
         if (_hasValidLocation) {
           _calculateRouteForSelected(0);
         } else {
-          // Sem GPS, fazer zoom para o primeiro POI (atrasar para garantir que o mapa está pronto)
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _zoomToPOI(_poisWithRoutes[0].poi);
-            }
-          });
+          _scheduleDefaultPOIAutoZoom();
         }
       }
     } catch (e) {
@@ -492,10 +532,10 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(
+                          const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
@@ -503,10 +543,13 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                               color: Colors.white,
                             ),
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text(
-                            'A calcular rota...',
-                            style: TextStyle(color: Colors.white, fontSize: 12),
+                            localizations.calculatingRoute,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -593,15 +636,28 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo[200],
-                  disabledBackgroundColor: Colors.grey[700], // Fundo cinzento quando indisponível
+                  disabledBackgroundColor:
+                      Colors.grey[700], // Fundo cinzento quando indisponível
                   disabledForegroundColor: Colors.white70, // Texto mais fraco
                   minimumSize: const Size(double.infinity, 48),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: (selectedIndex != null && _selectedRoute != null)
+                onPressed: selectedIndex != null
                     ? () {
+                        if (!_hasValidLocation) {
+                          AppTopFeedback.showWarning(
+                            context,
+                            localizations.gpsRequiredMessage,
+                          );
+                          return;
+                        }
+
+                        if (_selectedRoute == null) {
+                          return;
+                        }
+
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -648,7 +704,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
             ElevatedButton.icon(
               onPressed: _loadPOIs,
               icon: const Icon(Icons.refresh),
-              label: const Text('Tentar novamente'),
+              label: Text(localizations.tryAgain),
             ),
           ],
         ),

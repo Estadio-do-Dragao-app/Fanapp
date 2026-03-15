@@ -68,15 +68,8 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
   Widget build(BuildContext context) {
     return StatefulBuilder(
       builder: (context, setModalState) {
-        final filteredPOIs = _searchController.text.isEmpty
-            ? _allPOIs
-            : _allPOIs
-                  .where(
-                    (poi) => poi.name.toLowerCase().contains(
-                      _searchController.text.toLowerCase(),
-                    ),
-                  )
-                  .toList();
+        final query = _normalizeText(_searchController.text);
+        final filteredPOIs = _buildFilteredPOIs(query);
 
         return FractionallySizedBox(
           heightFactor: 1.0,
@@ -280,6 +273,70 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         );
       },
     );
+  }
+
+  List<POIModel> _buildFilteredPOIs(String normalizedQuery) {
+    if (normalizedQuery.isEmpty) return _allPOIs;
+
+    final scored = _allPOIs
+        .map((poi) => MapEntry(poi, _scorePOIMatch(poi, normalizedQuery)))
+        .where((entry) => entry.value >= 0)
+        .toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    return scored.map((entry) => entry.key).toList();
+  }
+
+  int _scorePOIMatch(POIModel poi, String query) {
+    final candidates = _buildSearchCandidates(poi);
+
+    if (candidates.contains(query)) return 0;
+    if (candidates.any((c) => c.startsWith(query))) return 1;
+    if (candidates.any((c) => c.contains(query))) return 2;
+
+    return -1;
+  }
+
+  Set<String> _buildSearchCandidates(POIModel poi) {
+    final name = _normalizeText(poi.name);
+    final category = _normalizeText(_getCategoryName(context, poi.category));
+    final acronym = _acronymFromName(name);
+    final collapsedName = name.replaceAll(RegExp(r'\s+'), '');
+    final collapsedCategory = category.replaceAll(RegExp(r'\s+'), '');
+
+    return {
+      name,
+      category,
+      acronym,
+      collapsedName,
+      collapsedCategory,
+    }.where((value) => value.isNotEmpty).toSet();
+  }
+
+  String _acronymFromName(String normalizedName) {
+    final ignore = {'de', 'da', 'do', 'dos', 'das', 'e', 'and'};
+    final words = normalizedName
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((w) => w.isNotEmpty && !ignore.contains(w))
+        .toList();
+
+    if (words.isEmpty) return '';
+    return words.map((w) => w[0]).join();
+  }
+
+  String _normalizeText(String value) {
+    final lower = value.toLowerCase();
+    const from = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
+    const to = 'aaaaaeeeeiiiiooooouuuucn';
+
+    final out = StringBuffer();
+    for (final rune in lower.runes) {
+      final ch = String.fromCharCode(rune);
+      final i = from.indexOf(ch);
+      out.write(i >= 0 ? to[i] : ch);
+    }
+
+    return out.toString().trim();
   }
 
   String _getCategoryName(BuildContext context, String category) {

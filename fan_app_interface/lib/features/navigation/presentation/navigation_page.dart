@@ -277,6 +277,23 @@ class _NavigationPageState extends State<NavigationPage>
               isEmergency: widget.isEmergency,
               onTapPOI: widget.isEmergency ? null : _showSwitchDestinationSheet,
               previewRoute: _previewRoute,
+              onToggleNavigationHeatmap: () {
+                setState(() {
+                  _showHeatmap = !_showHeatmap;
+                });
+              },
+              onRecenterNavigation: () {
+                print(
+                  '[NavigationPage] Center button pressed. Enabling follow mode.',
+                );
+                setState(() {
+                  _isFollowingUser = true;
+                });
+                _followUserPosition();
+              },
+              navigationControlsBottomInset: _showReroutePopup
+                  ? 360
+                  : (_isBottomSheetExpanded ? 360 : 200),
               onPositionChanged: (camera, hasGesture) {
                 if (hasGesture) {
                   // Cancel any existing idle timer
@@ -495,56 +512,6 @@ class _NavigationPageState extends State<NavigationPage>
                   },
                 ),
               ),
-
-            // Botão de centrar e Toggle Heatmap
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              right: 16,
-              bottom: _showReroutePopup
-                  ? 360
-                  : (_isBottomSheetExpanded ? 360 : 200),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton(
-                    heroTag: 'heatmap_toggle',
-                    backgroundColor: _showHeatmap
-                        ? Colors.orange
-                        : Colors.white,
-                    onPressed: () {
-                      setState(() {
-                        _showHeatmap = !_showHeatmap;
-                      });
-                    },
-                    child: Icon(
-                      _showHeatmap ? Icons.layers_clear : Icons.layers,
-                      color: _showHeatmap ? Colors.white : Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  FloatingActionButton(
-                    heroTag: 'center',
-                    backgroundColor: _isFollowingUser
-                        ? Colors.blue
-                        : Colors.white,
-                    onPressed: () {
-                      print(
-                        "[NavigationPage] 📍 Center button pressed. Enabling follow mode.",
-                      );
-                      setState(() {
-                        _isFollowingUser = true;
-                      });
-                      _followUserPosition();
-                    },
-                    child: Icon(
-                      Icons.my_location,
-                      color: _isFollowingUser ? Colors.white : Colors.blue,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

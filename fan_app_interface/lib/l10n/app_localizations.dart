@@ -533,6 +533,12 @@ abstract class AppLocalizations {
   /// **'Calculating route...'**
   String get calculatingRoute;
 
+  /// No description provided for @tryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get tryAgain;
+
   /// No description provided for @close.
   ///
   /// In en, this message translates to:
