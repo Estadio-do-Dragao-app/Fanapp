@@ -13,6 +13,7 @@ class LocationService {
   String? _userId;
   Timer? _timer;
   bool _isTracking = false;
+  bool _isUpdating = false;
 
   /// Initializes the service and creates an in-memory anonymous ID for this session
   Future<void> init() async {
@@ -71,7 +72,9 @@ class LocationService {
   /// Gets current position and publishes to MQTT anonymously
   Future<void> _updateAndPublish() async {
     if (!_isTracking || _userId == null) return;
+    if (_isUpdating) return;
 
+    _isUpdating = true;
     try {
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -88,6 +91,8 @@ class LocationService {
       );
     } catch (e) {
       print('[LocationService] Error getting position: $e');
+    } finally {
+      _isUpdating = false;
     }
   }
 
