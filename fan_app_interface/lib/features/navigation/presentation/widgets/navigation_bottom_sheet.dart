@@ -33,6 +33,7 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
   bool _isExpanded = false;
   late AnimationController _animationController;
   late Animation<double> _heightAnimation;
+  double _dragDeltaY = 0;
 
   @override
   void initState() {
@@ -65,20 +66,49 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
     widget.onExpansionChanged?.call(_isExpanded);
   }
 
+  void _setExpanded(bool expanded) {
+    if (_isExpanded == expanded) return;
+    _toggleExpanded();
+  }
+
+  void _onVerticalDragStart(DragStartDetails details) {
+    _dragDeltaY = 0;
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails details) {
+    _dragDeltaY += details.primaryDelta ?? 0;
+  }
+
+  void _onVerticalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+
+    // Fast swipe always wins.
+    if (velocity < -220) {
+      _setExpanded(true);
+      return;
+    }
+    if (velocity > 220) {
+      _setExpanded(false);
+      return;
+    }
+
+    // Slow drag fallback based on accumulated drag distance.
+    if (_dragDeltaY < -18) {
+      _setExpanded(true);
+    } else if (_dragDeltaY > 18) {
+      _setExpanded(false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
 
     return GestureDetector(
-      onVerticalDragUpdate: (details) {
-        if (details.primaryDelta! < -5) {
-          // Swipe para cima - expandir
-          if (!_isExpanded) _toggleExpanded();
-        } else if (details.primaryDelta! > 5) {
-          // Swipe para baixo - contrair
-          if (_isExpanded) _toggleExpanded();
-        }
-      },
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: _onVerticalDragStart,
+      onVerticalDragUpdate: _onVerticalDragUpdate,
+      onVerticalDragEnd: _onVerticalDragEnd,
       child: AnimatedBuilder(
         animation: _heightAnimation,
         builder: (context, child) {
@@ -104,12 +134,22 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
                 children: [
                   // Indicador de arrasto
                   const SizedBox(height: 12),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(2),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _toggleExpanded,
+                    child: Container(
+                      width: 56,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

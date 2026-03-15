@@ -14,6 +14,33 @@ import '../../../../core/config/map_config.dart';
 class MapService {
   static const String baseUrl = ApiConfig.mapService;
 
+  static const Set<String> _forcedEmergencyExitNames = {
+    'nave desportiva da ua',
+    'universidade - antiga reitoria b',
+    'universidade - antiga reuturia b',
+  };
+
+  POIModel _applyForcedEmergencyExit(POIModel poi) {
+    final normalizedName = poi.name.trim().toLowerCase();
+    if (!_forcedEmergencyExitNames.contains(normalizedName)) {
+      return poi;
+    }
+
+    if (poi.category.toLowerCase() == 'emergency_exit') {
+      return poi;
+    }
+
+    return POIModel(
+      id: poi.id,
+      name: poi.name,
+      category: 'emergency_exit',
+      description: poi.description,
+      x: poi.x,
+      y: poi.y,
+      level: poi.level,
+    );
+  }
+
   /// GET /map - Retorna mapa completo (nodes, edges, closures)
   Future<Map<String, dynamic>> getCompleteMap() async {
     final response = await http
@@ -144,18 +171,24 @@ class MapService {
     if (MapConfig.useOSMPOIs) {
       try {
         final osmPois = await getOSMPOIs();
-        final existingNames = staticPois.map((p) => p.name.toLowerCase()).toSet();
+        final existingNames = staticPois
+            .map((p) => p.name.toLowerCase())
+            .toSet();
         final newOsmPois = osmPois
             .where((p) => !existingNames.contains(p.name.toLowerCase()))
             .toList();
         staticPois.addAll(newOsmPois);
-        print('[MapService] +${newOsmPois.length} POIs do OSM (${osmPois.length} total, ${osmPois.length - newOsmPois.length} duplicados)');
+        print(
+          '[MapService] +${newOsmPois.length} POIs do OSM (${osmPois.length} total, ${osmPois.length - newOsmPois.length} duplicados)',
+        );
       } catch (e) {
-        print('[MapService] ⚠️ Falha ao buscar POIs OSM: $e (usando apenas estáticos)');
+        print(
+          '[MapService] ⚠️ Falha ao buscar POIs OSM: $e (usando apenas estáticos)',
+        );
       }
     }
 
-    return staticPois;
+    return staticPois.map(_applyForcedEmergencyExit).toList();
   }
 
   /// GET /pois/osm - Buscar POIs dinâmicos do OpenStreetMap
@@ -172,8 +205,6 @@ class MapService {
       throw Exception('Failed to load OSM POIs: ${response.statusCode}');
     }
   }
-
-
 
   /// GET /nodes - Filtrar POIs por piso
   Future<List<POIModel>> getPOIsByFloor(int level) async {

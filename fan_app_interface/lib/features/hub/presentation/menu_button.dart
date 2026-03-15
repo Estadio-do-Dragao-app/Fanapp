@@ -6,6 +6,7 @@ class MenuButton extends StatelessWidget {
   final Color backgroundColor;
   final Color dotColor;
   final EdgeInsets padding;
+  final IconData icon;
 
   const MenuButton({
     Key? key,
@@ -14,6 +15,7 @@ class MenuButton extends StatelessWidget {
     this.backgroundColor = const Color(0xFF161A3E),
     this.dotColor = Colors.white,
     this.padding = const EdgeInsets.all(0),
+    this.icon = Icons.more_vert,
   }) : super(key: key);
 
   @override
@@ -35,11 +37,7 @@ class MenuButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(
-          Icons.more_vert,
-          color: dotColor,
-          size: 30,
-        ),
+        child: Icon(icon, color: dotColor, size: 30),
       ),
     );
   }

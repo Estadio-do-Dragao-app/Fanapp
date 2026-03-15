@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:latlong2/latlong.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../map/presentation/stadium_map_page.dart';
+import '../../poi/presentation/poi_details_sheet.dart';
 import '../domain/navigation_controller.dart';
 import '../domain/models/reroute_event.dart';
 import 'widgets/navigation_header.dart';
@@ -21,7 +23,8 @@ class NavigationPage extends StatefulWidget {
   final double? initialX;
   final double? initialY;
   final int? initialLevel;
-  final bool isEmergency; // FIX 1: moved inside constructor params (was dangling field)
+  final bool
+  isEmergency; // FIX 1: moved inside constructor params (was dangling field)
 
   const NavigationPage({
     super.key,
@@ -41,17 +44,8 @@ class NavigationPage extends StatefulWidget {
 class _NavigationPageState extends State<NavigationPage>
     with TickerProviderStateMixin {
   late NavigationController _controller;
-  final MapController _mapController = MapController();
+  late final AnimatedMapController _animatedMapController;
   final RoutingService _routingService = RoutingService();
-
-  // Controlador de animação para movimento suave do mapa
-  late AnimationController _animationController;
-  Animation<double>? _latAnimation;
-  Animation<double>? _lngAnimation;
-  Animation<double>? _rotAnimation;
-
-  // Animation controller for blinking border (emergency mode)
-  late AnimationController _blinkController;
 
   bool _showHeatmap = false;
 
@@ -65,25 +59,23 @@ class _NavigationPageState extends State<NavigationPage>
   // Track if the map should follow the user position
   bool _isFollowingUser = true;
 
+  // Preview route to show when selecting a new destination mid-navigation
+  RouteModel? _previewRoute;
+
+  // Timer to resume user tracking after 5 seconds of inactivity
+  Timer? _idleTimer;
+
   @override
   void initState() {
     super.initState();
 
-    // FIX 2: AnimationControllers initialized before _controller so vsync is ready
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 100),
+    // Plugin: controlador com animações suaves
+    _animatedMapController = AnimatedMapController(
       vsync: this,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
     );
 
-    _blinkController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    if (widget.isEmergency) {
-      _blinkController.repeat(reverse: true);
-    }
-
-    // FIX 3: _controller initialized BEFORE addListener (was the other way around)
     _controller = NavigationController(
       route: widget.route,
       destination: widget.destination,
@@ -94,22 +86,13 @@ class _NavigationPageState extends State<NavigationPage>
     );
     _controller.addListener(_onNavigationUpdate);
 
-    // Configurar listener da animação
-    _animationController.addListener(() {
-      if (_latAnimation != null &&
-          _lngAnimation != null &&
-          _rotAnimation != null) {
-        _mapController.moveAndRotate(
-          LatLng(_latAnimation!.value, _lngAnimation!.value),
-          20.0,
-          _rotAnimation!.value,
-        );
-      }
-    });
-
     // Escutar eventos de reroute
     _controller.rerouteStream.listen((event) {
       if (!mounted) return;
+      if (widget.isEmergency) {
+        print('[NavigationPage] Emergency mode: reroute change ignored.');
+        return;
+      }
       print("[NavigationPage] 🔔 Reroute event received!");
       setState(() {
         _rerouteEvent = event;
@@ -120,12 +103,10 @@ class _NavigationPageState extends State<NavigationPage>
 
   @override
   void dispose() {
-    // FIX 4: remove listener and dispose controller BEFORE disposing AnimationControllers
-    // to avoid callbacks firing on disposed vsync objects
+    _idleTimer?.cancel();
     _controller.removeListener(_onNavigationUpdate);
     _controller.dispose();
-    _animationController.dispose();
-    _blinkController.dispose();
+    _animatedMapController.dispose();
     super.dispose();
   }
 
@@ -172,38 +153,13 @@ class _NavigationPageState extends State<NavigationPage>
     final userLng = tracker.currentX;
 
     try {
-      final targetRot = _controller.heading - 180.0;
-      _animateMapTo(LatLng(userLat, userLng), targetRot);
+      _animatedMapController.animateTo(
+        dest: LatLng(userLat, userLng),
+        zoom: 20.0,
+      );
     } catch (e) {
       // Mapa ainda não renderizado, ignorar
     }
-  }
-
-  void _animateMapTo(LatLng destLocation, double destRotation) {
-    if (!mounted) return;
-
-    final startLat = _mapController.camera.center.latitude;
-    final startLng = _mapController.camera.center.longitude;
-    final startRot = _mapController.camera.rotation;
-
-    double diff = (destRotation - startRot + 180) % 360 - 180;
-    final adjustedDestRot = startRot + diff;
-
-    _latAnimation = Tween<double>(begin: startLat, end: destLocation.latitude)
-        .animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.linear),
-        );
-    _lngAnimation = Tween<double>(begin: startLng, end: destLocation.longitude)
-        .animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.linear),
-        );
-    _rotAnimation = Tween<double>(begin: startRot, end: adjustedDestRot)
-        .animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-        );
-
-    _animationController.reset();
-    _animationController.forward();
   }
 
   Future<void> _endNavigation() async {
@@ -211,6 +167,74 @@ class _NavigationPageState extends State<NavigationPage>
     if (mounted) {
       _exitNavigation();
     }
+  }
+
+  /// Shows a sheet for switching destination mid-navigation
+  void _showSwitchDestinationSheet(POIModel poi) async {
+    if (widget.isEmergency) {
+      print('[NavigationPage] Emergency mode: destination switch blocked.');
+      return;
+    }
+
+    // Pause movement immediately while user decides
+    _controller.pauseGpsTracking();
+
+    RouteModel? route;
+    try {
+      route = await _routingService.getRouteToPOI(
+        startX: _controller.tracker.currentX,
+        startY: _controller.tracker.currentY,
+        startLevel: _controller.currentLevel,
+        poiId: poi.id,
+        avoidStairs: false,
+      );
+    } catch (e) {}
+
+    if (!mounted) {
+      _controller.resumeGpsTracking();
+      return;
+    }
+
+    // Show the green preview route on the map
+    if (route != null) {
+      setState(() => _previewRoute = route);
+    }
+
+    POIDetailsSheet.show(
+      context,
+      poi: poi,
+      route: route,
+      allNodes: widget.nodes,
+      onNavigate: () {
+        if (route != null) {
+          // Switch to new navigation
+          setState(() => _previewRoute = null);
+          _controller.endNavigation().then((_) {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NavigationPage(
+                    route: route!,
+                    destination: poi,
+                    nodes: widget.nodes,
+                    initialX: _controller.tracker.currentX,
+                    initialY: _controller.tracker.currentY,
+                    initialLevel: _controller.currentLevel,
+                  ),
+                ),
+              );
+            }
+          });
+        }
+      },
+    ).whenComplete(() {
+      // Sheet dismissed without navigating — clear preview and resume original
+      if (mounted) {
+        setState(() => _previewRoute = null);
+        _controller.resumeGpsTracking();
+      }
+    });
   }
 
   // FIX 5: consistent zero-padding for both hours and minutes
@@ -226,10 +250,7 @@ class _NavigationPageState extends State<NavigationPage>
   Widget build(BuildContext context) {
     final tracker = _controller.tracker;
 
-    final userPosition = LatLng(
-      tracker.currentY,
-      tracker.currentX,
-    );
+    final userPosition = LatLng(tracker.currentY, tracker.currentX);
 
     return PopScope(
       canPop: false,
@@ -245,58 +266,74 @@ class _NavigationPageState extends State<NavigationPage>
             StadiumMapPage(
               highlightedRoute: _controller.route,
               highlightedPOI: widget.destination,
-              mapController: _mapController,
+              mapController: _animatedMapController.mapController,
               isNavigating: true,
+              isFollowingUser: _isFollowingUser,
               userPosition: userPosition,
               userHeading: _controller.heading,
               routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
               initialFloor: _controller.currentLevel,
               showHeatmap: _showHeatmap,
               isEmergency: widget.isEmergency,
+              onTapPOI: widget.isEmergency ? null : _showSwitchDestinationSheet,
+              previewRoute: _previewRoute,
+              onToggleNavigationHeatmap: () {
+                setState(() {
+                  _showHeatmap = !_showHeatmap;
+                });
+              },
+              onRecenterNavigation: () {
+                print(
+                  '[NavigationPage] Center button pressed. Enabling follow mode.',
+                );
+                setState(() {
+                  _isFollowingUser = true;
+                });
+                _followUserPosition();
+              },
+              navigationControlsBottomInset: _showReroutePopup
+                  ? 360
+                  : (_isBottomSheetExpanded ? 360 : 200),
               onPositionChanged: (camera, hasGesture) {
-                if (hasGesture && _isFollowingUser) {
-                  print("[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.");
-                  setState(() {
-                    _isFollowingUser = false;
+                if (hasGesture) {
+                  // Cancel any existing idle timer
+                  _idleTimer?.cancel();
+
+                  if (_isFollowingUser) {
+                    print(
+                      "[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.",
+                    );
+                    setState(() {
+                      _isFollowingUser = false;
+                    });
+                  }
+
+                  // Start a new 5-second timer to auto-recenter
+                  _idleTimer = Timer(const Duration(seconds: 5), () {
+                    if (mounted && !_isFollowingUser) {
+                      print(
+                        "[NavigationPage] ⏳ 5 seconds of inactivity. Auto-resuming follow mode.",
+                      );
+                      setState(() {
+                        _isFollowingUser = true;
+                      });
+                      _followUserPosition();
+                    }
                   });
                 }
               },
             ),
 
-            // Emergency Blinking Border
-            if (widget.isEmergency)
-              Positioned(
-                top: -20,
-                bottom: -20,
-                left: -20,
-                right: -20,
-                child: AnimatedBuilder(
-                  animation: _blinkController,
-                  builder: (context, child) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(
-                          MediaQuery.of(context).viewPadding.top > 0 ? 70.0 : 0.0,
-                        ),
-                        border: Border.all(
-                          color: const Color(0xFFBD453D)
-                              .withValues(alpha: _blinkController.value),
-                          width: 35,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-            // Header com instrução de navegação (topo)
+            // Header com instrução de navegação (topo) — IgnorePointer para o mapa receber toques
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              child: NavigationHeader(
-                instruction: _controller.currentInstruction,
-                isEmergency: widget.isEmergency,
+              child: IgnorePointer(
+                child: NavigationHeader(
+                  instruction: _controller.currentInstruction,
+                  isEmergency: widget.isEmergency,
+                ),
               ),
             ),
 
@@ -343,19 +380,25 @@ class _NavigationPageState extends State<NavigationPage>
                     final originalCategory = widget.destination.category;
 
                     print('[NavigationPage] 🔍 Debug Reroute Values:');
-                    print('  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"');
+                    print(
+                      '  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"',
+                    );
                     print('  - Captured Dest ID: "$capturedNewDestinationId"');
                     print('  - Event Category: "${_rerouteEvent?.category}"');
                     print('  - Widget Dest Category: "$originalCategory"');
 
-                    if ((capturedCategory == null || capturedCategory.isEmpty) &&
+                    if ((capturedCategory == null ||
+                            capturedCategory.isEmpty) &&
                         originalCategory.isNotEmpty) {
                       capturedCategory = originalCategory;
-                      print('[NavigationPage] 📦 Using original destination category: $capturedCategory');
+                      print(
+                        '[NavigationPage] 📦 Using original destination category: $capturedCategory',
+                      );
                     }
 
                     // FIX 7: simplified and corrected category normalisation
-                    if (capturedCategory != null && capturedCategory.isNotEmpty) {
+                    if (capturedCategory != null &&
+                        capturedCategory.isNotEmpty) {
                       if (capturedCategory.toLowerCase() == 'wc') {
                         capturedCategory = 'WC';
                       } else {
@@ -381,7 +424,7 @@ class _NavigationPageState extends State<NavigationPage>
                     }
 
                     try {
-                      _controller.pauseAutoNavigation();
+                      _controller.pauseGpsTracking();
 
                       final currentX = _controller.tracker.currentX;
                       final currentY = _controller.tracker.currentY;
@@ -393,9 +436,12 @@ class _NavigationPageState extends State<NavigationPage>
                       if ((effectiveCategory == null ||
                               effectiveCategory.isEmpty) &&
                           capturedNewDestinationId.contains('-')) {
-                        effectiveCategory =
-                            capturedNewDestinationId.split('-').first;
-                        print('[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory');
+                        effectiveCategory = capturedNewDestinationId
+                            .split('-')
+                            .first;
+                        print(
+                          '[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory',
+                        );
                       }
 
                       if (effectiveCategory != null &&
@@ -403,15 +449,18 @@ class _NavigationPageState extends State<NavigationPage>
                         print(
                           '[NavigationPage] 🔄 Requesting nearest $effectiveCategory from ($currentX, $currentY) level=$currentLevel',
                         );
-                        newRoute = await _routingService.getRouteToNearestCategory(
-                          startX: currentX,
-                          startY: currentY,
-                          startLevel: currentLevel,
-                          category: effectiveCategory,
-                          avoidStairs: false,
-                        );
+                        newRoute = await _routingService
+                            .getRouteToNearestCategory(
+                              startX: currentX,
+                              startY: currentY,
+                              startLevel: currentLevel,
+                              category: effectiveCategory,
+                              avoidStairs: false,
+                            );
                       } else {
-                        print('[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId');
+                        print(
+                          '[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId',
+                        );
                         newRoute = await _routingService.getRouteToPOI(
                           startX: currentX,
                           startY: currentY,
@@ -422,9 +471,12 @@ class _NavigationPageState extends State<NavigationPage>
                       }
 
                       if (newRoute.path.isNotEmpty) {
-                        final nodeIds =
-                            newRoute.path.map((p) => p.nodeId).toList();
-                        print('[NavigationPage] ✅ New route received with ${nodeIds.length} nodes');
+                        final nodeIds = newRoute.path
+                            .map((p) => p.nodeId)
+                            .toList();
+                        print(
+                          '[NavigationPage] ✅ New route received with ${nodeIds.length} nodes',
+                        );
                         if (mounted) {
                           Navigator.pop(context); // Dismiss loading dialog
                         }
@@ -460,52 +512,6 @@ class _NavigationPageState extends State<NavigationPage>
                   },
                 ),
               ),
-
-            // Botão de centrar e Toggle Heatmap
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              left: 16,
-              bottom: _showReroutePopup
-                  ? 360
-                  : (_isBottomSheetExpanded ? 360 : 200),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton(
-                    heroTag: 'heatmap_toggle',
-                    backgroundColor:
-                        _showHeatmap ? Colors.orange : Colors.white,
-                    onPressed: () {
-                      setState(() {
-                        _showHeatmap = !_showHeatmap;
-                      });
-                    },
-                    child: Icon(
-                      _showHeatmap ? Icons.layers_clear : Icons.layers,
-                      color: _showHeatmap ? Colors.white : Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  FloatingActionButton(
-                    heroTag: 'center',
-                    backgroundColor:
-                        _isFollowingUser ? Colors.blue : Colors.white,
-                    onPressed: () {
-                      print("[NavigationPage] 📍 Center button pressed. Enabling follow mode.");
-                      setState(() {
-                        _isFollowingUser = true;
-                      });
-                      _followUserPosition();
-                    },
-                    child: Icon(
-                      Icons.my_location,
-                      color: _isFollowingUser ? Colors.white : Colors.blue,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

@@ -98,9 +98,9 @@ class DynamicRouteManager {
 
     _recalculationTimer = Timer(const Duration(seconds: 3), () {});
 
-    print('[DynamicRouteManager] 🔄 RECALCULANDO ROTA - User desviou-se!');
-    print('[DynamicRouteManager] 📍 Posição atual: x=$userX, y=$userY');
-    print('[DynamicRouteManager] 🎯 Destino: x=$destinationX, y=$destinationY');
+    print('[DynamicRouteManager] RECALCULANDO ROTA - User desviou-se!');
+    print('[DynamicRouteManager] Posição atual: x=$userX, y=$userY');
+    print('[DynamicRouteManager] Destino: x=$destinationX, y=$destinationY');
 
     try {
       // Determinar o nível atual do utilizador
@@ -121,13 +121,13 @@ class DynamicRouteManager {
       _currentRoute = newRoute;
 
       print(
-        '[DynamicRouteManager] ✅ Nova rota calculada: ${newRoute.path.length} waypoints',
+        '[DynamicRouteManager] Nova rota calculada: ${newRoute.path.length} waypoints',
       );
 
       // Notificar listeners
       onRouteUpdated?.call(newRoute);
     } catch (e) {
-      print('[DynamicRouteManager] ❌ Erro ao recalcular rota: $e');
+      print('[DynamicRouteManager] Erro ao recalcular rota: $e');
     }
   }
 

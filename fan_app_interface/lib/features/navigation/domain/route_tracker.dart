@@ -158,7 +158,7 @@ class RouteTracker {
 
     if (distToLast < 5.0 && sameLevel && progress >= 0.3) {
       print(
-        '[RouteTracker] 🎯 Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m, nível: $_userLevel',
+        '[RouteTracker]  Chegando ao destino! Distância: ${distToLast.toStringAsFixed(1)}m, nível: $_userLevel',
       );
       return NavigationInstruction(
         type: 'arrive',
@@ -170,7 +170,7 @@ class RouteTracker {
     // Se está perto em X,Y mas no nível errado, mostrar instrução para escadas/rampa
     if (distToLast < 10.0 && !sameLevel) {
       print(
-        '[RouteTracker] 🪜 Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
+        '[RouteTracker] Perto do destino mas nível errado: user=$_userLevel, dest=$destinationLevel',
       );
       // Continuar navegação normal para encontrar escadas
     }
@@ -219,7 +219,7 @@ class RouteTracker {
     }
 
     print(
-      '[RouteTracker] 📍 Instrução: "$turnType" em ${totalDistance.toStringAsFixed(1)}m '
+      '[RouteTracker] Instrução: "$turnType" em ${totalDistance.toStringAsFixed(1)}m '
       '(waypoints $_currentWaypointIndex→$nextTurnIndex de ${route.waypoints.length})',
     );
 
@@ -281,7 +281,7 @@ class RouteTracker {
     final angleDegrees = acos(dotProduct.clamp(-1.0, 1.0)) * 180 / pi;
 
     print(
-      '[RouteTracker] 🧭 Curva em WP$waypointIndex: ângulo=${angleDegrees.toStringAsFixed(1)}° cross=${crossProduct.toStringAsFixed(0)}',
+      '[RouteTracker] Curva em WP$waypointIndex: ângulo=${angleDegrees.toStringAsFixed(1)}° cross=${crossProduct.toStringAsFixed(0)}',
     );
 
     // Se o ângulo é pequeno, é praticamente reto
@@ -332,7 +332,7 @@ class RouteTracker {
       if (pointDist < 4.0) {
         _currentWaypointIndex = currentIdx + 1;
         print(
-          '[RouteTracker] ✅ WP$currentIdx atingido por proximidade '
+          '[RouteTracker] WP$currentIdx atingido por proximidade '
           '(${pointDist.toStringAsFixed(1)}m)',
         );
         advanced = true;
@@ -356,7 +356,7 @@ class RouteTracker {
         );
 
         print(
-          '[RouteTracker] 📐 Seg WP${currentIdx - 1}→WP$currentIdx: '
+          '[RouteTracker] Seg WP${currentIdx - 1}→WP$currentIdx: '
           'segDist=${segDist.toStringAsFixed(1)}m, '
           'progress=${(progress * 100).toStringAsFixed(0)}%',
         );
@@ -365,7 +365,7 @@ class RouteTracker {
         if (segDist < 8.0 && progress > 0.90) {
           _currentWaypointIndex = currentIdx + 1;
           print(
-            '[RouteTracker] ✅ WP$currentIdx atingido por snap-to-edge '
+            '[RouteTracker] WP$currentIdx atingido por snap-to-edge '
             '(progress=${(progress * 100).toStringAsFixed(0)}%)',
           );
           advanced = true;
@@ -394,7 +394,7 @@ class RouteTracker {
         if (distToNext < pointDist && pointDist > segmentLen * 0.4) {
           _currentWaypointIndex = currentIdx + 1;
           print(
-            '[RouteTracker] ✅ WP$currentIdx skipped (forward-projection): '
+            '[RouteTracker] WP$currentIdx skipped (forward-projection): '
             'distCurrent=${pointDist.toStringAsFixed(1)}m > '
             'distNext=${distToNext.toStringAsFixed(1)}m',
           );

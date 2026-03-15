@@ -142,5 +142,14 @@
   "defaultPoiDescription": "Point of interest",
   "invalidQRFormat": "Invalid QR code format",
   "invalidQRSignature": "Invalid or tampered QR code",
-  "connectionError": "Connection error. Check your internet."
+  "connectionError": "Connection error. Check your internet.",
+  "internetDisconnected": "Internet connection lost.",
+  "internetReconnected": "Internet connection restored.",
+  "addToFavorites": "Add to favorites",
+  "removeFromFavorites": "Remove from favorites",
+  "calculatingRoute": "Calculating route...",
+  "tryAgain": "Try again",
+  "close": "Close",
+  "gpsRequired": "GPS Required",
+  "gpsRequiredMessage": "Cannot calculate route without GPS location."
 }
