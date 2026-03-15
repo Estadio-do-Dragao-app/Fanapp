@@ -1,16 +1,16 @@
 import 'package:latlong2/latlong.dart';
-/*
+
 import 'package:geolocator/geolocator.dart';
 import '../../features/navigation/data/services/user_position_service.dart';
-*/
+
 class GeographicUtils {
   static const Distance _distanceCalculator = Distance();
   // Default starting position (temporary test mode)
-  
+  /*
   static const double _defaultStartX = -8.6591;
   static const double _defaultStartY = 40.6342;
   static const int _defaultStartLevel = 0;
-  
+  */
   /// Calculates the distance in meters between two points (x=Lng, y=Lat)
   static double calculateDistance(double x1, double y1, double x2, double y2) {
     return _distanceCalculator.as(
@@ -75,7 +75,7 @@ class GeographicUtils {
   static Future<({double x, double y, int level})?>
   getCurrentUserPosition() async {
     
-    /*
+    
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -109,9 +109,9 @@ class GeographicUtils {
         level: savedPosition.level,
       );
     }
-  */
+  
     // For now we force a fixed origin so route calculation always starts
     // from the same known point during testing.
-    return (x: _defaultStartX, y: _defaultStartY, level: _defaultStartLevel);
+    //return (x: _defaultStartX, y: _defaultStartY, level: _defaultStartLevel);
   }
 }
