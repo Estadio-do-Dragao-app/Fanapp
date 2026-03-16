@@ -100,14 +100,10 @@ class GeographicUtils {
 
       return (x: position.longitude, y: position.latitude, level: 0);
     } catch (e) {
-      print('[GeographicUtils] Failed to get real GPS, trying fallback: $e');
-      final savedPosition = await UserPositionService.getPosition();
-      if (savedPosition == null) return null;
-      return (
-        x: savedPosition.x,
-        y: savedPosition.y,
-        level: savedPosition.level,
-      );
+      print('[GeographicUtils] GPS not available: $e');
+      // GPS is disabled or unavailable - do NOT fallback to saved position
+      // This ensures old positions are not used when GPS is intentionally turned off
+      return null;
     }
   
     // For now we force a fixed origin so route calculation always starts

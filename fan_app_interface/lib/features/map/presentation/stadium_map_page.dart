@@ -143,7 +143,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
   // Stream para pedir ao plugin para centrar no GPS (parâmetro do CurrentLocationLayer)
   final StreamController<double?> _alignPositionStreamController =
-      StreamController<double?>();
+      StreamController<double?>.broadcast();
   bool _isLocationLayerAvailable = false;
   bool _isUserPositionLocked = false;
 
