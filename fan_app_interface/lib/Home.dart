@@ -193,6 +193,7 @@ class _HomeState extends State<Home> {
               showHeatmap: _showHeatmap,
               isHeatmapAvailable: _isHeatmapAvailable,
               onHeatmapChanged: (value) {
+                print('[Home] 🔥 Heatmap toggle changed: $value');
                 setState(() {
                   _showHeatmap = value;
                 });

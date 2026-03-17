@@ -1212,6 +1212,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
       return const SizedBox.shrink();
     }
 
+    // Coordenadas base (deve corresponder ao GPS Processor)
+    const double baseLatUA = 41.1617;
+    const double baseLngUA = -8.5836;
+
     final data = <WeightedLatLng>[];
 
     _heatmapData!.sections.forEach((cellId, cellData) {
@@ -1219,32 +1223,43 @@ class StadiumMapPageState extends State<StadiumMapPage>
       if (cellData.level != _currentFloor) return;
 
       // Extrair coordenadas do cellId (cell_X_Y ou cell_L_X_Y)
+      // As coordenadas estão em metros (conversão do GPS Processor)
       final parts = cellId.split('_');
-      int? x, y;
+      double? xMeters, yMeters;
 
       if (parts.length == 3 && parts[0] == 'cell') {
-        x = int.tryParse(parts[1]);
-        y = int.tryParse(parts[2]);
+        xMeters = double.tryParse(parts[1]);
+        yMeters = double.tryParse(parts[2]);
       } else if (parts.length == 4 && parts[0] == 'cell') {
-        x = int.tryParse(parts[2]);
-        y = int.tryParse(parts[3]);
+        xMeters = double.tryParse(parts[2]);
+        yMeters = double.tryParse(parts[3]);
       } else {
         return;
       }
 
-      if (x == null || y == null) return;
+      if (xMeters == null || yMeters == null) return;
+
+      // Converter de metros para lat/lng
+      // Inverso de: dx = (lng - BASE_LNG) * 111000 * 0.752
+      //             dy = (lat - BASE_LAT) * 111000
+      final lat = yMeters / 111000.0 + baseLatUA;
+      final lng = xMeters / (111000.0 * 0.752) + baseLngUA;
 
       // Ponto com peso = nível de congestão
       data.add(
         WeightedLatLng(
-          LatLng(y.toDouble(), x.toDouble()),
+          LatLng(lat, lng),
           cellData.congestionLevel,
         ),
       );
     });
 
-    if (data.isEmpty) return const SizedBox.shrink();
+    if (data.isEmpty) {
+      print('[Heatmap] ⚠️ No data after conversion (sections: ${_heatmapData!.sections.length})');
+      return const SizedBox.shrink();
+    }
 
+    print('[Heatmap] ✅ Rendering ${data.length} heatmap points');
     return HeatMapLayer(
       heatMapDataSource: InMemoryHeatMapDataSource(data: data),
       heatMapOptions: HeatMapOptions(radius: 30, minOpacity: 0.1),

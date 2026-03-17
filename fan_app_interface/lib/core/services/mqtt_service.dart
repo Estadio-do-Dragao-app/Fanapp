@@ -201,6 +201,7 @@ class MqttService {
 
         switch (topic) {
           case topicCongestion:
+            print('[MqttService] 🔥 Congestion message received: ${jsonData['cell_id']}');
             _congestionController.add(jsonData);
             break;
           case topicAlerts:
