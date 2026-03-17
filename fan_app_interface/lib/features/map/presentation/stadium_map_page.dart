@@ -1212,10 +1212,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
       return const SizedBox.shrink();
     }
 
-    // Coordenadas base (deve corresponder ao GPS Processor)
-    const double baseLatUA = 41.1617;
-    const double baseLngUA = -8.5836;
-
     final data = <WeightedLatLng>[];
 
     _heatmapData!.sections.forEach((cellId, cellData) {
@@ -1223,43 +1219,32 @@ class StadiumMapPageState extends State<StadiumMapPage>
       if (cellData.level != _currentFloor) return;
 
       // Extrair coordenadas do cellId (cell_X_Y ou cell_L_X_Y)
-      // As coordenadas estão em metros (conversão do GPS Processor)
       final parts = cellId.split('_');
-      double? xMeters, yMeters;
+      double? x, y;
 
       if (parts.length == 3 && parts[0] == 'cell') {
-        xMeters = double.tryParse(parts[1]);
-        yMeters = double.tryParse(parts[2]);
+        x = double.tryParse(parts[1]);
+        y = double.tryParse(parts[2]);
       } else if (parts.length == 4 && parts[0] == 'cell') {
-        xMeters = double.tryParse(parts[2]);
-        yMeters = double.tryParse(parts[3]);
+        x = double.tryParse(parts[2]);
+        y = double.tryParse(parts[3]);
       } else {
         return;
       }
 
-      if (xMeters == null || yMeters == null) return;
-
-      // Converter de metros para lat/lng
-      // Inverso de: dx = (lng - BASE_LNG) * 111000 * 0.752
-      //             dy = (lat - BASE_LAT) * 111000
-      final lat = yMeters / 111000.0 + baseLatUA;
-      final lng = xMeters / (111000.0 * 0.752) + baseLngUA;
+      if (x == null || y == null) return;
 
       // Ponto com peso = nível de congestão
       data.add(
         WeightedLatLng(
-          LatLng(lat, lng),
+          LatLng(y.toDouble(), x.toDouble()),
           cellData.congestionLevel,
         ),
       );
     });
 
-    if (data.isEmpty) {
-      print('[Heatmap] ⚠️ No data after conversion (sections: ${_heatmapData!.sections.length})');
-      return const SizedBox.shrink();
-    }
+    if (data.isEmpty) return const SizedBox.shrink();
 
-    print('[Heatmap] ✅ Rendering ${data.length} heatmap points');
     return HeatMapLayer(
       heatMapDataSource: InMemoryHeatMapDataSource(data: data),
       heatMapOptions: HeatMapOptions(radius: 30, minOpacity: 0.1),
