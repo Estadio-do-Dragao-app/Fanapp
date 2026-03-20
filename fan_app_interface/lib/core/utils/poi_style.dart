@@ -3,30 +3,26 @@ import 'package:flutter/material.dart';
 /// Centralized POI styling utility.
 /// All icon and color mappings for POI categories live here.
 /// Change once → reflected everywhere in the app.
+///
+/// Active categories: restroom/wc, food, restaurant, cafe, bar,
+///   emergency_exit, first_aid, information, stairs, ramp,
+///   entrance, library, parking
 class POIStyle {
   POIStyle._(); // prevent instantiation
 
-  // ─── Icons ───────────────────────────────────────────────
+  // ─── Icons ────────────────────────────────────────────────
 
-  /// Returns the icon for a POI, considering both category and name.
-  /// Use this when you have access to the full POI model.
-  static IconData getIcon(String category, {String? name}) {
-    // Name-based overrides (highest priority)
-    if (name != null) {
-      final lowerName = name.toLowerCase();
-      if (lowerName.contains('cgd')) return Icons.atm;
-    }
+  static IconData getIcon(String category, {String? name}) =>
+      getCategoryIcon(category);
 
-    switch (category.toLowerCase()) {
-      case 'atm':
-      case 'cgd':
-        return Icons.atm;
-      case 'departamento':
-      case 'department':
-        return Icons.home_work_rounded;
+  static IconData getCategoryIcon(String categoryId) {
+    switch (categoryId.toLowerCase()) {
       case 'restroom':
       case 'wc':
         return Icons.wc;
+      case 'cgd':
+      case 'atm':
+        return Icons.account_balance;
       case 'food':
       case 'restaurant':
         return Icons.restaurant;
@@ -39,89 +35,69 @@ class POIStyle {
       case 'first_aid':
         return Icons.local_hospital;
       case 'information':
-        return Icons.info;
-      case 'gate':
-        return Icons.door_front_door;
-      case 'merchandise':
-      case 'shop':
-      case 'store':
-        return Icons.store;
+        return Icons.info_outline;
       case 'stairs':
         return Icons.stairs;
       case 'ramp':
-        return Icons.accessible;
+        return Icons.accessible_forward;
       case 'entrance':
         return Icons.login;
-      case 'seat':
-        return Icons.event_seat;
       case 'library':
         return Icons.local_library;
       case 'parking':
         return Icons.local_parking;
-      // case 'ticket':
-      //   return Icons.local_activity; // Ticket feature temporarily disabled
       default:
         return Icons.place;
     }
   }
 
-  /// Simpler version for navbar / destination-selection contexts
-  /// where only the category ID string is available.
-  static IconData getCategoryIcon(String categoryId) {
-    return getIcon(categoryId);
-  }
+  // ─── Colors ───────────────────────────────────────────────
 
-  // ─── Colors ──────────────────────────────────────────────
-
-  /// Returns marker background color for a POI on the map.
+  /// Pastel palette: strong hue, high lightness — not washed out.
   static Color getColor(String category, {String? name}) {
-    // Name-based overrides
-    if (name != null) {
-      final lowerName = name.toLowerCase();
-      if (lowerName.contains('cgd')) return Colors.blue.shade800;
-    }
-
     switch (category.toLowerCase()) {
-      case 'atm':
-      case 'cgd':
-        return Colors.blue.shade800;
-      case 'departamento':
-      case 'department':
-        return Colors.indigo.shade600;
       case 'restroom':
       case 'wc':
-        return Colors.blue.shade700;
+        return const Color(0xFF42A5F5); // vivid sky blue
+
+      case 'cgd':
+      case 'atm':
+        return const Color(0xFF1E88E5); // CGD blue
+
       case 'food':
-      case 'cafe':
       case 'restaurant':
-        return Colors.orange.shade700;
+        return const Color(0xFFFF8A65); // coral orange
+
+      case 'cafe':
+        return const Color(0xFFA1887F); // warm coffee brown
+
       case 'bar':
-        return Colors.purple.shade700;
+        return const Color(0xFFAB47BC); // bright purple
+
       case 'emergency_exit':
-        return Colors.red.shade700;
+        return const Color(0xFFEF5350); // clear red
+
       case 'first_aid':
-        return Colors.green.shade700;
+        return const Color(0xFF26A69A); // teal green
+
       case 'information':
-        return Colors.cyan.shade700;
-      case 'gate':
-        return Colors.indigo.shade700;
-      case 'merchandise':
-      case 'shop':
-      case 'store':
-        return Colors.pink.shade700;
+        return const Color(0xFF29B6F6); // bright cyan-blue
+
+      case 'entrance':
+        return const Color(0xFF66BB6A); // fresh green
+
       case 'stairs':
       case 'ramp':
-        return Colors.amber.shade700;
-      case 'entrance':
-        return Colors.teal.shade700;
-      case 'seat':
-        return Colors.green.shade700;
+        return const Color(0xFFFFCA28); // bright amber
+
       case 'library':
-        return Colors.brown.shade700;
+        return const Color(0xFF8D6E63); // rich brown
+
       case 'parking':
-        return Colors.blueGrey.shade700;
+        return const Color(0xFF78909C); // slate blue-grey
+
       default:
-        return Colors.grey.shade700;
+        return const Color(0xFF757575); // medium grey
     }
   }
 }

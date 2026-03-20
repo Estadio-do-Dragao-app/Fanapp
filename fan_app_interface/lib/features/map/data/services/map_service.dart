@@ -131,24 +131,22 @@ class MapService {
   Future<List<POIModel>> getAllPOIs() async {
     // Tipos que consideramos POIs (excluindo corridor, normal, seat, row_aisle)
     const poiTypes = [
-      'gate',
       'restroom',
       'food',
       'bar',
       'emergency_exit',
       'first_aid',
       'information',
-      'merchandise',
       'stairs',
       'ramp',
-      'poi', // Tipo genérico
+      'poi', // generic type
       'entrance',
-      'shop',
       'wc',
       'library',
       'parking',
       'cafe',
       'restaurant',
+      'cgd',
     ];
 
     final response = await http

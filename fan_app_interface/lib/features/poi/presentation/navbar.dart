@@ -11,7 +11,8 @@ import 'package:fan_app_interface/l10n/app_localizations.dart';
 // import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
 // import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
 // import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
-import 'package:fan_app_interface/core/utils/poi_style.dart';
+
+import 'package:fan_app_interface/core/widgets/poi_icon.dart';
 // import 'package:fan_app_interface/core/utils/geographic_utils.dart';
 // import 'package:fan_app_interface/core/utils/top_feedback.dart';
 // import 'dart:math';
@@ -362,9 +363,10 @@ class _NavbarState extends State<Navbar> {
                       } else {
                         catId = label;
                       }
-                      return Icon(
-                        POIStyle.getCategoryIcon(catId),
+                      return POIIcon(
+                        categoryId: catId,
                         color: Colors.black,
+                        size: 24,
                       );
                     },
                   ),

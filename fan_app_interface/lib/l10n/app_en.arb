@@ -58,7 +58,7 @@
   "merchandising": "Merchandising",
   "filter": "Filter",
   "floor": "Floor",
-  "heatmap": "Heat map",
+  "heatmap": "Congestion",
   "accessibility": "Accessibility",
   "connectionFailed": "Connection failed",
   "newDestinationFound": "NEW DESTINATION FOUND",
@@ -151,5 +151,8 @@
   "tryAgain": "Try again",
   "close": "Close",
   "gpsRequired": "GPS Required",
-  "gpsRequiredMessage": "Cannot calculate route without GPS location."
+  "gpsRequiredMessage": "Cannot calculate route without GPS location.",
+  "savedPlaces": "Favorites",
+  "noSavedPlaces": "You haven't saved any places yet.",
+  "more": "More"
 }
