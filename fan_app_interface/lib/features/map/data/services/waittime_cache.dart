@@ -48,7 +48,7 @@ class WaittimeCache extends ChangeNotifier {
 
   Future<void> _fetchWaitTimes() async {
     try {
-      final url = Uri.parse('${ApiConfig.waitTimeService}/api/waittime/all?poi_type=food');
+      final url = Uri.parse('${ApiConfig.waitTimeService}/api/waittime/all');
       final response = await http.get(url).timeout(const Duration(seconds: 5));
       
       if (response.statusCode == 200) {
