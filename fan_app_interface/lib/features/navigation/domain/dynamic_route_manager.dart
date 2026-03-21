@@ -20,6 +20,9 @@ class DynamicRouteManager {
   RouteModel? _currentRoute;
   Timer? _recalculationTimer;
 
+  // Debounce: instante em que o user saiu da rota pela primeira vez
+  DateTime? _firstOffRouteTime;
+
   // Callbacks
   Function(RouteModel)? onRouteUpdated;
 
@@ -38,8 +41,9 @@ class DynamicRouteManager {
   /// Atualiza manualmente a rota atual (ex: por rerouting MQTT)
   void updateRoute(RouteModel newRoute) {
     _currentRoute = newRoute;
-    // Reiniciar timer para evitar conflitos imediatos
+    // Reiniciar timer e debounce para evitar conflitos imediatos
     _recalculationTimer?.cancel();
+    _firstOffRouteTime = null;
   }
 
   /// Inicia monitorização automática da posição
@@ -84,9 +88,28 @@ class DynamicRouteManager {
       '[DynamicRouteManager] Distância à rota: ${minDistanceToRoute.toStringAsFixed(1)}m',
     );
 
-    // Se está a mais de 8 metros da rota, recalcular
-    if (minDistanceToRoute > 8.0) {
-      await _recalculateRoute(userX, userY);
+    // Smart Rerouting: só recalcula se o user estiver >20m da rota
+    // por pelo menos 5 segundos consecutivos (evita drifts de GPS).
+    const double rerouteThreshold = 20.0;
+    const Duration rerouteDebounce = Duration(seconds: 5);
+
+    if (minDistanceToRoute > rerouteThreshold) {
+      _firstOffRouteTime ??= DateTime.now();
+      final offFor = DateTime.now().difference(_firstOffRouteTime!);
+      print(
+        '[DynamicRouteManager] Off-route for ${offFor.inSeconds}s '
+        '(threshold: ${rerouteDebounce.inSeconds}s)',
+      );
+      if (offFor >= rerouteDebounce) {
+        _firstOffRouteTime = null; // reset para próximo evento
+        await _recalculateRoute(userX, userY);
+      }
+    } else {
+      // Voltou à rota — cancelar contagem
+      if (_firstOffRouteTime != null) {
+        print('[DynamicRouteManager] Voltou à rota, debounce cancelado.');
+        _firstOffRouteTime = null;
+      }
     }
   }
 
@@ -162,5 +185,6 @@ class DynamicRouteManager {
 
   void dispose() {
     _recalculationTimer?.cancel();
+    _firstOffRouteTime = null;
   }
 }
