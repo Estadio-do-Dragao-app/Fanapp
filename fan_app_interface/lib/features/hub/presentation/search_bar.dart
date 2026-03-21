@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import '../../map/data/models/poi_model.dart';
-import '../../../core/utils/poi_style.dart';
+
 import '../../map/data/services/map_service.dart';
+import '../../../core/widgets/poi_icon.dart';
 
 class SearchBarBottomSheet extends StatefulWidget {
   final Function(POIModel)? onPOISelected;
@@ -235,12 +236,10 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
                                   backgroundColor: const Color(
                                     0xFF929AD4,
                                   ).withValues(alpha: 0.2),
-                                  child: Icon(
-                                    POIStyle.getIcon(
-                                      poi.category,
-                                      name: poi.name,
-                                    ),
+                                  child: POIIcon(
+                                    categoryId: poi.category,
                                     color: textColor,
+                                    size: 24,
                                   ),
                                 ),
                                 title: Text(

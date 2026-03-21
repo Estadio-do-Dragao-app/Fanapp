@@ -18,6 +18,7 @@ import '../data/services/congestion_service.dart';
 import '../data/services/saved_places_service.dart';
 import '../../../core/utils/poi_style.dart';
 import 'layers/floor_plan_layer.dart';
+import '../../../core/widgets/poi_icon.dart';
 import '../../navigation/presentation/navigation_page.dart';
 import '../../navigation/data/services/user_position_service.dart';
 // import '../../ticket/data/models/ticket_model.dart'; // Ticket feature disabled
@@ -822,7 +823,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
     );
   }
 
-  Widget _buildEmergencySimulationButton() {
+  /* Widget _buildEmergencySimulationButton() {
     return Material(
       color: Colors.redAccent,
       elevation: 8,
@@ -847,7 +848,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         ),
       ),
     );
-  }
+  } */
 
   /// Constrói o painel inline de detalhes do POI
   Widget _buildPOIPreviewPanel() {
@@ -1045,11 +1046,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
               top: -(_controlsCardHeight + _controlsCardGapAbovePanel),
               child: _buildMapControlsCard(),
             ),
-            Positioned(
+            /* Positioned(
               right: _controlsCardRightInset,
               top: -_controlsCardGapAbovePanel + _emergencyButtonGap,
               child: _buildEmergencySimulationButton(),
-            ),
+            ), */
           ],
         ),
       ),
@@ -1176,7 +1177,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
             child: _buildMapControlsCard(),
           ),
 
-        if (!widget.isNavigating &&
+        /* if (!widget.isNavigating &&
             !_isLoading &&
             _errorMessage == null &&
             widget.interactivePOIs &&
@@ -1188,7 +1189,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
                 _emergencyButtonSize -
                 _emergencyButtonGap,
             child: _buildEmergencySimulationButton(),
-          ),
+          ), */
 
         if (widget.isNavigating && !_isLoading && _errorMessage == null)
           Positioned(
@@ -1454,8 +1455,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
                     ),
                   ],
                 ),
-                child: Icon(
-                  POIStyle.getIcon(poi.category, name: poi.name),
+                child: POIIcon(
+                  categoryId: poi.category,
                   color: Colors.white,
                   size: isHighlighted ? 24 : 20,
                 ),

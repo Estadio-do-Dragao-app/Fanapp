@@ -97,7 +97,7 @@ class FilterButtonState extends State<FilterButton>
               ],
             ),
             child: Icon(
-              Icons.tune,
+              Icons.settings,
               color: _isExpanded ? Colors.white : const Color(0xFF161A3E),
               size: 24,
             ),
@@ -130,7 +130,7 @@ class FilterButtonState extends State<FilterButton>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.filter_alt,
+                        Icons.settings,
                         color: Colors.white.withOpacity(0.8),
                         size: 18,
                       ),

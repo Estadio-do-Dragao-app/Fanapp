@@ -58,7 +58,7 @@
   "merchandising": "Loja",
   "filter": "Filtro",
   "floor": "Piso",
-  "heatmap": "Mapa de calor",
+  "heatmap": "Congestionamento",
   "accessibility": "Acessibilidade",
   "connectionFailed": "Falha de conexão",
   "newDestinationFound": "NOVO DESTINO ENCONTRADO",
@@ -151,5 +151,8 @@
   "tryAgain": "Tentar novamente",
   "close": "Fechar",
   "gpsRequired": "GPS Necessário",
-  "gpsRequiredMessage": "Não é possível calcular a rota sem a sua localização (GPS)."
+  "gpsRequiredMessage": "Não é possível calcular a rota sem a sua localização (GPS).",
+  "savedPlaces": "Favoritos",
+  "noSavedPlaces": "Ainda não guardou nenhum lugar.",
+  "more": "Mais"
 }

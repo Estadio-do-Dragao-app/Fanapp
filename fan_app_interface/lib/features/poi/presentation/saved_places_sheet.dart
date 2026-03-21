@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../map/data/models/poi_model.dart';
-import '../../../core/utils/poi_style.dart';
+import '../../../core/widgets/poi_icon.dart';
 import '../../map/data/services/saved_places_service.dart';
+import 'package:fan_app_interface/l10n/app_localizations.dart';
 
 class SavedPlacesSheet extends StatefulWidget {
   final Function(POIModel poi) onPOISelected;
@@ -52,10 +53,8 @@ class _SavedPlacesSheetState extends State<SavedPlacesSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // Assuming localizations.savedPlaces doesn't exist yet, we'll use a hardcoded fallback
-    // or you can add it to app_en.arb / app_pt.arb later.
-    final title =
-        'Favoritos'; // Replace with localizations.savedPlaces if available
+    final localizations = AppLocalizations.of(context)!;
+    final title = localizations.savedPlaces;
     final screenHeight = MediaQuery.sizeOf(context).height;
     final emptyInitialChildSize = (300 / screenHeight).clamp(0.3, 0.45);
     final emptyMinChildSize = (220 / screenHeight).clamp(0.2, 0.35);
@@ -116,21 +115,21 @@ class _SavedPlacesSheetState extends State<SavedPlacesSheet> {
                                 constraints: BoxConstraints(
                                   minHeight: constraints.maxHeight - 48,
                                 ),
-                                child: const Column(
+                                child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       Icons.star_border,
                                       color: Colors.white54,
                                       size: 48,
                                     ),
-                                    SizedBox(height: 16),
-                                    Text(
-                                      'Ainda não guardou nenhum lugar.',
-                                      style: TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 16,
-                                      ),
+                                    const SizedBox(height: 16),
+                                      Text(
+                                        localizations.noSavedPlaces,
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 16,
+                                        ),
                                       textAlign: TextAlign.center,
                                     ),
                                   ],
@@ -167,12 +166,10 @@ class _SavedPlacesSheetState extends State<SavedPlacesSheet> {
                                   backgroundColor: const Color(
                                     0xFF929AD4,
                                   ).withValues(alpha: 0.2),
-                                  child: Icon(
-                                    POIStyle.getIcon(
-                                      poi.category,
-                                      name: poi.name,
-                                    ),
+                                  child: POIIcon(
+                                    categoryId: poi.category,
                                     color: Colors.white,
+                                    size: 24,
                                   ),
                                 ),
                                 title: Text(

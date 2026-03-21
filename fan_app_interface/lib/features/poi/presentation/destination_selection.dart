@@ -9,9 +9,11 @@ import '../../map/data/models/route_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
-import '../../../core/utils/poi_style.dart';
+
 import '../../../core/utils/geographic_utils.dart';
 import '../../../core/utils/top_feedback.dart';
+import '../../../core/widgets/poi_icon.dart';
+import '../../../core/widgets/animated_glow.dart';
 import '../../map/data/services/waittime_cache.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 
@@ -726,7 +728,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       itemBuilder: (context, index) {
         final item = _poisWithRoutes[index];
         final isSelected = selectedIndex == index;
-        final isFastest = _allRoutesCalculated && _fastestIndex == index;
+        final isDepartmentOrPoi = _normalizeCategory(widget.categoryId) == 'department' || _normalizeCategory(widget.categoryId) == 'poi';
+        final isFastest = _allRoutesCalculated && _fastestIndex == index && !isDepartmentOrPoi;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -762,15 +765,15 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                 border: Border.all(
                   color: isSelected
                       ? Colors.white
-                      : (isFastest ? Colors.green : Colors.white24),
-                  width: isSelected ? 3 : (isFastest ? 2 : 1),
+                      : Colors.white24,
+                  width: isSelected ? 3 : 1,
                 ),
               ),
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(
-                    POIStyle.getCategoryIcon(widget.categoryId),
+                  POIIcon(
+                    categoryId: widget.categoryId,
                     color: Colors.white,
                     size: 32,
                   ),
@@ -794,12 +797,15 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             // Tempo de caminhada
-                            _buildInfoChip(
-                              icon: Icons.directions_walk,
-                              label: (!_hasValidLocation || !item.hasRoute)
-                                  ? '-- min'
-                                  : localizations.walkTime(item.walkingMinutes),
-                              faded: !(item.hasRoute && _hasValidLocation),
+                            AnimatedSelectionGlow(
+                              play: isSelected,
+                              child: _buildInfoChip(
+                                icon: Icons.directions_walk,
+                                label: (!_hasValidLocation || !item.hasRoute)
+                                    ? '-- min'
+                                    : localizations.walkTime(item.walkingMinutes),
+                                faded: !(item.hasRoute && _hasValidLocation),
+                              ),
                             ),
                             // Tempo de fila (apenas categorias com fila)
                             if ([
@@ -812,10 +818,13 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                                 item.poi.name
                                     .toLowerCase()
                                     .contains('farmácia'))
-                              _buildInfoChip(
-                                icon: Icons.group,
-                                label: localizations
-                                    .queueTime(item.waitMinutes),
+                              AnimatedSelectionGlow(
+                                play: isSelected,
+                                child: _buildInfoChip(
+                                  icon: Icons.group,
+                                  label: localizations
+                                      .queueTime(item.waitMinutes),
+                                ),
                               ),
                             // Badge "Mais rápido"
                             if (isFastest)
@@ -841,14 +850,17 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                       ],
                     ),
                   ),
-                  Text(
-                    (!_hasValidLocation || !item.hasRoute)
-                        ? '-- m'
-                        : '${item.distance.toStringAsFixed(0)}m',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                  AnimatedSelectionGlow(
+                    play: isSelected,
+                    child: Text(
+                      (!_hasValidLocation || !item.hasRoute)
+                          ? '-- m'
+                          : '${item.distance.toStringAsFixed(0)}m',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],

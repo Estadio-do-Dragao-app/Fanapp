@@ -344,7 +344,7 @@ abstract class AppLocalizations {
   /// No description provided for @heatmap.
   ///
   /// In en, this message translates to:
-  /// **'Heat map'**
+  /// **'Congestion'**
   String get heatmap;
 
   /// No description provided for @accessibility.
@@ -568,6 +568,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cannot calculate route without GPS location.'**
   String get gpsRequiredMessage;
+
+  /// No description provided for @savedPlaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get savedPlaces;
+
+  /// No description provided for @noSavedPlaces.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t saved any places yet.'**
+  String get noSavedPlaces;
+
+  /// No description provided for @more.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get more;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
