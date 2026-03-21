@@ -50,6 +50,20 @@ class NavigationController extends ChangeNotifier {
   // Piso atual (baseado no waypoint atual)
   int _currentLevel = 0;
 
+  // ── Filtro de ruído GPS ──────────────────────────────────────────────────
+  // Última posição aceite como válida
+  double? _lastFilteredX;
+  double? _lastFilteredY;
+  DateTime? _lastFilteredTime;
+
+  // Velocidade máxima plausível para um pedrão a correr: 3.5 m/s (~12.6 km/h)
+  // Saltos que impliquem >3× esse valor são descartados como ruído de GPS.
+  static const double _maxPlausibleSpeed = 3.5;  // m/s
+  static const double _noiseMultiplier   = 3.0;
+  // Se o GPS esteve parado > 10 s (ex: récoupération de sinal), aceitar sempre
+  static const Duration _signalGap = Duration(seconds: 10);
+  // ──────────────────────────────────────────────────────────────────────────
+
   NavigationController({
     required RouteModel route,
     required this.destination,
@@ -195,11 +209,46 @@ class NavigationController extends ChangeNotifier {
               _heading = position.heading;
             }
 
+            final newX = position.longitude;
+            final newY = position.latitude;
+
+            // ── Filtro de ruído GPS ──────────────────────────────────────
+            if (_lastFilteredX != null && _lastFilteredTime != null) {
+              final timeDelta = DateTime.now()
+                  .difference(_lastFilteredTime!)
+                  .inMilliseconds / 1000.0;
+
+              // Se há menos de 10 s desde a última posição válida,
+              // verificar se a velocidade implicada é plausível.
+              if (timeDelta < _signalGap.inSeconds.toDouble() && timeDelta > 0) {
+                final dist = GeographicUtils.calculateDistance(
+                  _lastFilteredX!, _lastFilteredY!, newX, newY,
+                );
+                final impliedSpeed = dist / timeDelta; // m/s
+
+                if (impliedSpeed > _maxPlausibleSpeed * _noiseMultiplier) {
+                  print(
+                    '[NavigationController] ⚠️ GPS NOISE ignored: '
+                    'impliedSpeed=${impliedSpeed.toStringAsFixed(1)} m/s '
+                    '(limit=${(_maxPlausibleSpeed * _noiseMultiplier).toStringAsFixed(1)} m/s), '
+                    'jump=${dist.toStringAsFixed(1)}m in ${timeDelta.toStringAsFixed(1)}s',
+                  );
+                  return; // descartar esta posição
+                }
+              }
+            }
+
+            // Posição aceite — actualizar filtro
+            _lastFilteredX = newX;
+            _lastFilteredY = newY;
+            _lastFilteredTime = DateTime.now();
+            // ─────────────────────────────────────────────────────────────
+
             // Update position on map/tracker
-            updateUserPosition(position.longitude, position.latitude);
+            updateUserPosition(newX, newY);
 
             // Emit to trigger dynamic route manager updates
-            _positionStream.add((x: position.longitude, y: position.latitude));
+            _positionStream.add((x: newX, y: newY));
           },
         );
   }

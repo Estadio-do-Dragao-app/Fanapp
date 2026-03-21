@@ -299,19 +299,31 @@ class RouteTracker {
     }
   }
 
+  /// Versão do progressAlongSegment sem clamp — permite detectar t > 1
+  /// (user passou além do nó destino do segmento)
+  double _rawProgressAlongSegment(
+    double px, double py,
+    double x1, double y1,
+    double x2, double y2,
+  ) {
+    final segLenSq = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+    if (segLenSq < 1e-12) return 1.0;
+    return ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / segLenSq;
+  }
+
   /// Atualiza o waypoint atual baseado na posição do utilizador.
   ///
   /// Lógica estilo Google Maps:
-  /// 1. Se o user está perto de um waypoint (< 4m), avança
-  /// 2. Se o user progrediu > 90% no segmento atual, avança
-  /// 3. FORWARD-PROJECTION: Se o user está mais perto do PRÓXIMO waypoint
-  ///    do que do ATUAL, avança (skips waypoints ultrapassados)
+  /// 1. Proximidade direta ao nó (< 6m)
+  /// 2. Projeção na linha: se a projeção do user ultrapassou o nó (t ≥ 1.0)
+  ///    o nó é marcado como feito — mesmo que esteja 6m lateral
+  /// 3. Snap-to-edge: progresso > 90% dentro de 12m ao segmento
+  /// 4. Forward-jump: mais perto do próximo waypoint que do atual
   void _updateCurrentWaypoint() {
     if (_currentWaypointIndex >= route.waypoints.length) return;
 
     bool advanced = true;
 
-    // Continuar a avançar enquanto houver waypoints para saltar
     while (advanced && _currentWaypointIndex < route.waypoints.length) {
       advanced = false;
 
@@ -322,14 +334,13 @@ class RouteTracker {
         _userX, _userY, coords.x, coords.y,
       );
 
-      // Debug log
       print(
         '[RouteTracker] WP$currentIdx (${waypoint.nodeId}): '
         'dist=${pointDist.toStringAsFixed(1)}m',
       );
 
-      // === CHECK 1: Proximidade direta ao nó (< 4m) ===
-      if (pointDist < 4.0) {
+      // === CHECK 1: Proximidade direta ao nó (< 6m) ===
+      if (pointDist < 6.0) {
         _currentWaypointIndex = currentIdx + 1;
         print(
           '[RouteTracker] WP$currentIdx atingido por proximidade '
@@ -339,62 +350,75 @@ class RouteTracker {
         continue;
       }
 
-      // === CHECK 2: Snap-to-edge — progresso no segmento ===
+      // === CHECK 2: TRUE FORWARD PROJECTION ===
+      // Projeta a posição do user sobre o segmento anterior → atual.
+      // Se t >= 1.0 a projeção passou o nó, mesmo que o user esteja
+      // vários metros de lado (ex: numa curva, ou GPS drift lateral).
       if (currentIdx > 0) {
         final prevWp = route.waypoints[currentIdx - 1];
         final prevCoords = getCorrectWaypointCoords(prevWp);
 
-        final segDist = GeographicUtils.pointToSegmentDistance(
+        final rawT = _rawProgressAlongSegment(
           _userX, _userY,
           prevCoords.x, prevCoords.y,
           coords.x, coords.y,
         );
-        final progress = GeographicUtils.progressAlongSegment(
+
+        // Distância lateral ao segmento (para evitar falsos positivos em rotas em U)
+        final segDist = GeographicUtils.pointToSegmentDistance(
           _userX, _userY,
           prevCoords.x, prevCoords.y,
           coords.x, coords.y,
         );
 
         print(
-          '[RouteTracker] Seg WP${currentIdx - 1}→WP$currentIdx: '
-          'segDist=${segDist.toStringAsFixed(1)}m, '
-          'progress=${(progress * 100).toStringAsFixed(0)}%',
+          '[RouteTracker] Projection WP${currentIdx-1}→WP$currentIdx: '
+          't=${rawT.toStringAsFixed(2)}, lateral=${segDist.toStringAsFixed(1)}m',
         );
 
-        // Se está perto do segmento E progrediu > 90%, avança
-        if (segDist < 8.0 && progress > 0.90) {
+        // Se a projeção passou o nó (t ≥ 1.0) E o user não está demasiado
+        // longe lateralmente (< 15m — evita rotas em U falsas), avança.
+        if (rawT >= 1.0 && segDist < 15.0) {
+          _currentWaypointIndex = currentIdx + 1;
+          print(
+            '[RouteTracker] WP$currentIdx passed by projection '
+            '(t=${rawT.toStringAsFixed(2)}, lateral=${segDist.toStringAsFixed(1)}m)',
+          );
+          advanced = true;
+          continue;
+        }
+
+        // === CHECK 3: Snap-to-edge — progresso > 90% dentro de 12m ===
+        final clampedProgress = rawT.clamp(0.0, 1.0);
+        if (segDist < 12.0 && clampedProgress > 0.90) {
           _currentWaypointIndex = currentIdx + 1;
           print(
             '[RouteTracker] WP$currentIdx atingido por snap-to-edge '
-            '(progress=${(progress * 100).toStringAsFixed(0)}%)',
+            '(progress=${(clampedProgress * 100).toStringAsFixed(0)}%, '
+            'lateral=${segDist.toStringAsFixed(1)}m)',
           );
           advanced = true;
           continue;
         }
       }
 
-      // === CHECK 3: FORWARD-PROJECTION (estilo Google Maps) ===
-      // Se o user está mais perto do PRÓXIMO waypoint do que do ATUAL,
-      // significa que já ultrapassou o atual sem passar perto.
-      // Isto resolve o caso de cortar uma curva ou caminhar paralelo.
+      // === CHECK 4: FORWARD-JUMP ===
+      // Se o user está mais perto do próximo waypoint do que do atual
+      // e já passou mais de 40% do segmento atual → claramente ultrapassou.
       if (currentIdx + 1 < route.waypoints.length) {
         final nextWp = route.waypoints[currentIdx + 1];
         final nextCoords = getCorrectWaypointCoords(nextWp);
         final distToNext = GeographicUtils.calculateDistance(
           _userX, _userY, nextCoords.x, nextCoords.y,
         );
-
-        // Distância entre o waypoint atual e o próximo
         final segmentLen = GeographicUtils.calculateDistance(
           coords.x, coords.y, nextCoords.x, nextCoords.y,
         );
 
-        // Se o user está mais perto do próximo E a distância ao atual
-        // é maior que metade do segmento → claramente ultrapassou
         if (distToNext < pointDist && pointDist > segmentLen * 0.4) {
           _currentWaypointIndex = currentIdx + 1;
           print(
-            '[RouteTracker] WP$currentIdx skipped (forward-projection): '
+            '[RouteTracker] WP$currentIdx skipped (forward-jump): '
             'distCurrent=${pointDist.toStringAsFixed(1)}m > '
             'distNext=${distToNext.toStringAsFixed(1)}m',
           );
