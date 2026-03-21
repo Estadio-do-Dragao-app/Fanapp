@@ -16,6 +16,7 @@ import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
 import '../data/services/saved_places_service.dart';
+import '../data/services/waittime_cache.dart';
 import '../../../core/utils/poi_style.dart';
 import 'layers/floor_plan_layer.dart';
 import '../../../core/widgets/poi_icon.dart';
@@ -173,6 +174,18 @@ class StadiumMapPageState extends State<StadiumMapPage>
     _checkLocationLayerAvailability();
     loadUserPosition(); // Carregar posição guardada
     _loadMapData();
+
+    // Start listening to wait time updates
+    WaittimeCache().start();
+    WaittimeCache().addListener(_onWaittimeCacheUpdate);
+  }
+
+  void _onWaittimeCacheUpdate() {
+    if (mounted) {
+      setState(() {
+        // Just trigger rebuild to show fresh wait times in the panel
+      });
+    }
   }
 
   Future<void> _checkLocationLayerAvailability() async {
@@ -206,6 +219,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
     _alignPositionStreamController.close();
     _blinkController.dispose();
     _stopHeatmapUpdates();
+    WaittimeCache().removeListener(_onWaittimeCacheUpdate);
     super.dispose();
   }
 
@@ -978,7 +992,13 @@ class StadiumMapPageState extends State<StadiumMapPage>
                             icon: Icons.group,
                             label: AppLocalizations.of(
                               context,
-                            )!.queueTime(route.waitTime?.round() ?? 0),
+                            )!.queueTime(
+                              WaittimeCache()
+                                      .getWaitTime(_selectedPOI!.id)
+                                      ?.round() ??
+                                  route.waitTime?.round() ??
+                                  0,
+                            ),
                           ),
                       ],
                     ),
