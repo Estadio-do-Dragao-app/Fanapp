@@ -720,8 +720,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+    return AnimatedBuilder(
+      animation: WaittimeCache(),
+      builder: (context, child) {
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
       itemCount: _poisWithRoutes.length,
       itemBuilder: (context, index) {
         final item = _poisWithRoutes[index];
@@ -855,9 +858,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
               ),
             ),
           ),
-        );
+        ); // end Padding
       },
-    );
+    ); // end ListView.builder
+      }, // end AnimatedBuilder builder
+    ); // end return AnimatedBuilder
   }
 
   Widget _buildInfoChip({
