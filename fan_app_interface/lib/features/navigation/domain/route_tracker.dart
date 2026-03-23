@@ -30,10 +30,18 @@ class RouteTracker {
     if (node != null) {
       return (x: node.x, y: node.y);
     }
-    // Fallback: usar coordenadas do routing (podem estar erradas)
-    print(
-      '[RouteTracker] AVISO: Nó ${wp.nodeId} não encontrado no Map Service',
-    );
+
+    // Se o nó é (0,0) vindo do backend, é quase certamente um erro de snapping/virtual node.
+    // Usar as coordenadas do waypoint apenas se não forem (0,0).
+    if (wp.x.abs() < 0.0001 && wp.y.abs() < 0.0001) {
+      print(
+        '[RouteTracker] AVISO: Nó ${wp.nodeId} ignorado por ter coordenadas (0,0)',
+      );
+      // Em vez de retornar 0,0 (que dá erro de 4500km), retornamos a posição do user
+      // para que a distância ao primeiro nó seja pequena.
+      return (x: _userX, y: _userY);
+    }
+
     return (x: wp.x, y: wp.y);
   }
 
@@ -52,6 +60,29 @@ class RouteTracker {
     }
     print('[RouteTracker] Posição atualizada: x=$x, y=$y, level=$_userLevel');
     _updateCurrentWaypoint();
+  }
+
+  /// Define posição/índice base após um recálculo de rota sem executar
+  /// auto-progressão imediata para evitar saltos logo no primeiro frame.
+  void seedUserPositionForNewRoute(
+    double x,
+    double y, {
+    int? level,
+    int waypointIndex = 0,
+  }) {
+    _userX = x;
+    _userY = y;
+    if (level != null) {
+      _userLevel = level;
+    }
+
+    final maxIndex = route.waypoints.isEmpty ? 0 : route.waypoints.length - 1;
+    _currentWaypointIndex = waypointIndex.clamp(0, maxIndex);
+
+    print(
+      '[RouteTracker] Rota nova semeada: x=$x, y=$y, level=$_userLevel, '
+      'waypoint=$_currentWaypointIndex/${route.waypoints.length}',
+    );
   }
 
   /// Verifica se utilizador chegou ao destino
@@ -77,7 +108,7 @@ class RouteTracker {
       // na rota (pelo menos 60% dos waypoints ultrapassados)
       // Isto evita que a navegação termine antes de começar
       final minProgress = route.waypoints.length <= 3
-          ? 0.5  // Rotas muito curtas: pelo menos metade
+          ? 0.5 // Rotas muito curtas: pelo menos metade
           : 0.3; // Rotas normais: 30%
       if (progress < minProgress) {
         return false;
@@ -255,6 +286,19 @@ class RouteTracker {
     final current = route.waypoints[waypointIndex];
     final next = route.waypoints[waypointIndex + 1];
 
+    // Verificar se o waypoint atual e o seguinte são a mesma estrutura de transição
+    final currentNode = _nodesMap[current.nodeId];
+    final nextNode = _nodesMap[next.nodeId];
+
+    if (currentNode != null && nextNode != null) {
+      if (currentNode.type == 'stairs' && nextNode.type == 'stairs') {
+        return 'stairs';
+      }
+      if (currentNode.type == 'ramp' && nextNode.type == 'ramp') {
+        return 'ramp';
+      }
+    }
+
     // Obter coordenadas corretas do Map Service
     final prevCoords = getCorrectWaypointCoords(prev);
     final currentCoords = getCorrectWaypointCoords(current);
@@ -302,130 +346,141 @@ class RouteTracker {
   /// Versão do progressAlongSegment sem clamp — permite detectar t > 1
   /// (user passou além do nó destino do segmento)
   double _rawProgressAlongSegment(
-    double px, double py,
-    double x1, double y1,
-    double x2, double y2,
+    double px,
+    double py,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
   ) {
     final segLenSq = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
     if (segLenSq < 1e-12) return 1.0;
     return ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / segLenSq;
   }
 
-  /// Atualiza o waypoint atual baseado na posição do utilizador.
-  ///
-  /// Lógica estilo Google Maps:
-  /// 1. Proximidade direta ao nó (< 6m)
-  /// 2. Projeção na linha: se a projeção do user ultrapassou o nó (t ≥ 1.0)
-  ///    o nó é marcado como feito — mesmo que esteja 6m lateral
-  /// 3. Snap-to-edge: progresso > 90% dentro de 12m ao segmento
-  /// 4. Forward-jump: mais perto do próximo waypoint que do atual
   void _updateCurrentWaypoint() {
     if (_currentWaypointIndex >= route.waypoints.length) return;
 
-    bool advanced = true;
+    // Skip conservador para evitar saltos errados entre ramos da rota.
+    const int MAX_SKIP_AHEAD = 8;
+    const double PROXIMITY_DIST = 7.0; // meters – chegou ao nó
+    const double MAX_LATERAL_DIST = 14.0; // meters – tolerância lateral
 
-    while (advanced && _currentWaypointIndex < route.waypoints.length) {
-      advanced = false;
+    int bestNextWaypoint = _currentWaypointIndex;
 
-      final currentIdx = _currentWaypointIndex;
-      final waypoint = route.waypoints[currentIdx];
-      final coords = getCorrectWaypointCoords(waypoint);
+    final maxLook = (_currentWaypointIndex + MAX_SKIP_AHEAD).clamp(
+      0,
+      route.waypoints.length,
+    );
+
+    for (int i = _currentWaypointIndex; i < maxLook; i++) {
+      final wp = route.waypoints[i];
+      final coords = getCorrectWaypointCoords(wp);
+
       final pointDist = GeographicUtils.calculateDistance(
-        _userX, _userY, coords.x, coords.y,
+        _userX,
+        _userY,
+        coords.x,
+        coords.y,
       );
 
-      print(
-        '[RouteTracker] WP$currentIdx (${waypoint.nodeId}): '
-        'dist=${pointDist.toStringAsFixed(1)}m',
-      );
-
-      // === CHECK 1: Proximidade direta ao nó (< 6m) ===
-      if (pointDist < 6.0) {
-        _currentWaypointIndex = currentIdx + 1;
-        print(
-          '[RouteTracker] WP$currentIdx atingido por proximidade '
-          '(${pointDist.toStringAsFixed(1)}m)',
-        );
-        advanced = true;
-        continue;
+      // CHEGADA AO NÓ: está dentro do raio de chegada
+      if (pointDist < PROXIMITY_DIST) {
+        if (i + 1 > bestNextWaypoint) {
+          bestNextWaypoint = i + 1;
+        }
+        continue; // continue scanning ahead
       }
 
-      // === CHECK 2: TRUE FORWARD PROJECTION ===
-      // Projeta a posição do user sobre o segmento anterior → atual.
-      // Se t >= 1.0 a projeção passou o nó, mesmo que o user esteja
-      // vários metros de lado (ex: numa curva, ou GPS drift lateral).
-      if (currentIdx > 0) {
-        final prevWp = route.waypoints[currentIdx - 1];
+      // PROJEÇÃO NO SEGMENTO: só considerar se existe um segmento anterior
+      if (i > 0) {
+        final prevWp = route.waypoints[i - 1];
         final prevCoords = getCorrectWaypointCoords(prevWp);
 
+        final segLen = GeographicUtils.calculateDistance(
+          prevCoords.x,
+          prevCoords.y,
+          coords.x,
+          coords.y,
+        );
+        if (segLen < 0.5) continue; // segmento degenerado
+
         final rawT = _rawProgressAlongSegment(
-          _userX, _userY,
-          prevCoords.x, prevCoords.y,
-          coords.x, coords.y,
+          _userX,
+          _userY,
+          prevCoords.x,
+          prevCoords.y,
+          coords.x,
+          coords.y,
         );
-
-        // Distância lateral ao segmento (para evitar falsos positivos em rotas em U)
         final segDist = GeographicUtils.pointToSegmentDistance(
-          _userX, _userY,
-          prevCoords.x, prevCoords.y,
-          coords.x, coords.y,
+          _userX,
+          _userY,
+          prevCoords.x,
+          prevCoords.y,
+          coords.x,
+          coords.y,
         );
 
-        print(
-          '[RouteTracker] Projection WP${currentIdx-1}→WP$currentIdx: '
-          't=${rawT.toStringAsFixed(2)}, lateral=${segDist.toStringAsFixed(1)}m',
-        );
-
-        // Se a projeção passou o nó (t ≥ 1.0) E o user não está demasiado
-        // longe lateralmente (< 15m — evita rotas em U falsas), avança.
-        if (rawT >= 1.0 && segDist < 15.0) {
-          _currentWaypointIndex = currentIdx + 1;
-          print(
-            '[RouteTracker] WP$currentIdx passed by projection '
-            '(t=${rawT.toStringAsFixed(2)}, lateral=${segDist.toStringAsFixed(1)}m)',
-          );
-          advanced = true;
-          continue;
+        // Só considerar se estamos lateralmente perto do segmento
+        // E se estamos a progredir no sentido do nó (t >= 0) — não atrás
+        if (segDist < MAX_LATERAL_DIST && rawT >= 0.0 && rawT <= 1.1) {
+          if (i > bestNextWaypoint) {
+            bestNextWaypoint = i;
+          }
         }
+        // Se já passámos o nó (t > 0.85), o próximo alvo é o seguinte
+        if (segDist < MAX_LATERAL_DIST && rawT > 0.85) {
+          if (i + 1 > bestNextWaypoint) {
+            bestNextWaypoint = i + 1;
+          }
+        }
+      }
+    }
 
-        // === CHECK 3: Snap-to-edge — progresso > 90% dentro de 12m ===
-        final clampedProgress = rawT.clamp(0.0, 1.0);
-        if (segDist < 12.0 && clampedProgress > 0.90) {
-          _currentWaypointIndex = currentIdx + 1;
-          print(
-            '[RouteTracker] WP$currentIdx atingido por snap-to-edge '
-            '(progress=${(clampedProgress * 100).toStringAsFixed(0)}%, '
-            'lateral=${segDist.toStringAsFixed(1)}m)',
-          );
-          advanced = true;
-          continue;
+    if (bestNextWaypoint <= _currentWaypointIndex) {
+      // Fallback: se a heurística acima não avançou, escolhemos o waypoint
+      // mais próximo à frente do índice atual para evitar ficar preso atrás.
+      int nearestAhead = _currentWaypointIndex;
+      double nearestDist = double.infinity;
+
+      for (int i = _currentWaypointIndex; i < route.waypoints.length; i++) {
+        final wp = route.waypoints[i];
+        final coords = getCorrectWaypointCoords(wp);
+        final dist = GeographicUtils.calculateDistance(
+          _userX,
+          _userY,
+          coords.x,
+          coords.y,
+        );
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestAhead = i;
         }
       }
 
-      // === CHECK 4: FORWARD-JUMP ===
-      // Se o user está mais perto do próximo waypoint do que do atual
-      // e já passou mais de 40% do segmento atual → claramente ultrapassou.
-      if (currentIdx + 1 < route.waypoints.length) {
-        final nextWp = route.waypoints[currentIdx + 1];
-        final nextCoords = getCorrectWaypointCoords(nextWp);
-        final distToNext = GeographicUtils.calculateDistance(
-          _userX, _userY, nextCoords.x, nextCoords.y,
-        );
-        final segmentLen = GeographicUtils.calculateDistance(
-          coords.x, coords.y, nextCoords.x, nextCoords.y,
-        );
-
-        if (distToNext < pointDist && pointDist > segmentLen * 0.4) {
-          _currentWaypointIndex = currentIdx + 1;
-          print(
-            '[RouteTracker] WP$currentIdx skipped (forward-jump): '
-            'distCurrent=${pointDist.toStringAsFixed(1)}m > '
-            'distNext=${distToNext.toStringAsFixed(1)}m',
-          );
-          advanced = true;
-          continue;
-        }
+      // Só saltar automaticamente quando há alta confiança espacial e
+      // apenas para 1 waypoint à frente (evita pular grandes blocos).
+      final jump = nearestAhead - _currentWaypointIndex;
+      if (nearestAhead > _currentWaypointIndex && nearestDist < 12.0 && jump <= 1) {
+        bestNextWaypoint = nearestAhead;
       }
+    }
+
+    if (bestNextWaypoint > _currentWaypointIndex) {
+      // Guard-rail: limitar avanço por update para evitar saltos abruptos.
+      final maxForwardAdvancePerUpdate = _currentWaypointIndex + 1;
+      if (bestNextWaypoint > maxForwardAdvancePerUpdate) {
+        bestNextWaypoint = maxForwardAdvancePerUpdate;
+      }
+
+      if (bestNextWaypoint >= route.waypoints.length) {
+        bestNextWaypoint = route.waypoints.length - 1;
+      }
+      print(
+        '[RouteTracker] Progresso: WP$_currentWaypointIndex → WP$bestNextWaypoint',
+      );
+      _currentWaypointIndex = bestNextWaypoint;
     }
   }
 
@@ -435,4 +490,3 @@ class RouteTracker {
     return _currentWaypointIndex / route.waypoints.length;
   }
 }
-

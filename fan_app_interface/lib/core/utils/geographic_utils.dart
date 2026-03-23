@@ -94,11 +94,53 @@ class GeographicUtils {
         throw Exception('Location permissions are permanently denied');
       }
 
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.bestForNavigation,
-      );
+      // Tentar obter a última posição conhecida (instantâneo)
+      Position? lastPosition = await Geolocator.getLastKnownPosition();
+      Position? currentPosition;
 
-      return (x: position.longitude, y: position.latitude, level: 0);
+      if (lastPosition != null) {
+        final age = DateTime.now().difference(lastPosition.timestamp).inSeconds;
+        if (age < 15) {
+          print('[GeographicUtils] Using fresh lastKnownPosition (${age}s old)');
+          currentPosition = lastPosition;
+        }
+      }
+
+      if (currentPosition == null) {
+        print('[GeographicUtils] No fresh lastKnownPosition. Fetching current position...');
+        try {
+          currentPosition = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.bestForNavigation,
+            timeLimit: const Duration(seconds: 5),
+          );
+        } catch (e) {
+          print('[GeographicUtils] getCurrentPosition failed/timeout: $e');
+        }
+      }
+
+      // Se ainda for velha ou falhou, forçar uma leitura do stream (satélites reais)
+      if (currentPosition == null || 
+          DateTime.now().difference(currentPosition.timestamp).inSeconds > 20) {
+        print('[GeographicUtils] Position still stale or null. Waiting for real satellite fix...');
+        try {
+          currentPosition = await Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.bestForNavigation,
+            ),
+          ).firstWhere((pos) {
+            final age = DateTime.now().difference(pos.timestamp).inSeconds;
+            return age < 10;
+          }).timeout(const Duration(seconds: 8));
+          print('[GeographicUtils] Fresh GPS fix acquired from stream.');
+        } catch (e) {
+          print('[GeographicUtils] Stream timeout. Using whatever we have. $e');
+        }
+      }
+
+      final finalPos = currentPosition ?? lastPosition;
+      if (finalPos == null) return null;
+
+      return (x: finalPos.longitude, y: finalPos.latitude, level: 0);
     } catch (e) {
       print('[GeographicUtils] GPS not available: $e');
       // GPS is disabled or unavailable - do NOT fallback to saved position

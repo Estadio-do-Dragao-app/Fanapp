@@ -271,4 +271,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get more => 'More';
+
+  @override
+  String get useStairs => 'Use the stairs';
+
+  @override
+  String get useRamp => 'Use the ramp';
+
+  @override
+  String get routeCalculationError => 'Route Calculation Error';
+
+  @override
+  String get routeCalculationErrorMessage => 'It was not possible to calculate a route to the destination.';
 }

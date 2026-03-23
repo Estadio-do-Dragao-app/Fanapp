@@ -58,6 +58,7 @@ class StadiumMapPage extends StatefulWidget {
   final bool isFollowingUser; // Indicates if map should rotate with gyro
   final VoidCallback? onToggleNavigationHeatmap;
   final VoidCallback? onRecenterNavigation;
+  final VoidCallback? onCompassPressed;
   final double? navigationControlsBottomInset;
 
   const StadiumMapPage({
@@ -87,6 +88,7 @@ class StadiumMapPage extends StatefulWidget {
     this.isFollowingUser = true,
     this.onToggleNavigationHeatmap,
     this.onRecenterNavigation,
+    this.onCompassPressed,
     this.navigationControlsBottomInset,
     this.customPOIsToShow,
     this.zoomOutToPOIs = false,
@@ -169,8 +171,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
       vsync: this,
     )..repeat(reverse: true);
 
-    // Initialize blink animation for emergency mode
-
     _checkLocationLayerAvailability();
     loadUserPosition(); // Carregar posição guardada
     _loadMapData();
@@ -205,7 +205,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
         });
       }
     } catch (_) {
-      // Plugin exists but permission/service may still fail later; keep layer enabled.
       if (mounted) {
         setState(() {
           _isLocationLayerAvailable = true;
@@ -223,7 +222,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
     super.dispose();
   }
 
-  /// Carrega a posição guardada do utilizador
   Future<void> loadUserPosition({bool updateFloor = true}) async {
     final position = await UserPositionService.getPosition();
     if (position == null) {
@@ -241,29 +239,19 @@ class StadiumMapPageState extends State<StadiumMapPage>
       double x = position.x;
       double y = position.y;
 
-      // VALIDAÇÃO: Se a posição carregada estiver fora dos limites (ex: pixels do dragão), resetar para o centro
-      // Coordenadas válidas para UA devem estar perto de (40.6, -8.6)
       final LatLng currentLatLng = _convertToLatLng(x, y);
       if (!stadiumBounds.contains(currentLatLng)) {
-        // Ignorar se estiver em navegação (permitir movimento livre durante simulação)
-        if (widget.isNavigating) return;
-
-        print(
-          "[StadiumMapPage] Invalid position detected (${x}, ${y}). Resetting to center.",
-        );
-        x = stadiumCenter.longitude;
-        y = stadiumCenter.latitude;
+        if (!widget.isNavigating) {
+          x = stadiumCenter.longitude;
+          y = stadiumCenter.latitude;
+        }
       }
 
-      print(
-        "[StadiumMapPage] Loading user position from service: $x, $y (Level ${position.level})",
-      );
       setState(() {
         _userPositionX = x;
         _userPositionY = y;
-        _userLevel = position.level; // Guardar nível real
+        _userLevel = position.level;
 
-        // Só atualizar _currentFloor a partir da posição guardada se solicitado E não estivermos em navegação
         if (updateFloor && !widget.isNavigating) {
           if (_currentFloor != position.level) {
             _currentFloor = position.level;
@@ -278,27 +266,45 @@ class StadiumMapPageState extends State<StadiumMapPage>
   @override
   void didUpdateWidget(StadiumMapPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Atualizar rota quando parâmetros mudarem
-    if (widget.highlightedRoute != oldWidget.highlightedRoute) {
+
+    final oldSig = _buildRouteSignature(oldWidget.highlightedRoute);
+    final newSig = _buildRouteSignature(widget.highlightedRoute);
+    print('[StadiumMapPage-HASH] didUpdateWidget - oldWidgetHash: ${oldWidget.hashCode} - newWidgetHash: ${widget.hashCode} - oldRouteHash: ${oldWidget.highlightedRoute.hashCode} - newRouteHash: ${widget.highlightedRoute.hashCode}');
+    
+    if (widget.highlightedRoute != oldWidget.highlightedRoute || oldSig != newSig) {
       setState(() {
         _currentRoute = widget.highlightedRoute;
       });
+      if (widget.isNavigating) {
+        print('[StadiumMapPage] Route signature changed in navigation: $newSig');
+      }
     }
-    // Atualizar piso quando mudar externamente
+
+    if (widget.avoidStairs != oldWidget.avoidStairs) {
+      if (_selectedPOI != null && !widget.isNavigating) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showPOIDetails(_selectedPOI!);
+        });
+      }
+    }
+
     if (widget.initialFloor != oldWidget.initialFloor) {
-      // Atualizar _currentFloor sempre que o pai mandar (NavigationPage ou FilterButton)
       _currentFloor = widget.initialFloor;
-      loadUserPosition(
-        updateFloor: false,
-      ); // Reload position data but keep current floor
+      loadUserPosition(updateFloor: false);
       _loadMapData();
     }
-    // Carregar heatmap quando ativado
+
     if (widget.showHeatmap && !oldWidget.showHeatmap) {
       _startHeatmapUpdates();
     } else if (!widget.showHeatmap && oldWidget.showHeatmap) {
       _stopHeatmapUpdates();
     }
+  }
+
+  String _buildRouteSignature(RouteModel? route) {
+    if (route == null) return 'null';
+    final ids = route.waypoints.map((w) => w.nodeId).join('>');
+    return '${route.waypoints.length}|$ids';
   }
 
   /// Inicia atualização periódica do heatmap (cada 10 segundos)
@@ -704,12 +710,16 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   Widget _buildCompassButton() {
-    return Transform.scale(
-      scale: 0.8,
-      child: const MapCompass.cupertino(
-        hideIfRotatedNorth: false,
-        alignment: Alignment.center,
-        padding: EdgeInsets.zero,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => widget.onCompassPressed?.call(),
+      child: Transform.scale(
+        scale: 0.8,
+        child: const MapCompass.cupertino(
+          hideIfRotatedNorth: false,
+          alignment: Alignment.center,
+          padding: EdgeInsets.zero,
+        ),
       ),
     );
   }
@@ -1010,14 +1020,26 @@ class StadiumMapPageState extends State<StadiumMapPage>
                     child: ElevatedButton.icon(
                       onPressed: _isCalculatingPreviewRoute
                           ? null
-                          : () {
+                          : () async {
                               if (route == null) {
-                                AppTopFeedback.showWarning(
-                                  context,
-                                  AppLocalizations.of(
+                                final pos =
+                                    await GeographicUtils.getCurrentUserPosition();
+                                if (!mounted) return;
+                                if (pos == null) {
+                                  AppTopFeedback.showWarning(
                                     context,
-                                  )!.gpsRequiredMessage,
-                                );
+                                    AppLocalizations.of(
+                                      context,
+                                    )!.gpsRequiredMessage,
+                                  );
+                                } else {
+                                  AppTopFeedback.showWarning(
+                                    context,
+                                    AppLocalizations.of(
+                                      context,
+                                    )!.routeCalculationErrorMessage,
+                                  );
+                                }
                                 return;
                               }
 
@@ -1157,9 +1179,14 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // Camada de heatmap (se ativa)
         if (widget.showHeatmap) _buildHeatmapLayer(),
 
-        // Camada de rota (polyline) — ocultar quando há rota alternativa em preview
-        if (_currentRoute != null && widget.previewRoute == null)
-          _buildRouteLayer(),
+        // Camada de rota (polyline) — ocultar quando há rota alternativa em preview.
+        // Em navegação, usar sempre a rota vinda do parent (NavigationPage).
+        if (((widget.isNavigating ? widget.highlightedRoute : _currentRoute) !=
+                null) &&
+            widget.previewRoute == null)
+          _buildRouteLayer(
+            widget.isNavigating ? widget.highlightedRoute! : _currentRoute!,
+          ),
 
         // Preview da nova rota (quando a selecionar um POI durante navegação) — verde
         if (widget.previewRoute != null) _buildPreviewRouteLayer(),
@@ -1210,7 +1237,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
                 _emergencyButtonGap,
             child: _buildEmergencySimulationButton(),
           ), */
-
         if (widget.isNavigating && !_isLoading && _errorMessage == null)
           Positioned(
             right: _controlsCardRightInset,
@@ -1272,68 +1298,33 @@ class StadiumMapPageState extends State<StadiumMapPage>
     );
   }
 
-  Widget _buildRouteLayer() {
-    final route = _currentRoute!;
-
-    // IMPORTANTE: O Routing Service retorna coordenadas incorretas!
-    // Usamos os node_ids para buscar as coordenadas corretas dos nós do Map Service
-    // Mas confiamos no LEVEL retornado pelo Routing Service (pois define a rota 3D)
+  Widget _buildRouteLayer(RouteModel route) {
     final nodesMap = {for (var n in _nodes) n.id: n};
+    final points = <LatLng>[];
 
-    // Lista de segmentos de rota (listas de pontos) para desenhar
-    // O traço pode ser interrompido (ex: vai ao piso 0 e volta ao 1)
-    final segments = <List<LatLng>>[];
-    var currentSegment = <LatLng>[];
-
-    // FILTRAR: Começar a partir do índice do próximo waypoint
-    final startIndex = widget.routeStartWaypointIndex.clamp(
-      0,
-      route.waypoints.length,
-    );
-    final remainingWaypoints = route.waypoints.skip(startIndex);
-
-    // Durante navegação: a semirreta do utilizador
-    // Só adicionamos se o utilizador estiver neste piso
-    if (widget.isNavigating &&
-        widget.userPosition != null &&
-        widget.initialFloor == _currentFloor) {
-      currentSegment.add(widget.userPosition!);
-      // Nota: Não adicionamos aos segments ainda, esperamos pelo primeiro ponto válido da rota para conectar
+    // Mesma abordagem do preview de POI: rota inteira, sem filtros de piso.
+    if (widget.isNavigating && widget.userPosition != null) {
+      points.add(widget.userPosition!);
     }
 
-    for (var wp in remainingWaypoints) {
-      // Verificar se este ponto pertence ao piso atual OU se estamos em modo preview (mostrar tudo)
-      if (!widget.isNavigating || wp.level == _currentFloor) {
-        // Tentar encontrar o nó no Map Service para coords precisas
-        final node = nodesMap[wp.nodeId];
-        LatLng point;
-        if (node != null) {
-          point = _convertToLatLng(node.x, node.y);
-        } else {
-          point = _convertToLatLng(wp.x, wp.y);
-        }
-        currentSegment.add(point);
+    for (final wp in route.waypoints) {
+      final node = nodesMap[wp.nodeId];
+      if (node != null) {
+        points.add(_convertToLatLng(node.x, node.y));
       } else {
-        // Mudança de piso!
-        // Se tínhamos um segmento sendo construído, finalizamo-lo agora.
-        if (currentSegment.isNotEmpty) {
-          // Se o segmento tem apenas 1 ponto (o utilizador ou um ponto isolado),
-          // e esse ponto conecta a outro piso, talvez devêssemos mostrar?
-          // Mas geralmente queremos linhas com >1 ponto.
-          // Contudo, se for userPos -> Stairs (mesmo piso), são 2 pontos.
-          // Se for apenas userPos (sem waypoints neste piso), ignoramos?
-          if (currentSegment.length > 1 ||
-              (widget.isNavigating && currentSegment.isNotEmpty)) {
-            segments.add(List.from(currentSegment));
-          }
-          currentSegment = [];
-        }
+        points.add(_convertToLatLng(wp.x, wp.y));
       }
     }
 
-    // Adicionar o último segmento se existir
-    if (currentSegment.isNotEmpty) {
-      segments.add(currentSegment);
+    print(
+      '[StadiumMapPage] draw route RAW: total=${route.waypoints.length}, '
+      'rendered=${points.length}, gpsStart=${widget.userPosition != null}, '
+      'sig=${_buildRouteSignature(route)} '
+      '- RouteObjHash: ${route.hashCode} - WidgetRouteHash: ${widget.highlightedRoute.hashCode}',
+    );
+
+    if (points.length < 2) {
+      return const SizedBox.shrink();
     }
 
     return AnimatedBuilder(
@@ -1344,8 +1335,11 @@ class StadiumMapPageState extends State<StadiumMapPage>
             : 1.0;
 
         return PolylineLayer(
-          polylines: segments.map((points) {
-            return Polyline(
+          key: ValueKey(
+            'route-raw-${_buildRouteSignature(route)}-n${widget.isNavigating}',
+          ),
+          polylines: [
+            Polyline(
               points: points,
               strokeWidth: 7.0,
               color: widget.isEmergency
@@ -1359,8 +1353,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
                   ? const Color(0xFF8B1A1A)
                   : const Color(0xFF1A56DB),
               borderStrokeWidth: 2.0,
-            );
-          }).toList(),
+            ),
+          ],
         );
       },
     );
@@ -1419,7 +1413,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
       // 1. Mostrar POIs genéricos se o zoom permitir ou "Show All" estiver ativo
       // MAS apenas se showOtherPOIs for true
       if (widget.showOtherPOIs && (showGenericPOIs || widget.showAllPOIs)) {
-        poisToShow.addAll(_pois);
+        poisToShow.addAll(
+          _pois.where((p) => p.category != 'stairs' && p.category != 'ramp'),
+        );
       }
     }
 

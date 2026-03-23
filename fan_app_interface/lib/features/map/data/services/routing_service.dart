@@ -33,9 +33,9 @@ class RoutingService {
     );
 
     print(
-      '[RoutingService] 🚀 POST /api/route: startLevel=$startLevel, dest=$destinationType:$destinationId',
+      '[RoutingService] POST /api/route: startLevel=$startLevel, dest=$destinationType:$destinationId',
     );
-    print('[RoutingService] 📦 Request body: ${json.encode(request.toJson())}');
+    print('[RoutingService] Request body: ${json.encode(request.toJson())}');
 
     final response = await http.post(
       Uri.parse('$baseUrl/api/route'),
@@ -44,7 +44,14 @@ class RoutingService {
     );
 
     if (response.statusCode == 200) {
-      return RouteModel.fromJson(json.decode(response.body));
+      final decoded = json.decode(response.body);
+      print('[RoutingService] Rota recebida com ${decoded['path']?.length ?? 0} nodes');
+      // No log de debug, podemos ver o primeiro nó para confirmar as coordenadas
+      if (decoded['path'] != null && decoded['path'].isNotEmpty) {
+        final firstWp = decoded['path'][0];
+        print('[RoutingService] Primeiro nó (${firstWp['node_id']}): x=${firstWp['x']}, y=${firstWp['y']}');
+      }
+      return RouteModel.fromJson(decoded);
     } else {
       final errorBody = response.body;
       throw Exception(

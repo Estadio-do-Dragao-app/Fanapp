@@ -99,6 +99,20 @@ class RouteModel {
 
   /// ETA in seconds - backward compatibility
   int get etaSeconds => estimatedTime.round();
+
+  /// Creates a new RouteModel with the same data but a different object identity.
+  /// Use this whenever a route update must be detectable by Flutter's widget system
+  /// (i.e. didUpdateWidget comparing old vs new widget.highlightedRoute references).
+  RouteModel copy() {
+    return RouteModel(
+      path: List<PathNode>.from(path),
+      totalDistance: totalDistance,
+      estimatedTime: estimatedTime,
+      congestionLevel: congestionLevel,
+      waitTime: waitTime,
+      warnings: List<String>.from(warnings),
+    );
+  }
 }
 
 /// Path node with coordinates and timing info
