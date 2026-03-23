@@ -255,6 +255,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
     final oldSig = _buildRouteSignature(oldWidget.highlightedRoute);
     final newSig = _buildRouteSignature(widget.highlightedRoute);
+    print('[StadiumMapPage-HASH] didUpdateWidget - oldWidgetHash: ${oldWidget.hashCode} - newWidgetHash: ${widget.hashCode} - oldRouteHash: ${oldWidget.highlightedRoute.hashCode} - newRouteHash: ${widget.highlightedRoute.hashCode}');
+    
     if (widget.highlightedRoute != oldWidget.highlightedRoute || oldSig != newSig) {
       setState(() {
         _currentRoute = widget.highlightedRoute;
@@ -1297,7 +1299,8 @@ class StadiumMapPageState extends State<StadiumMapPage>
     print(
       '[StadiumMapPage] draw route RAW: total=${route.waypoints.length}, '
       'rendered=${points.length}, gpsStart=${widget.userPosition != null}, '
-      'sig=${_buildRouteSignature(route)}',
+      'sig=${_buildRouteSignature(route)} '
+      '- RouteObjHash: ${route.hashCode} - WidgetRouteHash: ${widget.highlightedRoute.hashCode}',
     );
 
     if (points.length < 2) {

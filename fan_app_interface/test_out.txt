@@ -1,0 +1,41 @@
+00:00 +0: loading /home/joao/Desktop/PEI/Fanapp/fan_app_interface/test/navigation/dynamic_reroute_offroute_test.dart
+00:00 +0: /home/joao/Desktop/PEI/Fanapp/fan_app_interface/test/navigation/dynamic_reroute_offroute_test.dart: recalcula rota quando utilizador foge dos pontos
+[DynamicRouteManager] Distância à rota: 33.0m (from WP0, 3 segmentos válidos)
+[DynamicRouteManager] Off-route (33.0m > 12.0m). Recalculating.
+[DynamicRouteManager] RECALCULANDO ROTA - User desviou-se!
+[DynamicRouteManager] Posição atual: x=-8.6299, y=41.1603
+[DynamicRouteManager] Destino: x=-8.62965, y=41.16
+[DynamicRouteManager] Nova rota calculada: 2 waypoints
+[DynamicRouteManager] Nós da nova rota: [n1, dest]
+00:00 +1: /home/joao/Desktop/PEI/Fanapp/fan_app_interface/test/navigation/reroute_scenario_test.dart: RouteTracker reroute behavior seedUserPositionForNewRoute clamps waypoint index
+[RouteTracker] Rota nova semeada: x=-8.62975, y=41.16, level=0, waypoint=3/4
+00:00 +2: /home/joao/Desktop/PEI/Fanapp/fan_app_interface/test/navigation/reroute_scenario_test.dart: RouteTracker reroute behavior seed near current position advances forward after update
+[RouteTracker] Rota nova semeada: x=-8.629805, y=41.16, level=0, waypoint=2/4
+[RouteTracker] Posição atualizada: x=-8.629805, y=41.16, level=0
+[RouteTracker] Progresso: WP2 → WP3
+00:00 +3: /home/joao/Desktop/PEI/Fanapp/fan_app_interface/test/navigation/reroute_scenario_test.dart: RouteTracker reroute behavior does not jump backwards to earlier waypoint after reroute
+[RouteTracker] Rota nova semeada: x=-8.629805, y=41.16, level=0, waypoint=2/4
+[RouteTracker] Posição atualizada: x=-8.6299, y=41.16, level=0
+00:00 +4: /home/joao/Desktop/PEI/Fanapp/fan_app_interface/test/navigation/reroute_scenario_test.dart: RouteTracker reroute behavior caps forward progress to one waypoint per update
+[RouteTracker] Rota nova semeada: x=-8.63, y=41.16, level=0, waypoint=0/4
+[RouteTracker] Posição atualizada: x=-8.62985, y=41.16, level=0
+[RouteTracker] Progresso: WP0 → WP1
+00:01 +5: /home/joao/Desktop/PEI/Fanapp/fan_app_interface/test/navigation/navigation_controller_reroute_test.dart: NavigationController properly updates route instance and hash
+Initial RouteObjHash: 7942981
+[NavigationController]  Applying new route with 2 nodes
+[RouteTracker] Rota nova semeada: x=0.0, y=0.0, level=0, waypoint=0/2
+[RouteTracker] Instrução: "arrive" em 2661461.0m (waypoints 0→1 de 2)
+[NavigationController]  New route applied: 2 waypoints, seeded at WP0
+After applyNewRoute, RouteObjHash: 270703632
+[GeographicUtils] GPS not available: Binding has not yet been initialized.
+The "instance" getter on the ServicesBinding binding mixin is only available once that binding has been initialized.
+Typically, this is done by calling "WidgetsFlutterBinding.ensureInitialized()" or "runApp()" (the latter calls the former). Typically this call is done in the "void main()" method. The "ensureInitialized" method is idempotent; calling it multiple times is not harmful. After calling that method, the "instance" getter will return the binding.
+In a test, one can call "TestWidgetsFlutterBinding.ensureInitialized()" as the first line in the test's "main()" method to initialize the binding.
+If ServicesBinding is a custom binding mixin, there must also be a custom binding class, like WidgetsFlutterBinding, but that mixes in the selected binding, and that is the class that must be constructed before using the "instance" getter.
+[NavigationController]  Usando posição fornecida (sem GPS): (0.0, 0.0, level=0)
+[NavigationController]  Nível inicial: 0
+[RouteTracker] Posição atualizada: x=0.0, y=0.0, level=0
+[NavigationController] Posição inicial está longe da rota (1565109.0 m). Forçando recálculo...
+[RoutingService] POST /api/route: startLevel=0, dest=poi:poi1
+[RoutingService] Request body: {"start":{"x":0.0,"y":0.0,"level":0},"destination_type":"poi","destination_id":"poi1","avoid_stairs":false}
+00:01 +6: All tests passed!

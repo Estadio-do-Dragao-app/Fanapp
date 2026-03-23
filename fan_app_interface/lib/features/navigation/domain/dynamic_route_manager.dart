@@ -14,12 +14,12 @@ class DynamicRouteManager {
   final RoutingService _routingService;
   final CurrentUserPositionProvider _currentUserPositionProvider;
 
-  // Destination info for recalculation
-  final String destinationId;
-  final String destinationType;
-  final double destinationX;
-  final double destinationY;
-  final int destinationLevel;
+  // Destination info for recalculation (mutable to support rerouting to a different POI)
+  String destinationId;
+  String destinationType;
+  double destinationX;
+  double destinationY;
+  int destinationLevel;
   final List<NodeModel> allNodes;
 
   RouteModel? _currentRoute;
@@ -64,6 +64,25 @@ class DynamicRouteManager {
     _movingAwayStreak = 0;
     _lastDistanceToDestination = null;
     _movingAwayDestinationStreak = 0;
+  }
+
+  /// Updates the target destination (e.g. when a reroute goes to a different POI)
+  void updateDestination({
+    required String destinationId,
+    required String destinationType,
+    required double destinationX,
+    required double destinationY,
+    required int destinationLevel,
+  }) {
+    this.destinationId = destinationId;
+    this.destinationType = destinationType;
+    this.destinationX = destinationX;
+    this.destinationY = destinationY;
+    this.destinationLevel = destinationLevel;
+    // Reset distance tracking so the new destination is evaluated fresh
+    _lastDistanceToDestination = null;
+    _movingAwayDestinationStreak = 0;
+    print('[DynamicRouteManager] 🎯 Destination updated to: $destinationId');
   }
 
   /// Inicia monitorização automática da posição

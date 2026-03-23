@@ -18,7 +18,7 @@ import '../../../core/utils/geographic_utils.dart';
 /// Gerencia o estado da navegação, tracking de posição e instruções
 class NavigationController extends ChangeNotifier {
   final RouteModel initialRoute;
-  final POIModel destination;
+  POIModel destination; // mutable: can change on reroute
   final List<NodeModel> allNodes;
   final double? initialX;
   final double? initialY;
@@ -38,6 +38,13 @@ class NavigationController extends ChangeNotifier {
   final StreamController<RerouteEvent> _rerouteStream =
       StreamController.broadcast();
   Stream<RerouteEvent> get rerouteStream => _rerouteStream.stream;
+
+  // Stream that emits the new RouteModel directly when a reroute fires.
+  // Consumers subscribe to get the exact object without re-reading _controller.route.
+  final StreamController<RouteModel> _routeChangeController =
+      StreamController.broadcast();
+  Stream<RouteModel> get routeChangeStream => _routeChangeController.stream;
+
   bool _isDisposed = false;
 
   // Subscription para MQTT routing stream
@@ -99,7 +106,8 @@ class NavigationController extends ChangeNotifier {
 
     // Callback quando rota é recalculada
     _routeManager.onRouteUpdated = (newRoute) {
-      print('[NavigationController]  Rota atualizada!');
+      print('[NavigationController]  Rota atualizada! ControllerHash: $hashCode');
+      print('[NavigationController]  Old RouteObjHash: ${route.hashCode} Length: ${route.waypoints.length}');
       // CRÍTICO: Preservar posição atual antes de recriar tracker
       final currentX = _tracker.currentX;
       final currentY = _tracker.currentY;
@@ -115,11 +123,16 @@ class NavigationController extends ChangeNotifier {
 
       final normalizedNodeIds = normalizedRoute.path.map((p) => p.nodeId).toList();
       print('[NavigationController] Rota aplicada (normalized): $normalizedNodeIds');
+      // Always create a new RouteModel copy so that Flutter's widget comparison
+      // (didUpdateWidget) detects the change even if normalization returned the same object.
+      final freshRoute = normalizedRoute.copy();
+      print('[NavigationController]  New RouteObjHash: ${freshRoute.hashCode} Length: ${freshRoute.waypoints.length}');
 
-      route = normalizedRoute;
-      _tracker = RouteTracker(route: normalizedRoute, allNodes: allNodes);
+      route = freshRoute;
+
+      _tracker = RouteTracker(route: freshRoute, allNodes: allNodes);
       final seededIndex = _computeSeededWaypointIndex(
-        normalizedRoute,
+        freshRoute,
         currentX,
         currentY,
       );
@@ -129,13 +142,15 @@ class NavigationController extends ChangeNotifier {
         level: _currentLevel,
         waypointIndex: seededIndex,
       );
-      _routeManager.updateRoute(normalizedRoute);
+      _routeManager.updateRoute(freshRoute);
       _routeManager.currentWaypointIndex = seededIndex;
 
       print(
-        '[NavigationController] Reroute seeded at WP$seededIndex/${normalizedRoute.waypoints.length} '
+        '[NavigationController] Reroute seeded at WP$seededIndex/${route.waypoints.length} '
         '(user=[$currentX,$currentY], level=$_currentLevel)',
       );
+      // Emit the new route directly so listeners get the exact object
+      _routeChangeController.add(freshRoute);
       _updateInstruction();
       notifyListeners();
     };
@@ -234,8 +249,8 @@ class NavigationController extends ChangeNotifier {
           startX,
           startY,
         );
-        route = normalizedRoute;
-        _tracker = RouteTracker(route: normalizedRoute, allNodes: allNodes);
+        route = normalizedRoute.copy();
+        _tracker = RouteTracker(route: route, allNodes: allNodes);
         final seededIndex = _computeSeededWaypointIndex(
           normalizedRoute,
           startX,
@@ -438,9 +453,12 @@ class NavigationController extends ChangeNotifier {
       '[NavigationController]  Applying new route with ${nodeIds.length} nodes',
     );
 
+    final currentX = _tracker.currentX;
+    final currentY = _tracker.currentY;
+
     // Mapear IDs para NodeModels
     final nodesMap = {for (var n in allNodes) n.id: n};
-    final newPath = <PathNode>[];
+    final rawPath = <PathNode>[];
     double cumulativeDist = 0;
     double cumulativeTime = 0;
 
@@ -450,7 +468,8 @@ class NavigationController extends ChangeNotifier {
       if (node == null) continue;
 
       if (i > 0) {
-        final prevNode = nodesMap[nodeIds[i - 1]];
+        final prevId = nodeIds[i - 1];
+        final prevNode = nodesMap[prevId];
         if (prevNode != null) {
           final dist = GeographicUtils.calculateDistance(
             prevNode.x,
@@ -463,7 +482,7 @@ class NavigationController extends ChangeNotifier {
         }
       }
 
-      newPath.add(
+      rawPath.add(
         PathNode(
           nodeId: id,
           x: node.x,
@@ -475,33 +494,71 @@ class NavigationController extends ChangeNotifier {
       );
     }
 
-    // Criar novo RouteModel
-    final newRouteModel = RouteModel(
-      path: newPath,
+    // Criar RouteModel bruto
+    final rawRouteModel = RouteModel(
+      path: rawPath,
       totalDistance: cumulativeDist,
       estimatedTime: cumulativeTime,
-      congestionLevel: 0, // Desconhecido nesta fase
+      congestionLevel: 0,
       warnings: [],
     );
 
-    // Atualizar rota no manager e tracker
-    route = newRouteModel;
-    _routeManager.updateRoute(newRouteModel);
+    // Normalizar: remover nós que ficaram atrás do utilizador
+    final newRouteModel = _normalizeRouteFromCurrentPosition(
+      rawRouteModel,
+      currentX,
+      currentY,
+    );
 
-    // Resetar tracker mas manter posição atual logicamente
-    final currentX = _tracker.currentX;
-    final currentY = _tracker.currentY;
-    _tracker = RouteTracker(route: newRouteModel, allNodes: allNodes);
-    _tracker.updateUserPosition(currentX, currentY);
+    // Always create a new RouteModel copy so that Flutter's widget comparison
+    // (didUpdateWidget) detects the change even if normalization returned the same object.
+    final freshRouteModel = newRouteModel.copy();
+    route = freshRouteModel;
+    _routeManager.updateRoute(freshRouteModel);
+
+    // Recriar tracker e semear na posição correta
+    _tracker = RouteTracker(route: freshRouteModel, allNodes: allNodes);
+    final seededIndex = _computeSeededWaypointIndex(
+      freshRouteModel,
+      currentX,
+      currentY,
+    );
+    _tracker.seedUserPositionForNewRoute(
+      currentX,
+      currentY,
+      level: _currentLevel,
+      waypointIndex: seededIndex,
+    );
+    _routeManager.currentWaypointIndex = seededIndex;
+
     _updateInstruction();
 
-    // Reiniciar navegação automática
-    // Resumir navegação baseada no GPS
+    // Reiniciar navegação baseada no GPS
     _isNavigating = true;
     resumeGpsTracking();
 
-    print('[NavigationController]  New route applied');
+    print(
+      '[NavigationController]  New route applied: '
+      '${newRouteModel.waypoints.length} waypoints, seeded at WP$seededIndex',
+    );
 
+    // Emit the new route directly so listeners get the exact object
+    _routeChangeController.add(freshRouteModel);
+    notifyListeners();
+  }
+
+  /// Updates the active destination POI (e.g. after a reroute to a different place)
+  void updateDestination(POIModel newDestination) {
+    destination = newDestination;
+    // Sync the dynamic route manager with the new target
+    _routeManager.updateDestination(
+      destinationId: newDestination.id,
+      destinationType: newDestination.category == 'seat' ? 'seat' : 'poi',
+      destinationX: newDestination.x,
+      destinationY: newDestination.y,
+      destinationLevel: newDestination.level,
+    );
+    print('[NavigationController] 🎯 Destination updated to: ${newDestination.id} (${newDestination.name})');
     notifyListeners();
   }
 
@@ -625,6 +682,7 @@ class NavigationController extends ChangeNotifier {
     _gpsSubscription?.cancel();
     _positionStream.close();
     _rerouteStream.close();
+    _routeChangeController.close();
     _routeManager.dispose();
     print('[NavigationController]  Dispose complete');
     super.dispose();
