@@ -2,16 +2,21 @@ import 'dart:async';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/services/routing_service.dart';
-import 'dart:math';
 import '../../../core/utils/geographic_utils.dart';
+
+typedef CurrentUserPositionProvider =
+  Future<({double x, double y, int level})?> Function();
 
 /// Gestor de rota dinâmica - recalcula automaticamente quando user se desvia
 ///
 /// Atualizado para nova API que usa coordenadas do utilizador
 class DynamicRouteManager {
-  final RoutingService _routingService = RoutingService();
+  final RoutingService _routingService;
+  final CurrentUserPositionProvider _currentUserPositionProvider;
 
-  // Destination info for recalculation (usando coordenadas para evitar 404)
+  // Destination info for recalculation
+  final String destinationId;
+  final String destinationType;
   final double destinationX;
   final double destinationY;
   final int destinationLevel;
@@ -19,31 +24,46 @@ class DynamicRouteManager {
 
   RouteModel? _currentRoute;
   Timer? _recalculationTimer;
-
-  // Debounce: instante em que o user saiu da rota pela primeira vez
-  DateTime? _firstOffRouteTime;
+  DateTime? _lastRouteUpdateTime;
+  double? _lastDistanceToTarget;
+  int _movingAwayStreak = 0;
+  double? _lastDistanceToDestination;
+  int _movingAwayDestinationStreak = 0;
 
   // Callbacks
   Function(RouteModel)? onRouteUpdated;
 
   DynamicRouteManager({
+    required this.destinationId,
+    required this.destinationType,
     required this.destinationX,
     required this.destinationY,
     required this.destinationLevel,
     required this.allNodes,
     required RouteModel initialRoute,
-  }) {
+    RoutingService? routingService,
+    CurrentUserPositionProvider? currentUserPositionProvider,
+  }) : _routingService = routingService ?? RoutingService(),
+       _currentUserPositionProvider =
+           currentUserPositionProvider ?? GeographicUtils.getCurrentUserPosition {
     _currentRoute = initialRoute;
   }
+
+  /// Índice do próximo waypoint na rota atual (segmentos passados são ignorados)
+  int currentWaypointIndex = 0;
 
   RouteModel? get currentRoute => _currentRoute;
 
   /// Atualiza manualmente a rota atual (ex: por rerouting MQTT)
   void updateRoute(RouteModel newRoute) {
     _currentRoute = newRoute;
-    // Reiniciar timer e debounce para evitar conflitos imediatos
+    currentWaypointIndex = 0; // reset para nova rota
     _recalculationTimer?.cancel();
-    _firstOffRouteTime = null;
+    _lastRouteUpdateTime = DateTime.now();
+    _lastDistanceToTarget = null;
+    _movingAwayStreak = 0;
+    _lastDistanceToDestination = null;
+    _movingAwayDestinationStreak = 0;
   }
 
   /// Inicia monitorização automática da posição
@@ -57,60 +77,175 @@ class DynamicRouteManager {
   Future<void> _checkAndRecalculateIfNeeded(double userX, double userY) async {
     if (_currentRoute == null || _currentRoute!.path.isEmpty) return;
 
+    // Não recalcular se já há um recálculo em curso
+    if (_recalculationTimer != null && _recalculationTimer!.isActive) return;
+
     // Criar mapa de nós para lookup O(1)
     final nodesMap = {for (var n in allNodes) n.id: n};
+    final movingAwayFromTarget = _isMovingAwayFromNextWaypoint(
+      userX,
+      userY,
+      nodesMap,
+    );
+    final movingAwayFromDestination = _isMovingAwayFromDestination(userX, userY);
 
-    // Calcular distância mínima à rota atual
+    // Cooldown de 10 seg após receber nova rota (evita loop de rerouting imediato)
+    if (_lastRouteUpdateTime != null) {
+      if (DateTime.now().difference(_lastRouteUpdateTime!).inSeconds < 10 &&
+          !movingAwayFromTarget &&
+          !movingAwayFromDestination) {
+        return;
+      }
+    }
+
+    // Calcular distância mínima aos segmentos restantes da rota.
+    // Retroceder 1 waypoint para incluir o segmento em que o utilizador
+    // provavelmente está (o tracker pode ter saltado à frente).
     double minDistanceToRoute = double.infinity;
+    final startIdx = currentWaypointIndex.clamp(
+      0,
+      _currentRoute!.path.length - 1,
+    );
+    int validSegments = 0;
 
-    for (int i = 0; i < _currentRoute!.path.length - 1; i++) {
+    for (int i = startIdx; i < _currentRoute!.path.length - 1; i++) {
       final wp1 = _currentRoute!.path[i];
       final wp2 = _currentRoute!.path[i + 1];
 
-      // Obter coordenadas corretas do Map Service
+      // Nós não encontrados no Map Service têm coordenadas noutro CRS;
+      // usar as coordenadas de fallback causaria distâncias de 4584 km.
+      // Saltar estes segmentos.
       final node1 = nodesMap[wp1.nodeId];
       final node2 = nodesMap[wp2.nodeId];
+      if (node1 == null || node2 == null) continue;
 
-      // Usar coordenadas do Map Service se disponíveis
-      final x1 = node1?.x ?? wp1.x;
-      final y1 = node1?.y ?? wp1.y;
-      final x2 = node2?.x ?? wp2.x;
-      final y2 = node2?.y ?? wp2.y;
+      validSegments++;
+      final dist = GeographicUtils.pointToSegmentDistance(
+        userX,
+        userY,
+        node1.x,
+        node1.y,
+        node2.x,
+        node2.y,
+      );
+      if (dist < minDistanceToRoute) minDistanceToRoute = dist;
+    }
 
-      final dist = GeographicUtils.pointToSegmentDistance(userX, userY, x1, y1, x2, y2);
-
-      if (dist < minDistanceToRoute) {
-        minDistanceToRoute = dist;
+    // Se todos os segmentos têm nós desconhecidos, só recalcular se houver
+    // forte evidência de afastamento do próximo objetivo.
+    if (validSegments == 0) {
+      if (movingAwayFromTarget) {
+        print(
+          '[DynamicRouteManager] Sem segmentos válidos, mas afastando-se do alvo. Recalculating.',
+        );
+        await _recalculateRoute(userX, userY);
+      } else if (movingAwayFromDestination) {
+        print(
+          '[DynamicRouteManager] Sem segmentos válidos, mas afastando-se do destino. Recalculating.',
+        );
+        await _recalculateRoute(userX, userY);
       }
+      print('[DynamicRouteManager] Sem segmentos válidos — skip reroute');
+      return;
     }
 
     print(
-      '[DynamicRouteManager] Distância à rota: ${minDistanceToRoute.toStringAsFixed(1)}m',
+      '[DynamicRouteManager] Distância à rota: ${minDistanceToRoute.toStringAsFixed(1)}m (from WP$startIdx, $validSegments segmentos válidos)',
     );
 
-    // Smart Rerouting: só recalcula se o user estiver >20m da rota
-    // por pelo menos 5 segundos consecutivos (evita drifts de GPS).
-    const double rerouteThreshold = 20.0;
-    const Duration rerouteDebounce = Duration(seconds: 5);
+    // Threshold mais permissivo: 20m (o backend snapa o início da rota ao nó mais próximo,
+    // que pode estar a ~15-20m do GPS do utilizador)
+    const double rerouteThreshold = 12.0;
+    // Só fazer bypass do cooldown em desvios verdadeiramente extremos (>50m)
+    const double extremeDeviation = 35.0;
 
-    if (minDistanceToRoute > rerouteThreshold) {
-      _firstOffRouteTime ??= DateTime.now();
-      final offFor = DateTime.now().difference(_firstOffRouteTime!);
+    if (minDistanceToRoute > extremeDeviation) {
       print(
-        '[DynamicRouteManager] Off-route for ${offFor.inSeconds}s '
-        '(threshold: ${rerouteDebounce.inSeconds}s)',
+        '[DynamicRouteManager] EXTREME off-route (${minDistanceToRoute.toStringAsFixed(1)}m). Recalculating.',
       );
-      if (offFor >= rerouteDebounce) {
-        _firstOffRouteTime = null; // reset para próximo evento
-        await _recalculateRoute(userX, userY);
-      }
-    } else {
-      // Voltou à rota — cancelar contagem
-      if (_firstOffRouteTime != null) {
-        print('[DynamicRouteManager] Voltou à rota, debounce cancelado.');
-        _firstOffRouteTime = null;
+      _lastRouteUpdateTime = null; // reset cooldown
+      await _recalculateRoute(userX, userY);
+    } else if (minDistanceToRoute > rerouteThreshold) {
+      print(
+        '[DynamicRouteManager] Off-route (${minDistanceToRoute.toStringAsFixed(1)}m > ${rerouteThreshold}m). Recalculating.',
+      );
+      await _recalculateRoute(userX, userY);
+    } else if (movingAwayFromTarget) {
+      print(
+        '[DynamicRouteManager] Moving away from next waypoint. Recalculating.',
+      );
+      await _recalculateRoute(userX, userY);
+    } else if (movingAwayFromDestination) {
+      print(
+        '[DynamicRouteManager] Moving away from destination. Recalculating.',
+      );
+      await _recalculateRoute(userX, userY);
+    }
+  }
+
+  bool _isMovingAwayFromNextWaypoint(
+    double userX,
+    double userY,
+    Map<String, NodeModel> nodesMap,
+  ) {
+    if (_currentRoute == null || _currentRoute!.path.isEmpty) return false;
+
+    final targetIdx = currentWaypointIndex.clamp(
+      0,
+      _currentRoute!.path.length - 1,
+    );
+    final targetWp = _currentRoute!.path[targetIdx];
+    final targetNode = nodesMap[targetWp.nodeId];
+    final targetX = targetNode?.x ?? targetWp.x;
+    final targetY = targetNode?.y ?? targetWp.y;
+
+    final distToTarget = GeographicUtils.calculateDistance(
+      userX,
+      userY,
+      targetX,
+      targetY,
+    );
+
+    if (_lastDistanceToTarget != null) {
+      final delta = distToTarget - _lastDistanceToTarget!;
+
+      // Afastamento consistente com margem para ruído de GPS
+      if (delta > 2.5) {
+        _movingAwayStreak++;
+      } else if (delta < -1.5) {
+        _movingAwayStreak = 0;
       }
     }
+
+    _lastDistanceToTarget = distToTarget;
+
+    // Trigger se já se afastou em 2+ updates e está significativamente longe.
+    return _movingAwayStreak >= 2 && distToTarget > 18.0;
+  }
+
+  bool _isMovingAwayFromDestination(double userX, double userY) {
+    final distToDestination = GeographicUtils.calculateDistance(
+      userX,
+      userY,
+      destinationX,
+      destinationY,
+    );
+
+    if (_lastDistanceToDestination != null) {
+      final delta = distToDestination - _lastDistanceToDestination!;
+
+      // Só contar afastamento relevante para evitar jitter.
+      if (delta > 3.0) {
+        _movingAwayDestinationStreak++;
+      } else if (delta < -2.0) {
+        _movingAwayDestinationStreak = 0;
+      }
+    }
+
+    _lastDistanceToDestination = distToDestination;
+
+    // Trigger se o utilizador se afasta do destino em sequência.
+    return _movingAwayDestinationStreak >= 3 && distToDestination > 30.0;
   }
 
   /// Recalcula rota da posição atual até ao destino
@@ -121,6 +256,14 @@ class DynamicRouteManager {
 
     _recalculationTimer = Timer(const Duration(seconds: 3), () {});
 
+    // Usar a posição mais fresca possível antes de pedir nova rota.
+    // Evita recalcular com uma amostra antiga e puxar o utilizador para trás.
+    final freshPosition = await _currentUserPositionProvider();
+    if (freshPosition != null) {
+      userX = freshPosition.x;
+      userY = freshPosition.y;
+    }
+
     print('[DynamicRouteManager] RECALCULANDO ROTA - User desviou-se!');
     print('[DynamicRouteManager] Posição atual: x=$userX, y=$userY');
     print('[DynamicRouteManager] Destino: x=$destinationX, y=$destinationY');
@@ -130,22 +273,45 @@ class DynamicRouteManager {
       final nearestNode = _findNearestNode(userX, userY);
       final currentLevel = nearestNode.level;
 
-      // Calcular nova rota usando coordenadas (evita 404 do lookup de POI)
-      final newRoute = await _routingService.getRouteToCoordinates(
-        startX: userX,
-        startY: userY,
-        startLevel: currentLevel,
-        endX: destinationX,
-        endY: destinationY,
-        endLevel: destinationLevel,
-        allNodes: allNodes,
-      );
+      // Tentar a rota pelo ID/Type original primeiro (melhor precisão)
+      RouteModel newRoute;
+      try {
+        newRoute = await _routingService.getRoute(
+          startX: userX,
+          startY: userY,
+          startLevel: currentLevel,
+          destinationType: destinationType,
+          destinationId: destinationId,
+          avoidStairs: false,
+        );
+      } catch (e) {
+        print('[DynamicRouteManager] getRoute fallback due to: $e');
+        // Calcular nova rota usando coordenadas (evita 404 do lookup de POI fakes)
+        newRoute = await _routingService.getRouteToCoordinates(
+          startX: userX,
+          startY: userY,
+          startLevel: currentLevel,
+          endX: destinationX,
+          endY: destinationY,
+          endLevel: destinationLevel,
+          allNodes: allNodes,
+        );
+      }
 
       _currentRoute = newRoute;
+      currentWaypointIndex = 0;
+      _lastRouteUpdateTime = DateTime.now();
+      _lastDistanceToTarget = null;
+      _movingAwayStreak = 0;
+      _lastDistanceToDestination = null;
+      _movingAwayDestinationStreak = 0;
+
+      final nodeIds = newRoute.path.map((p) => p.nodeId).toList();
 
       print(
         '[DynamicRouteManager] Nova rota calculada: ${newRoute.path.length} waypoints',
       );
+      print('[DynamicRouteManager] Nós da nova rota: $nodeIds');
 
       // Notificar listeners
       onRouteUpdated?.call(newRoute);
@@ -171,20 +337,7 @@ class DynamicRouteManager {
     return nearest ?? allNodes.first;
   }
 
-  /// Projetar e calcular distância (removido para usar GeographicUtils)
-  double _pointToLineDistance(
-    double px,
-    double py,
-    double x1,
-    double y1,
-    double x2,
-    double y2,
-  ) {
-    return GeographicUtils.pointToSegmentDistance(px, py, x1, y1, x2, y2);
-  }
-
   void dispose() {
     _recalculationTimer?.cancel();
-    _firstOffRouteTime = null;
   }
 }

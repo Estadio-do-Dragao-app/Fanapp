@@ -657,6 +657,10 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                         }
 
                         if (_selectedRoute == null) {
+                          AppTopFeedback.showWarning(
+                            context,
+                            localizations.routeCalculationErrorMessage,
+                          );
                           return;
                         }
 

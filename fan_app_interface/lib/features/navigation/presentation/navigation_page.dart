@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
+
 import 'package:latlong2/latlong.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
@@ -61,6 +62,7 @@ class _NavigationPageState extends State<NavigationPage>
 
   // Preview route to show when selecting a new destination mid-navigation
   RouteModel? _previewRoute;
+  String _lastRouteSignature = '';
 
   // Timer to resume user tracking after 5 seconds of inactivity
   Timer? _idleTimer;
@@ -68,6 +70,7 @@ class _NavigationPageState extends State<NavigationPage>
   @override
   void initState() {
     super.initState();
+    _lastRouteSignature = _routeSignature(widget.route);
 
     // Plugin: controlador com animações suaves
     _animatedMapController = AnimatedMapController(
@@ -112,10 +115,19 @@ class _NavigationPageState extends State<NavigationPage>
 
   void _onNavigationUpdate() {
     if (!mounted) return;
+    final currentSignature = _routeSignature(_controller.route);
     print(
       '[NavigationPage] 🔄 Update: index=${_controller.tracker.currentWaypointIndex}',
     );
-    setState(() {});
+    setState(() {
+      // Se a rota mudou (reroute), limpar qualquer preview antigo
+      // e forçar ciclo visual limpo no mapa.
+      if (currentSignature != _lastRouteSignature) {
+        _lastRouteSignature = currentSignature;
+        _previewRoute = null;
+        print('[NavigationPage] Route signature changed: $currentSignature');
+      }
+    });
 
     if (_isFollowingUser) {
       _followUserPosition();
@@ -271,6 +283,11 @@ class _NavigationPageState extends State<NavigationPage>
     _handleManualMapInteraction("Compass Press");
   }
 
+  String _routeSignature(RouteModel route) {
+    final ids = route.waypoints.map((w) => w.nodeId).join('>');
+    return '${route.waypoints.length}|$ids';
+  }
+
   @override
   Widget build(BuildContext context) {
     final tracker = _controller.tracker;
@@ -289,6 +306,7 @@ class _NavigationPageState extends State<NavigationPage>
           children: [
             // Mapa de fundo com rota destacada
             StadiumMapPage(
+              key: ValueKey('nav-map-${_routeSignature(_controller.route)}'),
               highlightedRoute: _controller.route,
               highlightedPOI: widget.destination,
               mapController: _animatedMapController.mapController,
@@ -296,7 +314,7 @@ class _NavigationPageState extends State<NavigationPage>
               isFollowingUser: _isFollowingUser,
               userPosition: userPosition,
               userHeading: _controller.heading,
-              routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
+              routeStartWaypointIndex: _controller.routeStartWaypointIndex,
               initialFloor: _controller.currentLevel,
               showHeatmap: _showHeatmap,
               isEmergency: widget.isEmergency,
@@ -515,6 +533,8 @@ class _NavigationPageState extends State<NavigationPage>
                   },
                 ),
               ),
+
+
           ],
         ),
       ),

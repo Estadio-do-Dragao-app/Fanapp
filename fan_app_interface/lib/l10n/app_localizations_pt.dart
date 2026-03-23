@@ -277,4 +277,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get useRamp => 'Use a rampa';
+
+  @override
+  String get routeCalculationError => 'Erro de cálculo de rota';
+
+  @override
+  String get routeCalculationErrorMessage => 'Não foi possível calcular uma rota para o destino.';
 }

@@ -11,6 +11,7 @@ import '../data/services/user_position_service.dart';
 import 'models/reroute_event.dart';
 import 'route_tracker.dart';
 import 'dynamic_route_manager.dart';
+import '../../map/data/services/routing_service.dart';
 import '../../../core/utils/geographic_utils.dart';
 
 /// Controlador principal da navegação
@@ -26,6 +27,7 @@ class NavigationController extends ChangeNotifier {
   late RouteModel route;
   late RouteTracker _tracker;
   late DynamicRouteManager _routeManager;
+  final RoutingService _routingService = RoutingService();
   StreamSubscription<Position>? _gpsSubscription;
 
   // Stream para monitorizar posição
@@ -56,13 +58,20 @@ class NavigationController extends ChangeNotifier {
   double? _lastFilteredY;
   DateTime? _lastFilteredTime;
 
-  // Velocidade máxima plausível para um pedrão a correr: 3.5 m/s (~12.6 km/h)
-  // Saltos que impliquem >3× esse valor são descartados como ruído de GPS.
-  static const double _maxPlausibleSpeed = 3.5;  // m/s
-  static const double _noiseMultiplier   = 3.0;
+  // Velocidade máxima plasível para um pedeão a correr: 3.5 m/s (~12.6 km/h)
+  // Saltos que impliquem >5× esse valor são descartados como ruído de GPS.
+  // Aumentado de 3.0 para 5.0 para não descartar atalhos rápidos legítimos.
+  static const double _maxPlausibleSpeed = 3.5; // m/s
+  static const double _noiseMultiplier = 5.0;
   // Se o GPS esteve parado > 10 s (ex: récoupération de sinal), aceitar sempre
   static const Duration _signalGap = Duration(seconds: 10);
   // ──────────────────────────────────────────────────────────────────────────
+
+  bool _isInitializing = true;
+  bool get isInitializing => _isInitializing;
+
+  // O desenho da rota deve sempre começar no progresso real do tracker.
+  int get routeStartWaypointIndex => _tracker.currentWaypointIndex;
 
   NavigationController({
     required RouteModel route,
@@ -79,6 +88,8 @@ class NavigationController extends ChangeNotifier {
     // Inicializar gestor de rota dinâmica
     // Usa coordenadas do POI para recalcular rotas quando user se desvia
     _routeManager = DynamicRouteManager(
+      destinationId: destination.id,
+      destinationType: destination.category == 'seat' ? 'seat' : 'poi',
       destinationX: destination.x,
       destinationY: destination.y,
       destinationLevel: destination.level,
@@ -89,13 +100,42 @@ class NavigationController extends ChangeNotifier {
     // Callback quando rota é recalculada
     _routeManager.onRouteUpdated = (newRoute) {
       print('[NavigationController]  Rota atualizada!');
-      route = newRoute;
       // CRÍTICO: Preservar posição atual antes de recriar tracker
       final currentX = _tracker.currentX;
       final currentY = _tracker.currentY;
-      _tracker = RouteTracker(route: newRoute, allNodes: allNodes);
-      // CORREÇÃO: Passar o nível atual para não perder contexto
-      _tracker.updateUserPosition(currentX, currentY, level: _currentLevel);
+
+      final rawNodeIds = newRoute.path.map((p) => p.nodeId).toList();
+      print('[NavigationController] Rota recebida (raw): $rawNodeIds');
+
+      final normalizedRoute = _normalizeRouteFromCurrentPosition(
+        newRoute,
+        currentX,
+        currentY,
+      );
+
+      final normalizedNodeIds = normalizedRoute.path.map((p) => p.nodeId).toList();
+      print('[NavigationController] Rota aplicada (normalized): $normalizedNodeIds');
+
+      route = normalizedRoute;
+      _tracker = RouteTracker(route: normalizedRoute, allNodes: allNodes);
+      final seededIndex = _computeSeededWaypointIndex(
+        normalizedRoute,
+        currentX,
+        currentY,
+      );
+      _tracker.seedUserPositionForNewRoute(
+        currentX,
+        currentY,
+        level: _currentLevel,
+        waypointIndex: seededIndex,
+      );
+      _routeManager.updateRoute(normalizedRoute);
+      _routeManager.currentWaypointIndex = seededIndex;
+
+      print(
+        '[NavigationController] Reroute seeded at WP$seededIndex/${normalizedRoute.waypoints.length} '
+        '(user=[$currentX,$currentY], level=$_currentLevel)',
+      );
       _updateInstruction();
       notifyListeners();
     };
@@ -128,22 +168,25 @@ class NavigationController extends ChangeNotifier {
     int startLevel =
         _currentLevel; // Inicializar com o nível passado no construtor
 
-    if (initialX != null && initialY != null) {
-      // Usar posição passada como parâmetro
+    // Sempre tentar obter a posição GPS real - ignora initialX/Y (que podem estar velhos)
+    final freshGps = await GeographicUtils.getCurrentUserPosition();
+    if (freshGps != null) {
+      startX = freshGps.x;
+      startY = freshGps.y;
+      startLevel = freshGps.level;
+      print(
+        '[NavigationController]  GPS fresco obtido: ($startX, $startY, level=$startLevel)',
+      );
+    } else if (initialX != null && initialY != null) {
+      // Fallback: usar posição passada como parâmetro
       startX = initialX!;
       startY = initialY!;
-      // Se initialLevel foi fornecido, usá-lo, caso contrário, carregar do serviço
-      if (initialLevel != null) {
-        startLevel = initialLevel!;
-      } else {
-        final savedPosition = await UserPositionService.getPosition();
-        startLevel = savedPosition?.level ?? _currentLevel;
-      }
+      if (initialLevel != null) startLevel = initialLevel!;
       print(
-        '[NavigationController]  Usando posição fornecida: ($startX, $startY, level=$startLevel)',
+        '[NavigationController]  Usando posição fornecida (sem GPS): ($startX, $startY, level=$startLevel)',
       );
     } else {
-      // Carregar posição do UserPositionService
+      // Último recurso: UserPositionService
       final savedPosition = await UserPositionService.getPosition();
       if (savedPosition != null) {
         startX = savedPosition.x;
@@ -153,9 +196,7 @@ class NavigationController extends ChangeNotifier {
           '[NavigationController]  Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
         );
       } else {
-        // Fallback: This should never be reached if UI checks work.
-        // If we reach here without GPS, throw an exception.
-        throw Exception("Cannot calculate route without GPS location. Ensure position is obtained before navigating.");
+        throw Exception("Cannot calculate route without GPS location.");
       }
     }
 
@@ -164,6 +205,56 @@ class NavigationController extends ChangeNotifier {
     print('[NavigationController]  Nível inicial: $_currentLevel');
 
     _tracker.updateUserPosition(startX, startY, level: _currentLevel);
+
+    // VERIFICAÇÃO CRÍTICA: Se a posição real estiver muito longe do início da rota (> 50m)
+    // recalcular imediatamente ANTES de terminar a inicialização para evitar mostrar 10km+ ao user.
+    final firstWp = route.waypoints.first;
+    final firstWpCoords = GeographicUtils.calculateDistance(
+      startX,
+      startY,
+      firstWp.x,
+      firstWp.y,
+    );
+
+    if (firstWpCoords > 50.0) {
+      print(
+        '[NavigationController] Posição inicial está longe da rota ($firstWpCoords m). Forçando recálculo...',
+      );
+      try {
+        final newRoute = await _routingService.getRoute(
+          startX: startX,
+          startY: startY,
+          startLevel: _currentLevel,
+          destinationType: destination.category == 'seat' ? 'seat' : 'poi',
+          destinationId: destination.id,
+          avoidStairs: false,
+        );
+        final normalizedRoute = _normalizeRouteFromCurrentPosition(
+          newRoute,
+          startX,
+          startY,
+        );
+        route = normalizedRoute;
+        _tracker = RouteTracker(route: normalizedRoute, allNodes: allNodes);
+        final seededIndex = _computeSeededWaypointIndex(
+          normalizedRoute,
+          startX,
+          startY,
+        );
+        _tracker.seedUserPositionForNewRoute(
+          startX,
+          startY,
+          level: _currentLevel,
+          waypointIndex: seededIndex,
+        );
+        _routeManager.updateRoute(normalizedRoute);
+        _routeManager.currentWaypointIndex = seededIndex;
+      } catch (e) {
+        print('[NavigationController] Erro no recálculo inicial: $e');
+      }
+    }
+
+    _isInitializing = false;
     _updateInstruction();
     notifyListeners();
 
@@ -200,57 +291,60 @@ class NavigationController extends ChangeNotifier {
     );
 
     _gpsSubscription =
-        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
-          (Position position) {
-            if (!_isNavigating || _isDisposed) return;
+        Geolocator.getPositionStream(
+          locationSettings: locationSettings,
+        ).listen((Position position) {
+          if (!_isNavigating || _isDisposed) return;
 
-            // Update heading based on device movement
-            if (position.heading > 0) {
-              _heading = position.heading;
-            }
+          // Update heading based on device movement
+          if (position.heading > 0) {
+            _heading = position.heading;
+          }
 
-            final newX = position.longitude;
-            final newY = position.latitude;
+          final newX = position.longitude;
+          final newY = position.latitude;
 
-            // ── Filtro de ruído GPS ──────────────────────────────────────
-            if (_lastFilteredX != null && _lastFilteredTime != null) {
-              final timeDelta = DateTime.now()
-                  .difference(_lastFilteredTime!)
-                  .inMilliseconds / 1000.0;
+          // ── Filtro de ruído GPS ──────────────────────────────────────
+          if (_lastFilteredX != null && _lastFilteredTime != null) {
+            final timeDelta =
+                DateTime.now().difference(_lastFilteredTime!).inMilliseconds /
+                1000.0;
 
-              // Se há menos de 10 s desde a última posição válida,
-              // verificar se a velocidade implicada é plausível.
-              if (timeDelta < _signalGap.inSeconds.toDouble() && timeDelta > 0) {
-                final dist = GeographicUtils.calculateDistance(
-                  _lastFilteredX!, _lastFilteredY!, newX, newY,
+            // Se há menos de 10 s desde a última posição válida,
+            // verificar se a velocidade implicada é plausível.
+            if (timeDelta < _signalGap.inSeconds.toDouble() && timeDelta > 0) {
+              final dist = GeographicUtils.calculateDistance(
+                _lastFilteredX!,
+                _lastFilteredY!,
+                newX,
+                newY,
+              );
+              final impliedSpeed = dist / timeDelta; // m/s
+
+              if (impliedSpeed > _maxPlausibleSpeed * _noiseMultiplier) {
+                print(
+                  '[NavigationController] ⚠️ GPS NOISE ignored: '
+                  'impliedSpeed=${impliedSpeed.toStringAsFixed(1)} m/s '
+                  '(limit=${(_maxPlausibleSpeed * _noiseMultiplier).toStringAsFixed(1)} m/s), '
+                  'jump=${dist.toStringAsFixed(1)}m in ${timeDelta.toStringAsFixed(1)}s',
                 );
-                final impliedSpeed = dist / timeDelta; // m/s
-
-                if (impliedSpeed > _maxPlausibleSpeed * _noiseMultiplier) {
-                  print(
-                    '[NavigationController] ⚠️ GPS NOISE ignored: '
-                    'impliedSpeed=${impliedSpeed.toStringAsFixed(1)} m/s '
-                    '(limit=${(_maxPlausibleSpeed * _noiseMultiplier).toStringAsFixed(1)} m/s), '
-                    'jump=${dist.toStringAsFixed(1)}m in ${timeDelta.toStringAsFixed(1)}s',
-                  );
-                  return; // descartar esta posição
-                }
+                return; // descartar esta posição
               }
             }
+          }
 
-            // Posição aceite — actualizar filtro
-            _lastFilteredX = newX;
-            _lastFilteredY = newY;
-            _lastFilteredTime = DateTime.now();
-            // ─────────────────────────────────────────────────────────────
+          // Posição aceite — actualizar filtro
+          _lastFilteredX = newX;
+          _lastFilteredY = newY;
+          _lastFilteredTime = DateTime.now();
+          // ─────────────────────────────────────────────────────────────
 
-            // Update position on map/tracker
-            updateUserPosition(newX, newY);
+          // Update position on map/tracker
+          updateUserPosition(newX, newY);
 
-            // Emit to trigger dynamic route manager updates
-            _positionStream.add((x: newX, y: newY));
-          },
-        );
+          // Emit to trigger dynamic route manager updates
+          _positionStream.add((x: newX, y: newY));
+        });
   }
 
   /// Pausar GPS tracking (ex: antes de recalcular rota)
@@ -277,7 +371,12 @@ class NavigationController extends ChangeNotifier {
 
   /// Atualiza posição (para integração com GPS real)
   void updateUserPosition(double x, double y) {
-    _tracker.updateUserPosition(x, y);
+    // Atualizar piso atual a partir do nó mais próximo para manter o tracker consistente.
+    _currentLevel = _findNearestNode(x, y).level;
+    _tracker.updateUserPosition(x, y, level: _currentLevel);
+    // Sincronizar o índice de progresso com o gestor de rota dinâmica
+    // para que a verificação off-route ignore segmentos já ultrapassados
+    _routeManager.currentWaypointIndex = _tracker.currentWaypointIndex;
     _updateInstruction();
 
     if (_tracker.hasArrived) {
@@ -423,10 +522,10 @@ class NavigationController extends ChangeNotifier {
         final routeIds = List<String>.from(event['route'] ?? []);
         if (routeIds.isNotEmpty) {
           print(
-            '[NavigationController]  Applying evacuation route with  24{routeIds.length} nodes',
+            '[NavigationController]  Applying evacuation route with ${routeIds.length} nodes',
           );
           print(
-            '[NavigationController]  Keeping user at current position: ( 24{_tracker.currentX},  24{_tracker.currentY})',
+            '[NavigationController]  Keeping user at current position: (${_tracker.currentX}, ${_tracker.currentY})',
           );
 
           // STOP GPS tracking temporarily
@@ -570,5 +669,124 @@ class NavigationController extends ChangeNotifier {
     }
 
     return nearest ?? allNodes.first;
+  }
+
+  /// Remove prefixo de waypoints atrás do utilizador após reroute.
+  ///
+  /// O backend pode incluir 1-2 nós iniciais de "snap" que ficam para trás,
+  /// o que faz o mapa/instrução parecer voltar ao ponto antigo.
+  RouteModel _normalizeRouteFromCurrentPosition(
+    RouteModel rawRoute,
+    double userX,
+    double userY,
+  ) {
+    if (rawRoute.path.length < 3) return rawRoute;
+
+    final nodesMap = {for (var n in allNodes) n.id: n};
+
+    int nearestIndex = 0;
+    double nearestDistance = double.infinity;
+
+    for (int i = 0; i < rawRoute.path.length; i++) {
+      final wp = rawRoute.path[i];
+      final node = nodesMap[wp.nodeId];
+      final wpX = node?.x ?? wp.x;
+      final wpY = node?.y ?? wp.y;
+
+      final dist = GeographicUtils.calculateDistance(userX, userY, wpX, wpY);
+      if (dist < nearestDistance) {
+        nearestDistance = dist;
+        nearestIndex = i;
+      }
+    }
+
+    // Só corta o prefixo quando a diferença é clara e segura.
+    if (nearestIndex <= 0 || nearestDistance > 35.0) {
+      return rawRoute;
+    }
+
+    final first = rawRoute.path.first;
+    final firstNode = nodesMap[first.nodeId];
+    final firstX = firstNode?.x ?? first.x;
+    final firstY = firstNode?.y ?? first.y;
+    final distanceToFirst = GeographicUtils.calculateDistance(
+      userX,
+      userY,
+      firstX,
+      firstY,
+    );
+
+    if (distanceToFirst - nearestDistance < 8.0) {
+      print(
+        '[NavigationController] Reroute kept raw prefix: nearestIdx=$nearestIndex '
+        'nearest=${nearestDistance.toStringAsFixed(1)}m first=${distanceToFirst.toStringAsFixed(1)}m',
+      );
+      return rawRoute;
+    }
+
+    final trimmed = rawRoute.path.skip(nearestIndex).toList();
+    if (trimmed.length < 2) {
+      return rawRoute;
+    }
+
+    // Recalcular métricas para manter consistência com o path aparado.
+    final removedDistance = trimmed.first.distanceFromStart;
+    final removedTime = trimmed.first.estimatedTime;
+    final adjustedDistance = (rawRoute.totalDistance - removedDistance).clamp(
+      0.0,
+      double.infinity,
+    );
+    final adjustedTime = (rawRoute.estimatedTime - removedTime).clamp(
+      0.0,
+      double.infinity,
+    );
+
+    print(
+      '[NavigationController] Reroute trimmed prefix: drop=$nearestIndex '
+      'nearest=${nearestDistance.toStringAsFixed(1)}m first=${distanceToFirst.toStringAsFixed(1)}m '
+      'len=${rawRoute.path.length}->${trimmed.length}',
+    );
+
+    return RouteModel(
+      path: trimmed,
+      totalDistance: adjustedDistance,
+      estimatedTime: adjustedTime,
+      congestionLevel: rawRoute.congestionLevel,
+      waitTime: rawRoute.waitTime,
+      warnings: rawRoute.warnings,
+    );
+  }
+
+  int _computeSeededWaypointIndex(
+    RouteModel route,
+    double userX,
+    double userY,
+  ) {
+    if (route.waypoints.length <= 1) return 0;
+
+    final nodesMap = {for (var n in allNodes) n.id: n};
+    final lookAhead = route.waypoints.length < 4 ? route.waypoints.length : 4;
+
+    int nearestIdx = 0;
+    double nearestDist = double.infinity;
+
+    for (int i = 0; i < lookAhead; i++) {
+      final wp = route.waypoints[i];
+      final node = nodesMap[wp.nodeId];
+      final wpX = node?.x ?? wp.x;
+      final wpY = node?.y ?? wp.y;
+      final dist = GeographicUtils.calculateDistance(userX, userY, wpX, wpY);
+
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIdx = i;
+      }
+    }
+
+    // Só arrancar à frente quando há evidência clara e próxima.
+    if (nearestIdx > 0 && nearestDist < 10.0) {
+      return nearestIdx;
+    }
+    return 0;
   }
 }

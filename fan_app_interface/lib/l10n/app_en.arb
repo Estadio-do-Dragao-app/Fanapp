@@ -156,5 +156,7 @@
   "noSavedPlaces": "You haven't saved any places yet.",
   "more": "More",
   "useStairs": "Use the stairs",
-  "useRamp": "Use the ramp"
+  "useRamp": "Use the ramp",
+  "routeCalculationError": "Route Calculation Error",
+  "routeCalculationErrorMessage": "It was not possible to calculate a route to the destination."
 }

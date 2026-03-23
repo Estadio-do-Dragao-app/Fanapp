@@ -156,5 +156,7 @@
   "noSavedPlaces": "Ainda não guardou nenhum lugar.",
   "more": "Mais",
   "useStairs": "Use as escadas",
-  "useRamp": "Use a rampa"
+  "useRamp": "Use a rampa",
+  "routeCalculationError": "Erro de cálculo de rota",
+  "routeCalculationErrorMessage": "Não foi possível calcular uma rota para o destino."
 }

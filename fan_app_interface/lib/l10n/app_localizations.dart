@@ -598,6 +598,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use the ramp'**
   String get useRamp;
+
+  /// No description provided for @routeCalculationError.
+  ///
+  /// In en, this message translates to:
+  /// **'Route Calculation Error'**
+  String get routeCalculationError;
+
+  /// No description provided for @routeCalculationErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'It was not possible to calculate a route to the destination.'**
+  String get routeCalculationErrorMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
