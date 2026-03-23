@@ -586,6 +586,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'More'**
   String get more;
+
+  /// No description provided for @useStairs.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the stairs'**
+  String get useStairs;
+
+  /// No description provided for @useRamp.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the ramp'**
+  String get useRamp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

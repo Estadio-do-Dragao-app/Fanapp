@@ -154,5 +154,7 @@
   "gpsRequiredMessage": "Não é possível calcular a rota sem a sua localização (GPS).",
   "savedPlaces": "Favoritos",
   "noSavedPlaces": "Ainda não guardou nenhum lugar.",
-  "more": "Mais"
+  "more": "Mais",
+  "useStairs": "Use as escadas",
+  "useRamp": "Use a rampa"
 }

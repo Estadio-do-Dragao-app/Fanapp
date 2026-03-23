@@ -154,5 +154,7 @@
   "gpsRequiredMessage": "Cannot calculate route without GPS location.",
   "savedPlaces": "Favorites",
   "noSavedPlaces": "You haven't saved any places yet.",
-  "more": "More"
+  "more": "More",
+  "useStairs": "Use the stairs",
+  "useRamp": "Use the ramp"
 }

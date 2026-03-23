@@ -255,6 +255,19 @@ class RouteTracker {
     final current = route.waypoints[waypointIndex];
     final next = route.waypoints[waypointIndex + 1];
 
+    // Verificar se o waypoint atual e o seguinte são a mesma estrutura de transição
+    final currentNode = _nodesMap[current.nodeId];
+    final nextNode = _nodesMap[next.nodeId];
+    
+    if (currentNode != null && nextNode != null) {
+      if (currentNode.type == 'stairs' && nextNode.type == 'stairs') {
+        return 'stairs';
+      }
+      if (currentNode.type == 'ramp' && nextNode.type == 'ramp') {
+        return 'ramp';
+      }
+    }
+
     // Obter coordenadas corretas do Map Service
     final prevCoords = getCorrectWaypointCoords(prev);
     final currentCoords = getCorrectWaypointCoords(current);

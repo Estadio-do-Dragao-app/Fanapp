@@ -246,6 +246,31 @@ class _NavigationPageState extends State<NavigationPage>
     return '${arrivalTime.hour.toString().padLeft(2, '0')}:${arrivalTime.minute.toString().padLeft(2, '0')}';
   }
 
+  void _handleManualMapInteraction(String source) {
+    // Cancel any existing idle timer
+    _idleTimer?.cancel();
+
+    if (_isFollowingUser) {
+      setState(() {
+        _isFollowingUser = false;
+      });
+    }
+
+    // Start a new 5-second timer to auto-recenter
+    _idleTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && !_isFollowingUser) {
+        setState(() {
+          _isFollowingUser = true;
+        });
+        _followUserPosition();
+      }
+    });
+  }
+
+  void _onCompassPressed() {
+    _handleManualMapInteraction("Compass Press");
+  }
+
   @override
   Widget build(BuildContext context) {
     final tracker = _controller.tracker;
@@ -276,6 +301,7 @@ class _NavigationPageState extends State<NavigationPage>
               showHeatmap: _showHeatmap,
               isEmergency: widget.isEmergency,
               onTapPOI: widget.isEmergency ? null : _showSwitchDestinationSheet,
+              onCompassPressed: _onCompassPressed,
               previewRoute: _previewRoute,
               onToggleNavigationHeatmap: () {
                 setState(() {
@@ -296,30 +322,7 @@ class _NavigationPageState extends State<NavigationPage>
                   : (_isBottomSheetExpanded ? 360 : 200),
               onPositionChanged: (camera, hasGesture) {
                 if (hasGesture) {
-                  // Cancel any existing idle timer
-                  _idleTimer?.cancel();
-
-                  if (_isFollowingUser) {
-                    print(
-                      "[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.",
-                    );
-                    setState(() {
-                      _isFollowingUser = false;
-                    });
-                  }
-
-                  // Start a new 5-second timer to auto-recenter
-                  _idleTimer = Timer(const Duration(seconds: 5), () {
-                    if (mounted && !_isFollowingUser) {
-                      print(
-                        "[NavigationPage] ⏳ 5 seconds of inactivity. Auto-resuming follow mode.",
-                      );
-                      setState(() {
-                        _isFollowingUser = true;
-                      });
-                      _followUserPosition();
-                    }
-                  });
+                  _handleManualMapInteraction("Gesture");
                 }
               },
             ),

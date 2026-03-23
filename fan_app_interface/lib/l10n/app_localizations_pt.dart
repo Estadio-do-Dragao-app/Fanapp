@@ -271,4 +271,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get more => 'Mais';
+
+  @override
+  String get useStairs => 'Use as escadas';
+
+  @override
+  String get useRamp => 'Use a rampa';
 }

@@ -57,6 +57,7 @@ class StadiumMapPage extends StatefulWidget {
   final bool isFollowingUser; // Indicates if map should rotate with gyro
   final VoidCallback? onToggleNavigationHeatmap;
   final VoidCallback? onRecenterNavigation;
+  final VoidCallback? onCompassPressed;
   final double? navigationControlsBottomInset;
 
   const StadiumMapPage({
@@ -86,6 +87,7 @@ class StadiumMapPage extends StatefulWidget {
     this.isFollowingUser = true,
     this.onToggleNavigationHeatmap,
     this.onRecenterNavigation,
+    this.onCompassPressed,
     this.navigationControlsBottomInset,
     this.customPOIsToShow,
     this.zoomOutToPOIs = false,
@@ -269,6 +271,14 @@ class StadiumMapPageState extends State<StadiumMapPage>
       setState(() {
         _currentRoute = widget.highlightedRoute;
       });
+    }
+    // Re-calcular a rota de previsão se a opção "Evitar Escadas" mudar e houver um destino selecionado
+    if (widget.avoidStairs != oldWidget.avoidStairs) {
+      if (_selectedPOI != null && !widget.isNavigating) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showPOIDetails(_selectedPOI!);
+        });
+      }
     }
     // Atualizar piso quando mudar externamente
     if (widget.initialFloor != oldWidget.initialFloor) {
@@ -690,12 +700,16 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   Widget _buildCompassButton() {
-    return Transform.scale(
-      scale: 0.8,
-      child: const MapCompass.cupertino(
-        hideIfRotatedNorth: false,
-        alignment: Alignment.center,
-        padding: EdgeInsets.zero,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => widget.onCompassPressed?.call(),
+      child: Transform.scale(
+        scale: 0.8,
+        child: const MapCompass.cupertino(
+          hideIfRotatedNorth: false,
+          alignment: Alignment.center,
+          padding: EdgeInsets.zero,
+        ),
       ),
     );
   }
@@ -1399,7 +1413,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
       // 1. Mostrar POIs genéricos se o zoom permitir ou "Show All" estiver ativo
       // MAS apenas se showOtherPOIs for true
       if (widget.showOtherPOIs && (showGenericPOIs || widget.showAllPOIs)) {
-        poisToShow.addAll(_pois);
+        poisToShow.addAll(_pois.where((p) => p.category != 'stairs' && p.category != 'ramp'));
       }
     }
 

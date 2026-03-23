@@ -271,4 +271,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get more => 'More';
+
+  @override
+  String get useStairs => 'Use the stairs';
+
+  @override
+  String get useRamp => 'Use the ramp';
 }
