@@ -65,11 +65,10 @@ class NavigationController extends ChangeNotifier {
   double? _lastFilteredY;
   DateTime? _lastFilteredTime;
 
-  // Velocidade máxima plasível para um pedeão a correr: 3.5 m/s (~12.6 km/h)
-  // Saltos que impliquem >5× esse valor são descartados como ruído de GPS.
-  // Aumentado de 3.0 para 5.0 para não descartar atalhos rápidos legítimos.
+  // Velocidade máxima plausível para um pedrão a correr: 3.5 m/s (~12.6 km/h)
+  // Saltos que impliquem >3× esse valor são descartados como ruído de GPS.
   static const double _maxPlausibleSpeed = 3.5; // m/s
-  static const double _noiseMultiplier = 5.0;
+  static const double _noiseMultiplier = 3.0;
   // Se o GPS esteve parado > 10 s (ex: récoupération de sinal), aceitar sempre
   static const Duration _signalGap = Duration(seconds: 10);
   // ──────────────────────────────────────────────────────────────────────────
@@ -211,7 +210,11 @@ class NavigationController extends ChangeNotifier {
           '[NavigationController]  Posição carregada do serviço: ($startX, $startY, level=$startLevel)',
         );
       } else {
-        throw Exception("Cannot calculate route without GPS location.");
+        // Fallback: This should never be reached if UI checks work.
+        // If we reach here without GPS, throw an exception.
+        throw Exception(
+          "Cannot calculate route without GPS location. Ensure position is obtained before navigating.",
+        );
       }
     }
 

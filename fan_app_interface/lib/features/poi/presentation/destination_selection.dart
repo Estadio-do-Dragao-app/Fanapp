@@ -731,152 +731,160 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       builder: (context, child) {
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-      itemCount: _poisWithRoutes.length,
-      itemBuilder: (context, index) {
-        final item = _poisWithRoutes[index];
-        final isSelected = selectedIndex == index;
-        final isDepartmentOrPoi = _normalizeCategory(widget.categoryId) == 'department' || _normalizeCategory(widget.categoryId) == 'poi';
-        final isFastest = _allRoutesCalculated && _fastestIndex == index && !isDepartmentOrPoi;
+          itemCount: _poisWithRoutes.length,
+          itemBuilder: (context, index) {
+            final item = _poisWithRoutes[index];
+            final isSelected = selectedIndex == index;
+            final isDepartmentOrPoi =
+                _normalizeCategory(widget.categoryId) == 'department' ||
+                _normalizeCategory(widget.categoryId) == 'poi';
+            final isFastest =
+                _allRoutesCalculated &&
+                _fastestIndex == index &&
+                !isDepartmentOrPoi;
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: InkWell(
-            onTap: () {
-              setState(() {
-                selectedIndex = index;
-                _selectedRoute = item.route;
-              });
-              if (item.hasRoute) {
-                // Já tem rota - fazer zoom (atrasar para evitar conflito com build)
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    _zoomToRoute(item.route!);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    selectedIndex = index;
+                    _selectedRoute = item.route;
+                  });
+                  if (item.hasRoute) {
+                    // Já tem rota - fazer zoom (atrasar para evitar conflito com build)
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _zoomToRoute(item.route!);
+                      }
+                    });
+                  } else if (!_hasValidLocation) {
+                    // Sem GPS - fazer zoom apenas para o POI
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _zoomToPOI(item.poi);
+                      }
+                    });
+                  } else {
+                    // Calcular rota (zoom será feito após cálculo no _calculateRouteForSelected)
+                    _calculateRouteForSelected(index);
                   }
-                });
-              } else if (!_hasValidLocation) {
-                // Sem GPS - fazer zoom apenas para o POI
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    _zoomToPOI(item.poi);
-                  }
-                });
-              } else {
-                // Calcular rota (zoom será feito após cálculo no _calculateRouteForSelected)
-                _calculateRouteForSelected(index);
-              }
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF161A3E),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isSelected
-                      ? Colors.white
-                      : Colors.white24,
-                  width: isSelected ? 3 : 1,
-                ),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  POIIcon(
-                    categoryId: widget.categoryId,
-                    color: Colors.white,
-                    size: 32,
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161A3E),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected ? Colors.white : Colors.white24,
+                      width: isSelected ? 3 : 1,
+                    ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.poi.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Gabarito',
-                          ),
-                        ),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      POIIcon(
+                        categoryId: widget.categoryId,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Tempo de caminhada
-                            AnimatedSelectionGlow(
-                              play: isSelected,
-                              child: _buildInfoChip(
-                                icon: Icons.directions_walk,
-                                label: (!_hasValidLocation || !item.hasRoute)
-                                    ? '-- min'
-                                    : localizations.walkTime(item.walkingMinutes),
-                                faded: !(item.hasRoute && _hasValidLocation),
+                            Text(
+                              item.poi.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Gabarito',
                               ),
                             ),
-                            // Tempo de fila (apenas categorias com fila)
-                            if ([
-                              'wc',
-                              'food',
-                              'store',
-                              'bar',
-                              'bar_p',
-                            ].contains(item.poi.category) ||
-                                item.poi.name
-                                    .toLowerCase()
-                                    .contains('farmácia'))
-                              AnimatedSelectionGlow(
-                                play: isSelected,
-                                child: _buildInfoChip(
-                                  icon: Icons.group,
-                                  label: localizations
-                                      .queueTime(item.waitMinutes),
-                                ),
-                              ),
-                            // Badge "Mais rápido"
-                            if (isFastest)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  localizations.faster,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                // Tempo de caminhada
+                                AnimatedSelectionGlow(
+                                  play: isSelected,
+                                  child: _buildInfoChip(
+                                    icon: Icons.directions_walk,
+                                    label:
+                                        (!_hasValidLocation || !item.hasRoute)
+                                        ? '-- min'
+                                        : localizations.walkTime(
+                                            item.walkingMinutes,
+                                          ),
+                                    faded:
+                                        !(item.hasRoute && _hasValidLocation),
                                   ),
                                 ),
-                              ),
+                                // Tempo de fila (apenas categorias com fila)
+                                if ([
+                                      'wc',
+                                      'food',
+                                      'store',
+                                      'bar',
+                                      'bar_p',
+                                    ].contains(item.poi.category) ||
+                                    item.poi.name.toLowerCase().contains(
+                                      'farmácia',
+                                    ))
+                                  AnimatedSelectionGlow(
+                                    play: isSelected,
+                                    child: _buildInfoChip(
+                                      icon: Icons.group,
+                                      label: localizations.queueTime(
+                                        item.waitMinutes,
+                                      ),
+                                    ),
+                                  ),
+                                // Badge "Mais rápido"
+                                if (isFastest)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      localizations.faster,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  AnimatedSelectionGlow(
-                    play: isSelected,
-                    child: Text(
-                      (!_hasValidLocation || !item.hasRoute)
-                          ? '-- m'
-                          : '${item.distance.toStringAsFixed(0)}m',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
                       ),
-                    ),
+                      AnimatedSelectionGlow(
+                        play: isSelected,
+                        child: Text(
+                          (!_hasValidLocation || !item.hasRoute)
+                              ? '-- m'
+                              : '${item.distance.toStringAsFixed(0)}m',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ); // end Padding
-      },
-    ); // end ListView.builder
+            ); // end Padding
+          },
+        ); // end ListView.builder
       }, // end AnimatedBuilder builder
     ); // end return AnimatedBuilder
   }

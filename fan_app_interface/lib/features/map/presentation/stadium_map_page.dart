@@ -1000,9 +1000,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
                             ))
                           _buildInfoChip(
                             icon: Icons.group,
-                            label: AppLocalizations.of(
-                              context,
-                            )!.queueTime(
+                            label: AppLocalizations.of(context)!.queueTime(
                               WaittimeCache()
                                       .getWaitTime(_selectedPOI!.id)
                                       ?.round() ??

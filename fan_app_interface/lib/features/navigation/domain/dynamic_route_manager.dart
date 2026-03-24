@@ -1,4 +1,4 @@
-import 'dart:async';
+  import 'dart:async';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/services/routing_service.dart';
@@ -82,7 +82,7 @@ class DynamicRouteManager {
     // Reset distance tracking so the new destination is evaluated fresh
     _lastDistanceToDestination = null;
     _movingAwayDestinationStreak = 0;
-    print('[DynamicRouteManager] 🎯 Destination updated to: $destinationId');
+    print('[DynamicRouteManager] Destination updated to: $destinationId');
   }
 
   /// Inicia monitorização automática da posição

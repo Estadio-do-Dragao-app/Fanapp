@@ -1,7 +1,7 @@
 /// Configuração do modo do mapa — Indoor vs Outdoor
 ///
 /// Para trocar de modo, basta alterar o valor de [mode]:
-///   - MapMode.outdoor → OSM tiles + POIs dinâmicos do Overpass
+///   - MapMode.outdoor → OSM tiles (POIs OSM opcionais)
 ///   - MapMode.indoor  → FloorPlanLayer + POIs estáticos da BD
 ///
 /// Tudo o resto (navegação, routing, coordenadas GPS) funciona igual.
@@ -9,6 +9,9 @@ class MapConfig {
   // ==================== MODO ====================
   // Alterar AQUI para trocar entre indoor e outdoor:
   static const MapMode mode = MapMode.outdoor;
+
+  // Quando true, mostra apenas POIs da BD do Map-Service.
+  static const bool onlyDatabasePOIs = true;
 
   // ==================== FLAGS DERIVADAS ====================
 
@@ -19,7 +22,7 @@ class MapConfig {
   static bool get useFloorPlan => mode == MapMode.indoor;
 
   /// Buscar POIs dinâmicos do OpenStreetMap (endpoint /pois/osm)
-  static bool get useOSMPOIs => mode == MapMode.outdoor;
+  static bool get useOSMPOIs => mode == MapMode.outdoor && !onlyDatabasePOIs;
 
   /// Raio máximo (metros) para considerar uma posição walkable
   static double get walkableRadius => mode == MapMode.outdoor ? 50.0 : 15.0;
