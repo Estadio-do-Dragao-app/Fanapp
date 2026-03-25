@@ -42,7 +42,7 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   http: ^1.2.2
-  shared_preferences: ^2.3.3 # Keeping the higher version for shared_preferences
+  shared_preferences: ^2.3.3
   
   # Ticket Scanner
   mobile_scanner: ^5.1.1
@@ -50,8 +50,19 @@ dependencies:
   hive_flutter: ^1.1.0
   path_provider: ^2.1.5
   
+  connectivity_plus: ^6.1.4
+
   # MQTT for real-time data from broker
   mqtt_client: ^10.0.0
+  flutter_map_compass: ^1.1.1
+  flutter_map_location_marker: ^9.1.1
+  flutter_map_animations: ^0.8.0
+  flutter_map_heatmap: ^0.0.8
+  geolocator: ^13.0.2
+  cached_network_image: ^3.4.1
+
+  # Location and Identity
+  uuid: ^4.4.0
 
 dev_dependencies:
   flutter_test:

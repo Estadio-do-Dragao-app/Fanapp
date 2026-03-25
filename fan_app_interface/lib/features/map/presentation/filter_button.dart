@@ -6,9 +6,6 @@ class FilterButton extends StatefulWidget {
   final bool showHeatmap;
   final bool isHeatmapAvailable;
   final ValueChanged<bool> onHeatmapChanged;
-  final int currentFloor;
-  final ValueChanged<int> onFloorChanged;
-  final List<int> availableFloors;
   final bool avoidStairs;
   final ValueChanged<bool> onAvoidStairsChanged;
   final VoidCallback? onExpandedChanged;
@@ -18,9 +15,6 @@ class FilterButton extends StatefulWidget {
     required this.showHeatmap,
     this.isHeatmapAvailable = true,
     required this.onHeatmapChanged,
-    this.currentFloor = 0,
-    required this.onFloorChanged,
-    this.availableFloors = const [0, 1],
     this.avoidStairs = false,
     required this.onAvoidStairsChanged,
     this.onExpandedChanged,
@@ -103,7 +97,7 @@ class FilterButtonState extends State<FilterButton>
               ],
             ),
             child: Icon(
-              Icons.tune,
+              Icons.settings,
               color: _isExpanded ? Colors.white : const Color(0xFF161A3E),
               size: 24,
             ),
@@ -136,7 +130,7 @@ class FilterButtonState extends State<FilterButton>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.filter_alt,
+                        Icons.settings,
                         color: Colors.white.withOpacity(0.8),
                         size: 18,
                       ),
@@ -153,16 +147,10 @@ class FilterButtonState extends State<FilterButton>
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Divider(color: Colors.white24, height: 1),
+                  const Divider(color: Colors.grey, height: 1),
                   const SizedBox(height: 12),
-
-                  // Floor selector
-                  _buildFloorSelector(context),
-                  const SizedBox(height: 12),
-                  const Divider(color: Colors.white24, height: 1),
 
                   // Accessibility toggle
-                  const SizedBox(height: 12),
                   _buildAccessibilityToggle(context),
 
                   const SizedBox(height: 12),
@@ -175,65 +163,6 @@ class FilterButtonState extends State<FilterButton>
               ),
             ),
           ),
-      ],
-    );
-  }
-
-  Widget _buildFloorSelector(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.layers, color: Colors.white, size: 20),
-        const SizedBox(width: 10),
-        SizedBox(
-          width: 120,
-          child: Text(
-            AppLocalizations.of(context)!.floor,
-            style: const TextStyle(
-              color: Colors.white,
-              fontFamily: 'Gabarito',
-              fontSize: 14,
-            ),
-          ),
-        ),
-        // Floor buttons
-        ...widget.availableFloors.map((floor) {
-          final isSelected = floor == widget.currentFloor;
-          return Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: GestureDetector(
-              onTap: () => widget.onFloorChanged(floor),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? const Color(0xFF929AD4)
-                      : Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isSelected
-                        ? const Color(0xFF929AD4)
-                        : Colors.white.withOpacity(0.3),
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    '$floor',
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white70,
-                      fontFamily: 'Gabarito',
-                      fontSize: 14,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
       ],
     );
   }

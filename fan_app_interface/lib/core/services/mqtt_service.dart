@@ -26,6 +26,7 @@ class MqttService {
   static const String topicSecurity = 'stadium/events/security';
   static const String topicAlerts = 'alerts/broadcast';
   static const String topicRouting = 'stadium/services/routing/#';
+  static const String topicGps = 'stadium/location/gps';
 
   MqttServerClient? _client;
   bool _isConnected = false;
@@ -59,6 +60,28 @@ class MqttService {
       _allEventsController.stream;
   Stream<Map<String, dynamic>> get routingStream => _routingController.stream;
   Stream<Map<String, dynamic>> get waittimeStream => _waittimeController.stream;
+
+  /// Publish user location (GPS) to the broker
+  /// This is used for anonymous crowd tracking
+  void publishLocation(String userId, double lat, double lng) {
+    if (_client == null || !_isConnected) return;
+
+    final Map<String, dynamic> message = {
+      'user_id': userId,
+      'lat': lat,
+      'lng': lng,
+      'timestamp': DateTime.now().millisecondsSinceEpoch / 1000.0,
+    };
+
+    final builder = MqttClientPayloadBuilder();
+    builder.addString(json.encode(message));
+
+    _client!.publishMessage(
+      topicGps,
+      MqttQos.atMostOnce, // Low priority
+      builder.payload!,
+    );
+  }
 
   /// Check if connected to broker
   bool get isConnected => _isConnected;
@@ -178,6 +201,7 @@ class MqttService {
 
         switch (topic) {
           case topicCongestion:
+            print('[MqttService] 🔥 Congestion message received: ${jsonData['cell_id']}');
             _congestionController.add(jsonData);
             break;
           case topicAlerts:
@@ -191,6 +215,9 @@ class MqttService {
             break;
           case topicAllEvents:
             _allEventsController.add(jsonData);
+            break;
+          case topicGps:
+            // High frequency data - ignored by client to avoid lag
             break;
         }
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math';
 import '../../map/presentation/stadium_map_page.dart';
@@ -9,7 +9,11 @@ import '../../map/data/models/route_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../navigation/presentation/navigation_page.dart';
-import '../../navigation/data/services/user_position_service.dart';
+
+import '../../../core/utils/geographic_utils.dart';
+import '../../../core/utils/top_feedback.dart';
+import '../../../core/widgets/poi_icon.dart';
+import '../../../core/widgets/animated_glow.dart';
 import '../../map/data/services/waittime_cache.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 
@@ -74,12 +78,11 @@ class DestinationSelectionPage extends StatefulWidget {
       _DestinationSelectionPageState();
 }
 
-class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
+class _DestinationSelectionPageState extends State<DestinationSelectionPage>
+    with TickerProviderStateMixin {
   final MapService _mapService = MapService();
   final RoutingService _routingService = RoutingService();
-  final MapController _mapController = MapController();
-
-  static const String userNodeId = 'N1';
+  late final AnimatedMapController _animatedMapController;
 
   int? selectedIndex;
   List<POIWithRoute> _poisWithRoutes = [];
@@ -101,17 +104,32 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
   double _userX = 0.0;
   double _userY = 0.0;
   int _userLevel = 0;
+  bool _hasValidLocation = true;
+  bool _didAutoZoomDefaultPOI = false;
+  bool _isAutoZoomingDefaultPOI = false;
 
   @override
   void initState() {
     super.initState();
+    _animatedMapController = AnimatedMapController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
     _loadPOIs();
+  }
+
+  @override
+  void dispose() {
+    _animatedMapController.dispose();
+    super.dispose();
   }
 
   String _normalizeCategory(String backendCategory) {
     final category = backendCategory.toLowerCase();
     switch (category) {
       case 'bar':
+      case 'bar_p':
       case 'restaurant':
         return 'food';
       case 'restroom':
@@ -121,14 +139,24 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       case 'emergency_exit':
         return 'exit';
       case 'merchandise':
-        return 'merchandising';
+      case 'merchandising':
+      case 'store':
+        return 'shop';
+      case 'parking':
+      case 'parking_lot':
+      case 'parkinglot':
+      case 'car_park':
+      case 'carpark':
+      case 'park':
+        return 'parking';
       case 'first_aid':
       case 'firstaid':
       case 'first-aid':
         return 'first_aid';
       case 'information':
       case 'info':
-        return 'information';
+      case 'poi':
+        return 'poi';
       default:
         return category;
     }
@@ -138,6 +166,47 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
   }
 
+  /// Sem GPS, garante que o POI selecionado por defeito (índice 0) também faz zoom.
+  /// O segundo zoom curto cobre casos em que o mapa ainda está a terminar o carregamento.
+  void _scheduleDefaultPOIAutoZoom() {
+    if (_hasValidLocation || _poisWithRoutes.isEmpty || selectedIndex != 0)
+      return;
+    if (_didAutoZoomDefaultPOI || _isAutoZoomingDefaultPOI) return;
+
+    _isAutoZoomingDefaultPOI = true;
+    final defaultPoi = _poisWithRoutes[0].poi;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _isAutoZoomingDefaultPOI = false;
+        return;
+      }
+
+      if (_hasValidLocation || _poisWithRoutes.isEmpty || selectedIndex != 0) {
+        _isAutoZoomingDefaultPOI = false;
+        return;
+      }
+
+      _zoomToPOI(defaultPoi);
+
+      Future.delayed(const Duration(milliseconds: 450), () {
+        if (!mounted) {
+          _isAutoZoomingDefaultPOI = false;
+          return;
+        }
+
+        if (!_hasValidLocation &&
+            _poisWithRoutes.isNotEmpty &&
+            selectedIndex == 0) {
+          _zoomToPOI(defaultPoi);
+        }
+
+        _didAutoZoomDefaultPOI = true;
+        _isAutoZoomingDefaultPOI = false;
+      });
+    });
+  }
+
   /// Carrega POIs e inicia cálculo de rotas em background
   Future<void> _loadPOIs() async {
     setState(() {
@@ -145,34 +214,40 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       _errorMessage = null;
       _allRoutesCalculated = false;
       _fastestIndex = null;
+      _didAutoZoomDefaultPOI = false;
+      _isAutoZoomingDefaultPOI = false;
     });
 
     try {
       final allPois = await _mapService.getAllPOIs();
       final allNodes = await _mapService.getAllNodes();
 
-      // Carregar posição do utilizador do serviço
-      final savedPosition = await UserPositionService.getPosition();
-      if (savedPosition.x != 0.0 || savedPosition.y != 0.0) {
-        _userX = savedPosition.x;
-        _userY = savedPosition.y;
-        _userLevel = savedPosition.level; // Usar nível guardado
-        print(
-          '[DestinationSelection] 📍 Usando posição guardada: ($_userX, $_userY, level=$_userLevel)',
-        );
+      // Carregar posição real do utilizador (GPS ou Saved)
+      final userPos = await GeographicUtils.getCurrentUserPosition();
+
+      if (userPos == null) {
+        // Se não houver GPS, mostramos o aviso mas deixamos ver a lista
+        _userX = 0.0;
+        _userY = 0.0;
+        _userLevel = 0;
+        _hasValidLocation = false;
+
+        if (mounted) {
+          AppTopFeedback.showWarning(
+            context,
+            AppLocalizations.of(context)!.gpsRequiredMessage,
+          );
+        }
       } else {
-        // Fallback para N1
-        final userNode = allNodes.firstWhere(
-          (n) => n.id == userNodeId,
-          orElse: () => allNodes.first,
-        );
-        _userX = userNode.x;
-        _userY = userNode.y;
-        _userLevel = userNode.level;
-        print(
-          '[DestinationSelection] 📍 Fallback para N1: ($_userX, $_userY, level=$_userLevel)',
-        );
+        _userX = userPos.x;
+        _userY = userPos.y;
+        _userLevel = userPos.level;
+        _hasValidLocation = true;
       }
+
+      print(
+        '[DestinationSelection] Usando posição real/guardada: ($_userX, $_userY, level=$_userLevel)',
+      );
 
       _allNodes = allNodes;
 
@@ -184,14 +259,21 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
 
       // Criar lista com distâncias estimadas (usando posição real do utilizador)
       List<POIWithRoute> poisWithRoutes = categoryPois.map((poi) {
-        final distance = _euclideanDistance(_userX, _userY, poi.x, poi.y);
+        final distance = _hasValidLocation
+            ? _euclideanDistance(_userX, _userY, poi.x, poi.y)
+            : 0.0;
         return POIWithRoute(poi: poi, estimatedDistance: distance);
       }).toList();
 
-      // Ordenar por distância euclidiana (aproximação inicial)
-      poisWithRoutes.sort(
-        (a, b) => a.estimatedDistance.compareTo(b.estimatedDistance),
-      );
+      if (_hasValidLocation) {
+        // Ordenar por distância euclidiana (aproximação inicial)
+        poisWithRoutes.sort(
+          (a, b) => a.estimatedDistance.compareTo(b.estimatedDistance),
+        );
+      } else {
+        // Sem GPS, ordenar alfabeticamente
+        poisWithRoutes.sort((a, b) => a.poi.name.compareTo(b.poi.name));
+      }
 
       setState(() {
         _poisWithRoutes = poisWithRoutes;
@@ -207,7 +289,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
 
       // Calcular rota do primeiro selecionado imediatamente
       if (_poisWithRoutes.isNotEmpty) {
-        _calculateRouteForSelected(0);
+        if (_hasValidLocation) {
+          _calculateRouteForSelected(0);
+        } else {
+          _scheduleDefaultPOIAutoZoom();
+        }
       }
     } catch (e) {
       setState(() {
@@ -219,7 +305,14 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
 
   /// Calcula todas as rotas em paralelo no background
   Future<void> _calculateAllRoutesInBackground() async {
-    if (_poisWithRoutes.isEmpty) return;
+    if (_poisWithRoutes.isEmpty || !_hasValidLocation) {
+      if (mounted && !_hasValidLocation) {
+        setState(() {
+          _allRoutesCalculated = true;
+        });
+      }
+      return;
+    }
 
     setState(() {
       _isCalculatingAllRoutes = true;
@@ -248,10 +341,12 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       await Future.wait(futures);
 
       if (mounted) {
-        // Reordenar a lista pelo tempo total (Menor tempo primeiro)
-        _poisWithRoutes.sort(
-          (a, b) => a.totalEtaMinutes.compareTo(b.totalEtaMinutes),
-        );
+        if (_hasValidLocation) {
+          // Reordenar a lista pelo tempo total (Menor tempo primeiro)
+          _poisWithRoutes.sort(
+            (a, b) => a.totalEtaMinutes.compareTo(b.totalEtaMinutes),
+          );
+        }
 
         // Como ordenámos, o mais rápido é o primeiro (índice 0)
         int fastestIdx = 0;
@@ -301,6 +396,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       return;
     }
 
+    if (!_hasValidLocation) return;
+
     setState(() {
       _isCalculatingSelectedRoute = true;
     });
@@ -338,22 +435,9 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
     }
   }
 
-  /// Converte coordenadas do backend para LatLng (mesmo método do StadiumMapPage)
   LatLng _convertToLatLng(double x, double y) {
-    const backendCenterX = 499.0;
-    const backendCenterY = 400.0;
-    const stadiumCenterLat = 41.161758;
-    const stadiumCenterLng = -8.583933;
-    const unitsToLatDegrees = 0.000004;
-    const unitsToLngDegrees = 0.000005;
-
-    final centeredX = x - backendCenterX;
-    final centeredY = y - backendCenterY;
-
-    return LatLng(
-      stadiumCenterLat + (centeredY * unitsToLatDegrees),
-      stadiumCenterLng + (centeredX * unitsToLngDegrees),
-    );
+    // x = Longitude, y = Latitude no nosso novo modelo
+    return LatLng(y, x);
   }
 
   /// Faz zoom para mostrar o início e fim da rota
@@ -390,32 +474,24 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       if (maxDiff > 0.002) zoom = 16.5;
       if (maxDiff > 0.003) zoom = 16.0;
 
-      _mapController.move(LatLng(centerLat, centerLng), zoom);
+      _animatedMapController.animateTo(
+        dest: LatLng(centerLat, centerLng),
+        zoom: zoom,
+      );
     } catch (e) {
       print('[DestinationSelection] Erro ao fazer zoom: $e');
     }
   }
 
-  static IconData getCategoryIcon(String categoryId) {
-    switch (categoryId.toLowerCase()) {
-      case 'seat':
-        return Icons.event_seat;
-      case 'wc':
-        return Icons.wc;
-      case 'food':
-        return Icons.fastfood;
-      case 'bar':
-        return Icons.local_bar;
-      case 'exit':
-        return Icons.meeting_room;
-      case 'first_aid':
-        return Icons.local_hospital;
-      case 'information':
-        return Icons.info;
-      case 'merchandising':
-        return Icons.store;
-      default:
-        return Icons.place;
+  /// Faz zoom para um POI específico (usado quando não há GPS)
+  void _zoomToPOI(POIModel poi) {
+    try {
+      _animatedMapController.animateTo(
+        dest: _convertToLatLng(poi.x, poi.y),
+        zoom: 18.0,
+      );
+    } catch (e) {
+      print('[DestinationSelection] Erro ao fazer zoom para POI: $e');
     }
   }
 
@@ -441,11 +517,12 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
             child: Stack(
               children: [
                 StadiumMapPage(
-                  mapController: _mapController,
+                  mapController: _animatedMapController.mapController,
                   highlightedRoute: _selectedRoute,
                   highlightedPOI: selectedPOI,
                   showAllPOIs: false,
                   showOtherPOIs: false,
+                  interactivePOIs: false,
                 ),
                 if (_isCalculatingSelectedRoute)
                   Positioned(
@@ -457,10 +534,10 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(
+                          const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
@@ -468,10 +545,13 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
                               color: Colors.white,
                             ),
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text(
-                            'A calcular rota...',
-                            style: TextStyle(color: Colors.white, fontSize: 12),
+                            localizations.calculatingRoute,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -557,17 +637,33 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
               right: 24,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      (selectedIndex != null && _selectedRoute != null)
-                      ? Colors.indigo[200]
-                      : Colors.grey[600],
+                  backgroundColor: Colors.indigo[200],
+                  disabledBackgroundColor:
+                      Colors.grey[700], // Fundo cinzento quando indisponível
+                  disabledForegroundColor: Colors.white70, // Texto mais fraco
                   minimumSize: const Size(double.infinity, 48),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: (selectedIndex != null && _selectedRoute != null)
+                onPressed: selectedIndex != null
                     ? () {
+                        if (!_hasValidLocation) {
+                          AppTopFeedback.showWarning(
+                            context,
+                            localizations.gpsRequiredMessage,
+                          );
+                          return;
+                        }
+
+                        if (_selectedRoute == null) {
+                          AppTopFeedback.showWarning(
+                            context,
+                            localizations.routeCalculationErrorMessage,
+                          );
+                          return;
+                        }
+
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -614,7 +710,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
             ElevatedButton.icon(
               onPressed: _loadPOIs,
               icon: const Icon(Icons.refresh),
-              label: const Text('Tentar novamente'),
+              label: Text(localizations.tryAgain),
             ),
           ],
         ),
@@ -630,167 +726,194 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-      itemCount: _poisWithRoutes.length,
-      itemBuilder: (context, index) {
-        final item = _poisWithRoutes[index];
-        final isSelected = selectedIndex == index;
-        final isFastest = _allRoutesCalculated && _fastestIndex == index;
+    return AnimatedBuilder(
+      animation: WaittimeCache(),
+      builder: (context, child) {
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+          itemCount: _poisWithRoutes.length,
+          itemBuilder: (context, index) {
+            final item = _poisWithRoutes[index];
+            final isSelected = selectedIndex == index;
+            final isDepartmentOrPoi =
+                _normalizeCategory(widget.categoryId) == 'department' ||
+                _normalizeCategory(widget.categoryId) == 'poi';
+            final isFastest =
+                _allRoutesCalculated &&
+                _fastestIndex == index &&
+                !isDepartmentOrPoi;
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: InkWell(
-            onTap: () {
-              setState(() {
-                selectedIndex = index;
-                _selectedRoute = item.route;
-              });
-              if (item.hasRoute) {
-                // Já tem rota - fazer zoom imediatamente
-                _zoomToRoute(item.route!);
-              } else {
-                // Calcular rota (zoom será feito após cálculo)
-                _calculateRouteForSelected(index);
-              }
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF161A3E),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isSelected
-                      ? Colors.white
-                      : (isFastest ? Colors.green : Colors.white24),
-                  width: isSelected ? 3 : (isFastest ? 2 : 1),
-                ),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(
-                    getCategoryIcon(widget.categoryId),
-                    color: Colors.white,
-                    size: 32,
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    selectedIndex = index;
+                    _selectedRoute = item.route;
+                  });
+                  if (item.hasRoute) {
+                    // Já tem rota - fazer zoom (atrasar para evitar conflito com build)
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _zoomToRoute(item.route!);
+                      }
+                    });
+                  } else if (!_hasValidLocation) {
+                    // Sem GPS - fazer zoom apenas para o POI
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _zoomToPOI(item.poi);
+                      }
+                    });
+                  } else {
+                    // Calcular rota (zoom será feito após cálculo no _calculateRouteForSelected)
+                    _calculateRouteForSelected(index);
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161A3E),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected ? Colors.white : Colors.white24,
+                      width: isSelected ? 3 : 1,
+                    ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.poi.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Gabarito',
-                          ),
-                        ),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      POIIcon(
+                        categoryId: widget.categoryId,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Piso
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.indigo.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.white30),
-                              ),
-                              child: Text(
-                                'Piso ${item.poi.level}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            Text(
+                              item.poi.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Gabarito',
                               ),
                             ),
-                            // Tempo de caminhada
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                const Icon(
-                                  Icons.directions_walk,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  item.hasRoute
-                                      ? '${item.walkingMinutes} min'
-                                      : '~${item.walkingMinutes} min',
-                                  style: TextStyle(
-                                    color: item.hasRoute
-                                        ? Colors.white
-                                        : Colors.white70,
+                                // Tempo de caminhada
+                                AnimatedSelectionGlow(
+                                  play: isSelected,
+                                  child: _buildInfoChip(
+                                    icon: Icons.directions_walk,
+                                    label:
+                                        (!_hasValidLocation || !item.hasRoute)
+                                        ? '-- min'
+                                        : localizations.walkTime(
+                                            item.walkingMinutes,
+                                          ),
+                                    faded:
+                                        !(item.hasRoute && _hasValidLocation),
                                   ),
                                 ),
-                              ],
-                            ),
-                            // Tempo de espera (se existir)
-                            if (item.waitMinutes > 0)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.hourglass_bottom,
-                                    color: Colors.orange,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '+${item.waitMinutes} min',
-                                    style: const TextStyle(
-                                      color: Colors.orange,
+                                // Tempo de fila (apenas categorias com fila)
+                                if ([
+                                      'wc',
+                                      'food',
+                                      'store',
+                                      'bar',
+                                      'bar_p',
+                                    ].contains(item.poi.category) ||
+                                    item.poi.name.toLowerCase().contains(
+                                      'farmácia',
+                                    ))
+                                  AnimatedSelectionGlow(
+                                    play: isSelected,
+                                    child: _buildInfoChip(
+                                      icon: Icons.group,
+                                      label: localizations.queueTime(
+                                        item.waitMinutes,
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            // Badge "Mais rápido"
-                            if (isFastest)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  localizations.faster,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
+                                // Badge "Mais rápido"
+                                if (isFastest)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      localizations.faster,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      AnimatedSelectionGlow(
+                        play: isSelected,
+                        child: Text(
+                          (!_hasValidLocation || !item.hasRoute)
+                              ? '-- m'
+                              : '${item.distance.toStringAsFixed(0)}m',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '${item.distance.toStringAsFixed(0)}m',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+                ),
               ),
+            ); // end Padding
+          },
+        ); // end ListView.builder
+      }, // end AnimatedBuilder builder
+    ); // end return AnimatedBuilder
+  }
+
+  Widget _buildInfoChip({
+    required IconData icon,
+    required String label,
+    bool faded = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF252A5E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: faded ? Colors.white54 : Colors.white, size: 14),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: faded ? Colors.white54 : Colors.white,
+              fontSize: 13,
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

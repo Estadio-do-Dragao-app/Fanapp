@@ -35,6 +35,7 @@ class POIDetailsSheet extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1E1E3F),
+      barrierColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -141,22 +142,7 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
           ),
           const SizedBox(height: 8),
 
-          // Piso do POI
-          Row(
-            children: [
-              const Icon(Icons.layers, color: Colors.white54, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                AppLocalizations.of(context)!.floorLabel(widget.poi.level),
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
 
           // Informações de tempo
           Row(
@@ -170,17 +156,26 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                       )!.walkTime((widget.route!.etaSeconds / 60).round())
                     : AppLocalizations.of(context)!.walkTime(3),
               ),
-              const SizedBox(width: 24),
-
-              // Tempo de fila (do backend, ou 0 se não disponível)
-              _buildTimeInfo(
-                icon: Icons.group,
-                label: widget.route?.waitTime != null
-                    ? AppLocalizations.of(
-                        context,
-                      )!.queueTime(widget.route!.waitTime!.round())
-                    : AppLocalizations.of(context)!.queueTime(0),
-              ),
+              // Tempo de fila (do backend, ou 0 se não disponível) - Apenas categorias com fila
+              if ([
+                    'wc',
+                    'food',
+                    // 'ticket', // Ticket feature temporarily disabled
+                    'store',
+                    'bar',
+                    'bar_p',
+                  ].contains(widget.poi.category) ||
+                  widget.poi.name.toLowerCase().contains('farmácia')) ...[
+                const SizedBox(width: 24),
+                _buildTimeInfo(
+                  icon: Icons.group,
+                  label: widget.route?.waitTime != null
+                      ? AppLocalizations.of(
+                          context,
+                        )!.queueTime(widget.route!.waitTime!.round())
+                      : AppLocalizations.of(context)!.queueTime(0),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 24),

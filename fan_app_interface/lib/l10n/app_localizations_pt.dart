@@ -106,15 +106,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deleteTicket => 'Apagar Bilhete';
 
   @override
-  String get deleteTicketConfirm =>
-      'Tem a certeza que quer apagar este bilhete?';
+  String get deleteTicketConfirm => 'Tem a certeza que quer apagar este bilhete?';
 
   @override
   String get noTicketScanned => 'Nenhum bilhete digitalizado';
 
   @override
-  String get noTicketScannedMessage =>
-      'Por favor digitalize o código QR do seu bilhete para navegar até ao seu lugar.';
+  String get noTicketScannedMessage => 'Por favor digitalize o código QR do seu bilhete para navegar até ao seu lugar.';
 
   @override
   String get scanNow => 'Digitalizar Agora';
@@ -138,7 +136,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get floor => 'Piso';
 
   @override
-  String get heatmap => 'Mapa de calor';
+  String get heatmap => 'Congestionamento';
 
   @override
   String get accessibility => 'Acessibilidade';
@@ -237,4 +235,52 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectionError => 'Erro de conexão. Verifique a sua internet.';
+
+  @override
+  String get internetDisconnected => 'Ligação à internet perdida.';
+
+  @override
+  String get internetReconnected => 'Ligação à internet restabelecida.';
+
+  @override
+  String get addToFavorites => 'Adicionar aos favoritos';
+
+  @override
+  String get removeFromFavorites => 'Remover dos favoritos';
+
+  @override
+  String get calculatingRoute => 'A calcular rota...';
+
+  @override
+  String get tryAgain => 'Tentar novamente';
+
+  @override
+  String get close => 'Fechar';
+
+  @override
+  String get gpsRequired => 'GPS Necessário';
+
+  @override
+  String get gpsRequiredMessage => 'Não é possível calcular a rota sem a sua localização (GPS).';
+
+  @override
+  String get savedPlaces => 'Favoritos';
+
+  @override
+  String get noSavedPlaces => 'Ainda não guardou nenhum lugar.';
+
+  @override
+  String get more => 'Mais';
+
+  @override
+  String get useStairs => 'Use as escadas';
+
+  @override
+  String get useRamp => 'Use a rampa';
+
+  @override
+  String get routeCalculationError => 'Erro de cálculo de rota';
+
+  @override
+  String get routeCalculationErrorMessage => 'Não foi possível calcular uma rota para o destino.';
 }

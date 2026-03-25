@@ -7,11 +7,39 @@ import '../models/gate_model.dart';
 import '../models/tile_model.dart';
 import 'local_map_cache.dart';
 import '../../../../core/config/api_config.dart';
+import '../../../../core/config/map_config.dart';
 
 /// Service para comunicar com o Map-Service
 /// Backend: https://github.com/Estadio-do-Dragao-app/Map-Service
 class MapService {
-  static const String baseUrl = ApiConfig.mapService;
+  static String get baseUrl => ApiConfig.mapService;
+
+  static const Set<String> _forcedEmergencyExitNames = {
+    'nave desportiva da ua',
+    'universidade - antiga reitoria b',
+    'universidade - antiga reuturia b',
+  };
+
+  POIModel _applyForcedEmergencyExit(POIModel poi) {
+    final normalizedName = poi.name.trim().toLowerCase();
+    if (!_forcedEmergencyExitNames.contains(normalizedName)) {
+      return poi;
+    }
+
+    if (poi.category.toLowerCase() == 'emergency_exit') {
+      return poi;
+    }
+
+    return POIModel(
+      id: poi.id,
+      name: poi.name,
+      category: 'emergency_exit',
+      description: poi.description,
+      x: poi.x,
+      y: poi.y,
+      level: poi.level,
+    );
+  }
 
   /// GET /map - Retorna mapa completo (nodes, edges, closures)
   Future<Map<String, dynamic>> getCompleteMap() async {
@@ -99,42 +127,85 @@ class MapService {
 
   /// GET /nodes - Buscar todos os POIs a partir dos nós
   /// O endpoint /pois do backend é muito restritivo, por isso filtramos client-side
-  /// Tipos POI: gate, restroom, food, bar, emergency_exit, first_aid, information, merchandise, stairs, ramp
+  /// Tipos POI: gate, restroom, food, bar, emergency_exit, first_aid, information, merchandise
   Future<List<POIModel>> getAllPOIs() async {
     // Tipos que consideramos POIs (excluindo corridor, normal, seat, row_aisle)
     const poiTypes = [
-      'gate',
       'restroom',
       'food',
       'bar',
       'emergency_exit',
       'first_aid',
       'information',
-      'merchandise',
-      'stairs',
-      'ramp',
-      'poi', // Tipo genérico
+      'poi', // generic type
       'entrance',
-      'shop',
+      'wc',
+      'library',
+      'parking',
+      'cafe',
+      'restaurant',
+      'cgd',
     ];
 
     final response = await http
         .get(Uri.parse('$baseUrl/nodes'))
         .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
+    List<POIModel> staticPois = [];
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
-      // Filtrar apenas nós que são POIs
-      final pois = data
+      staticPois = data
           .where((node) => poiTypes.contains(node['type']))
           .map((json) => POIModel.fromJson(json))
           .toList();
       print(
-        '[MapService] ${pois.length} POIs carregados de ${data.length} nós',
+        '[MapService] ${staticPois.length} POIs estáticos carregados de ${data.length} nós',
       );
-      return pois;
+    }
+
+    // Merge com POIs dinâmicos do OSM (apenas em modo outdoor)
+    if (MapConfig.useOSMPOIs) {
+      try {
+        final osmPois = await getOSMPOIs();
+        final existingNames = staticPois
+            .map((p) => p.name.toLowerCase())
+            .toSet();
+        final newOsmPois = osmPois
+            .where((p) => !existingNames.contains(p.name.toLowerCase()))
+            .toList();
+        staticPois.addAll(newOsmPois);
+        print(
+          '[MapService] +${newOsmPois.length} POIs do OSM (${osmPois.length} total, ${osmPois.length - newOsmPois.length} duplicados)',
+        );
+      } catch (e) {
+        print(
+          '[MapService] ⚠️ Falha ao buscar POIs OSM: $e (usando apenas estáticos)',
+        );
+      }
+    }
+
+    return staticPois
+        .map(_applyForcedEmergencyExit)
+        .where(
+          (poi) =>
+              poi.category.toLowerCase() != 'stairs' &&
+              poi.category.toLowerCase() != 'ramp',
+        )
+        .toList();
+  }
+
+  /// GET /pois/osm - Buscar POIs dinâmicos do OpenStreetMap
+  Future<List<POIModel>> getOSMPOIs() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/pois/osm'))
+        .timeout(const Duration(seconds: 35)); // Overpass pode demorar
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final List<dynamic> pois = data['pois'] ?? [];
+      return pois.map((json) => POIModel.fromJson(json)).toList();
     } else {
-      throw Exception('Failed to load POIs: ${response.statusCode}');
+      throw Exception('Failed to load OSM POIs: ${response.statusCode}');
     }
   }
 

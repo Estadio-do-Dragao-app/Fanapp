@@ -5,7 +5,7 @@ import '../../../../core/config/api_config.dart';
 
 /// Serviço para comunicar com a API do Ticket-Service
 class TicketService {
-  static const String baseUrl = ApiConfig.ticketService;
+  static String get baseUrl => ApiConfig.ticketService;
 
   /// GET /ticket/{ticket_id} - Obtém informação de um bilhete
   Future<TicketModel> getTicket(int ticketId) async {

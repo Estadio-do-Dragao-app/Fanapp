@@ -5,9 +5,9 @@ import '../../../map/data/models/poi_model.dart';
 /// Bottom sheet expansível com informações de navegação
 /// Estado normal (compacto) e expandido (com botão End Route)
 class NavigationBottomSheet extends StatefulWidget {
-  final String arrivalTime; // Ex: "19:39"
-  final String remainingTime; // Ex: "0:05 hrs"
-  final String remainingDistance; // Ex: "40 m"
+  final String arrivalTime;
+  final String remainingTime;
+  final String remainingDistance;
   final POIModel destination;
   final VoidCallback onEndRoute;
   final ValueChanged<bool>? onExpansionChanged;
@@ -33,6 +33,7 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
   bool _isExpanded = false;
   late AnimationController _animationController;
   late Animation<double> _heightAnimation;
+  double _dragDeltaY = 0;
 
   @override
   void initState() {
@@ -41,7 +42,7 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _heightAnimation = Tween<double>(begin: 120, end: 280).animate(
+    _heightAnimation = Tween<double>(begin: 110, end: 280).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
   }
@@ -61,33 +62,48 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
         _animationController.reverse();
       }
     });
-    // Notify parent about expansion change
     widget.onExpansionChanged?.call(_isExpanded);
   }
 
+  void _setExpanded(bool expanded) {
+    if (_isExpanded == expanded) return;
+    _toggleExpanded();
+  }
+
+  void _onVerticalDragStart(DragStartDetails details) {
+    _dragDeltaY = 0;
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails details) {
+    _dragDeltaY += details.primaryDelta ?? 0;
+  }
+
+  void _onVerticalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -220) { _setExpanded(true); return; }
+    if (velocity > 220) { _setExpanded(false); return; }
+    if (_dragDeltaY < -18) { _setExpanded(true); }
+    else if (_dragDeltaY > 18) { _setExpanded(false); }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context)!;
+    final loc = AppLocalizations.of(context)!;
 
     return GestureDetector(
-      onVerticalDragUpdate: (details) {
-        if (details.primaryDelta! < -5) {
-          // Swipe para cima - expandir
-          if (!_isExpanded) _toggleExpanded();
-        } else if (details.primaryDelta! > 5) {
-          // Swipe para baixo - contrair
-          if (_isExpanded) _toggleExpanded();
-        }
-      },
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: _onVerticalDragStart,
+      onVerticalDragUpdate: _onVerticalDragUpdate,
+      onVerticalDragEnd: _onVerticalDragEnd,
       child: AnimatedBuilder(
         animation: _heightAnimation,
-        builder: (context, child) {
+        builder: (context, _) {
           return Container(
             height: _heightAnimation.value,
             decoration: BoxDecoration(
-              color: widget.isEmergency
-                  ? const Color(0xFF1E1E3F)
-                  : const Color(0xFF1E1E3F),
+              color: const Color(0xFF1E1E3F),
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
@@ -97,127 +113,176 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
                 ),
               ],
             ),
-            child: SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Indicador de arrasto
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Conteúdo compacto (sempre visível)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildInfoColumn(
-                          localizations.arrival,
-                          widget.arrivalTime,
-                          widget.isEmergency,
-                        ),
-                        _buildInfoColumn(
-                          localizations.time,
-                          widget.remainingTime,
-                          widget.isEmergency,
-                        ),
-                        _buildInfoColumn(
-                          localizations.distance,
-                          widget.remainingDistance,
-                          widget.isEmergency,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Conteúdo expandido
-                  if (_isExpanded) ...[
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            localizations.destination,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            widget.destination.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Botão End Route
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: widget.onEndRoute,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: widget.isEmergency
-                                    ? const Color(0xFFBD453D)
-                                    : const Color(0xFFE74C3C),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: Text(
-                                localizations.endRoute,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+            child: _isExpanded
+                ? _buildExpandedContent(loc)
+                : _buildCollapsedContent(loc),
           );
         },
       ),
     );
   }
 
-  Widget _buildInfoColumn(String label, String value, bool isEmergency) {
+  // ─── COLLAPSED: Column(center) ensures true vertical centering ───────────
+  Widget _buildCollapsedContent(AppLocalizations loc) {
     return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: isEmergency ? const Color(0xFFFF6B6B) : Colors.white,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
+        // "^ MORE ^" hint — tappable
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggleExpanded,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.keyboard_arrow_up, color: Colors.white54, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  loc.more.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.keyboard_arrow_up, color: Colors.white54, size: 14),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 4),
+        // Info row
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: [
+              Expanded(child: _buildInfoColumn(loc.arrival, widget.arrivalTime, widget.isEmergency, CrossAxisAlignment.start)),
+              Expanded(child: _buildInfoColumn(loc.time, widget.remainingTime, widget.isEmergency, CrossAxisAlignment.center)),
+              Expanded(child: _buildInfoColumn(loc.distance, widget.remainingDistance, widget.isEmergency, CrossAxisAlignment.end)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── EXPANDED: scrollable column with drag handle + destination + button ──
+  Widget _buildExpandedContent(AppLocalizations loc) {
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle pill
+          const SizedBox(height: 10),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleExpanded,
+            child: Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Info row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                Expanded(child: _buildInfoColumn(loc.arrival, widget.arrivalTime, widget.isEmergency, CrossAxisAlignment.start)),
+                Expanded(child: _buildInfoColumn(loc.time, widget.remainingTime, widget.isEmergency, CrossAxisAlignment.center)),
+                Expanded(child: _buildInfoColumn(loc.distance, widget.remainingDistance, widget.isEmergency, CrossAxisAlignment.end)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Destination name + End Route button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  loc.destination,
+                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  widget.destination.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: widget.onEndRoute,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.isEmergency
+                          ? const Color(0xFFBD453D)
+                          : const Color(0xFFE74C3C),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      loc.endRoute,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── INFO COLUMN ─────────────────────────────────────────────────────────
+  Widget _buildInfoColumn(String label, String value, bool isEmergency,
+      [CrossAxisAlignment alignment = CrossAxisAlignment.center]) {
+    return Column(
+      crossAxisAlignment: alignment,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: alignment == CrossAxisAlignment.start
+              ? Alignment.centerLeft
+              : alignment == CrossAxisAlignment.end
+                  ? Alignment.centerRight
+                  : Alignment.center,
+          child: Text(
+            value,
+            style: TextStyle(
+              color: isEmergency ? const Color(0xFFFF6B6B) : Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
         Text(
           label,
           style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
