@@ -9,7 +9,7 @@ import '../../../../core/config/api_config.dart';
 ///
 /// Nova API usa POST com coordenadas em vez de GET com node IDs
 class RoutingService {
-  static const String baseUrl = ApiConfig.routingService;
+  static String get baseUrl => ApiConfig.routingService;
 
   /// POST /api/route - Calcula rota entre posição inicial e destino
   ///

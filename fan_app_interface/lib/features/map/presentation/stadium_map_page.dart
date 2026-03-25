@@ -206,7 +206,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
   void dispose() {
     _alignPositionStreamController.close();
     _blinkController.dispose();
-    WaittimeCache().removeListener(_onWaittimeCacheUpdate);
+    // WaittimeCache().removeListener(_onWaittimeCacheUpdate); // Broken reference
     super.dispose();
   }
 
@@ -1201,14 +1201,14 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
       // Extrair coordenadas do cellId (cell_X_Y ou cell_L_X_Y)
       final parts = cellId.split('_');
-      int? x, y;
+      double? x, y;
 
       if (parts.length == 3 && parts[0] == 'cell') {
-        x = int.tryParse(parts[1]);
-        y = int.tryParse(parts[2]);
+        x = double.tryParse(parts[1]);
+        y = double.tryParse(parts[2]);
       } else if (parts.length == 4 && parts[0] == 'cell') {
-        x = int.tryParse(parts[2]);
-        y = int.tryParse(parts[3]);
+        x = double.tryParse(parts[2]);
+        y = double.tryParse(parts[3]);
       } else {
         print("Invalid cellId: $cellId");
         return;
