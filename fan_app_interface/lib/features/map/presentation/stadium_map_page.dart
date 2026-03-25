@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_compass/flutter_map_compass.dart';
@@ -137,9 +138,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
   bool _isCalculatingPreviewRoute = false;
   bool _isSelectedPOISaved = false;
 
-  // Heatmap data
-  StadiumHeatmapData? _heatmapData;
-  Timer? _heatmapTimer;
+  // Tracking zoom for reactive heatmap scaling
+  double _currentZoom = 17.0;
+
+  // Heatmap data state removed in favor of StreamBuilder
 
   // Ticket data (temporariamente desativado)
   // TicketModel? _userTicket;
@@ -322,27 +324,10 @@ class StadiumMapPageState extends State<StadiumMapPage>
     _heatmapTimer = null;
   }
 
-  /// Carrega dados de congestão para o heatmap
-  Future<void> _loadHeatmapData() async {
-    try {
-      final data = _congestionService.getStadiumHeatmap();
-      if (mounted) {
-        setState(() {
-          _heatmapData = data;
-        });
-        // Notificar sucesso de conexão
-        widget.onHeatmapConnectionSuccess?.call();
-      }
-    } catch (e) {
-      // Limpar dados do heatmap em caso de erro
-      if (mounted) {
-        setState(() {
-          _heatmapData = null;
-        });
-        // Notificar erro de conexão
-        widget.onHeatmapConnectionError?.call();
-      }
-    }
+  String _buildRouteSignature(RouteModel? route) {
+    if (route == null) return 'null';
+    final ids = route.waypoints.map((w) => w.nodeId).join('>');
+    return '${route.waypoints.length}|$ids';
   }
 
   /// Public method to reload map data (called from parent)
@@ -1126,6 +1111,13 @@ class StadiumMapPageState extends State<StadiumMapPage>
           flags: InteractiveFlag.all,
         ),
         onPositionChanged: (camera, hasGesture) {
+          // Only update state if zoom changed significantly to avoid lag
+          if ((camera.zoom - _currentZoom).abs() > 0.05) {
+            setState(() {
+              _currentZoom = camera.zoom;
+            });
+          }
+
           if (hasGesture && _isUserPositionLocked) {
             setState(() {
               _isUserPositionLocked = false;
@@ -1174,8 +1166,18 @@ class StadiumMapPageState extends State<StadiumMapPage>
         // REMOVIDO: Camada de seats para melhor performance
         // O lugar do utilizador é mostrado separadamente se tiver bilhete
 
-        // Camada de heatmap (se ativa)
-        if (widget.showHeatmap) _buildHeatmapLayer(),
+        // Camada de heatmap (se ativa) - usando StreamBuilder para updates em tempo real
+        if (widget.showHeatmap)
+          StreamBuilder<StadiumHeatmapData>(
+            stream: _congestionService.heatmapStream,
+            initialData: _congestionService.getStadiumHeatmap(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || snapshot.data!.sections.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return _buildHeatmapLayer(snapshot.data!);
+            },
+          ),
 
         // Camada de rota (polyline) — ocultar quando há rota alternativa em preview.
         // Em navegação, usar sempre a rota vinda do parent (NavigationPage).
@@ -1252,14 +1254,14 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   /// Camada de heatmap usando o plugin flutter_map_heatmap
-  Widget _buildHeatmapLayer() {
-    if (_heatmapData == null || _heatmapData!.sections.isEmpty) {
+  Widget _buildHeatmapLayer(StadiumHeatmapData heatmapData) {
+    if (heatmapData.sections.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final data = <WeightedLatLng>[];
 
-    _heatmapData!.sections.forEach((cellId, cellData) {
+    heatmapData.sections.forEach((cellId, cellData) {
       // Filtrar pelo piso atual
       if (cellData.level != _currentFloor) return;
 
@@ -1274,15 +1276,23 @@ class StadiumMapPageState extends State<StadiumMapPage>
         x = double.tryParse(parts[2]);
         y = double.tryParse(parts[3]);
       } else {
+        print("Invalid cellId: $cellId");
         return;
       }
 
-      if (x == null || y == null) return;
+      if (x == null || y == null) {
+        print("Invalid coordinates: $x, $y");
+        return;
+      }
 
-      // Ponto com peso = nível de congestão
+      // Convert from meters (offset from BASE_LAT/LNG) to degrees
+      final double projectedLat = stadiumCenter.latitude + (y / 111111.0);
+      final double projectedLng =
+          stadiumCenter.longitude + (x / (111111.0 * 0.7589)); // cos(40.63)
+
       data.add(
         WeightedLatLng(
-          LatLng(y.toDouble(), x.toDouble()),
+          LatLng(projectedLat, projectedLng),
           cellData.congestionLevel,
         ),
       );
@@ -1290,9 +1300,23 @@ class StadiumMapPageState extends State<StadiumMapPage>
 
     if (data.isEmpty) return const SizedBox.shrink();
 
+    // Calculate dynamic radius based on zoom
+    double currentZoom = 18.0;
+    try {
+      currentZoom = _mapController.camera.zoom;
+    } catch (_) {}
+
+    // Formula: 20px base at zoom 18. Scale by 1.5x per zoom level.
+    // Cap at 10 (far) and 60 (close) to avoid red blobs or tiny dots.
+    final double dynamicRadius = 20 * pow(1.5, currentZoom - 18.0).toDouble();
+    final double clampedRadius = dynamicRadius.clamp(10.0, 60.0);
+
     return HeatMapLayer(
       heatMapDataSource: InMemoryHeatMapDataSource(data: data),
-      heatMapOptions: HeatMapOptions(radius: 30, minOpacity: 0.1),
+      heatMapOptions: HeatMapOptions(
+        radius: clampedRadius,
+        minOpacity: 0.15,
+      ),
     );
   }
 

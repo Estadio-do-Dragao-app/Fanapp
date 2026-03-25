@@ -12,7 +12,7 @@ import '../../../../core/config/map_config.dart';
 /// Service para comunicar com o Map-Service
 /// Backend: https://github.com/Estadio-do-Dragao-app/Map-Service
 class MapService {
-  static const String baseUrl = ApiConfig.mapService;
+  static String get baseUrl => ApiConfig.mapService;
 
   static const Set<String> _forcedEmergencyExitNames = {
     'nave desportiva da ua',

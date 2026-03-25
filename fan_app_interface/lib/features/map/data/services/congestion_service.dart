@@ -61,11 +61,16 @@ class CongestionService {
 
   // Local store for MQTT updates
   final Map<String, CellCongestionData> _cellData = {};
+  final Map<String, DateTime> _lastUpdate = {}; // Track expiration
   StreamSubscription? _mqttSubscription;
   bool _isConnected = false;
 
   /// Check if connected to MQTT broker
   bool get isConnected => _isConnected;
+
+  /// Stream of heatmap data for UI
+  Stream<StadiumHeatmapData> get heatmapStream =>
+      _mqttService.congestionStream.map((_) => getStadiumHeatmap());
 
   /// Initialize connection to MQTT broker
   Future<bool> connect() async {
@@ -86,6 +91,8 @@ class CongestionService {
   void _onCongestionUpdate(Map<String, dynamic> data) {
     final cellData = CellCongestionData.fromJson(data);
     _cellData[cellData.cellId] = cellData;
+    _lastUpdate[cellData.cellId] = DateTime.now();
+    
     print(
       '[CongestionService] Stored cell ${cellData.cellId} with level ${cellData.congestionLevel}. Total cells: ${_cellData.length}',
     );
@@ -93,6 +100,15 @@ class CongestionService {
 
   /// Get current heatmap data from MQTT cache
   StadiumHeatmapData getStadiumHeatmap() {
+    // Expire old data (TTL: 30 seconds)
+    final now = DateTime.now();
+    _cellData.removeWhere((key, _) {
+      final last = _lastUpdate[key];
+      if (last == null) return true;
+      return now.difference(last).inSeconds > 15;
+    });
+    _lastUpdate.removeWhere((key, last) => now.difference(last).inSeconds > 15);
+
     if (_cellData.isEmpty) {
       return StadiumHeatmapData(
         sections: {},

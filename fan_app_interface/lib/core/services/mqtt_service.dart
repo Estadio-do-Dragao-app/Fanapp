@@ -216,6 +216,9 @@ class MqttService {
           case topicAllEvents:
             _allEventsController.add(jsonData);
             break;
+          case topicGps:
+            // High frequency data - ignored by client to avoid lag
+            break;
         }
 
         print('[MqttService] Received on $topic: ${jsonData.keys.toList()}');
