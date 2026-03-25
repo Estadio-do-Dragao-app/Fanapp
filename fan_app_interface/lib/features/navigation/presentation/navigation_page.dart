@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
+
 import 'package:latlong2/latlong.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/routing_service.dart';
+import '../../map/data/services/map_service.dart';
 import '../../map/presentation/stadium_map_page.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
 import '../domain/navigation_controller.dart';
@@ -61,13 +63,25 @@ class _NavigationPageState extends State<NavigationPage>
 
   // Preview route to show when selecting a new destination mid-navigation
   RouteModel? _previewRoute;
+  String _lastRouteSignature = '';
+
+  // The currently active route shown on the map.
+  // Snapshotted inside setState so build() always uses the route captured
+  // at the moment notifyListeners() fired, not a potentially-later re-read.
+  late RouteModel _activeRoute;
 
   // Timer to resume user tracking after 5 seconds of inactivity
   Timer? _idleTimer;
 
+  // Current active destination (updated on reroute)
+  late POIModel _currentDestination;
+
   @override
   void initState() {
     super.initState();
+    _lastRouteSignature = _routeSignature(widget.route);
+    _currentDestination = widget.destination;
+    _activeRoute = widget.route;
 
     // Plugin: controlador com animações suaves
     _animatedMapController = AnimatedMapController(
@@ -99,6 +113,22 @@ class _NavigationPageState extends State<NavigationPage>
         _showReroutePopup = true;
       });
     });
+
+    // Listen to the direct route change stream.
+    // This receives the exact new RouteModel object, bypassing the
+    // _controller.route field which may be stale due to rapid async callbacks.
+    _controller.routeChangeStream.listen((newRoute) {
+      if (!mounted) return;
+      print('[NavigationPage] 🗺️ routeChangeStream: new route hash=${newRoute.hashCode} len=${newRoute.waypoints.length}');
+      setState(() {
+        _activeRoute = newRoute;
+        final sig = _routeSignature(newRoute);
+        if (sig != _lastRouteSignature) {
+          _lastRouteSignature = sig;
+          _previewRoute = null;
+        }
+      });
+    });
   }
 
   @override
@@ -112,10 +142,22 @@ class _NavigationPageState extends State<NavigationPage>
 
   void _onNavigationUpdate() {
     if (!mounted) return;
+    final currentRoute = _controller.route; // snapshot before async yields
+    final currentSignature = _routeSignature(currentRoute);
     print(
-      '[NavigationPage] 🔄 Update: index=${_controller.tracker.currentWaypointIndex}',
+      '[NavigationPage-HASH] 🔄 Update: index=${_controller.tracker.currentWaypointIndex} - ControllerHash: ${_controller.hashCode} - Mounted: $mounted - RouteObjHash: ${currentRoute.hashCode}',
     );
-    setState(() {});
+    setState(() {
+      // NOTE: _activeRoute is only updated by routeChangeStream - do NOT
+      // overwrite it here, or GPS ticks will revert the map back to the
+      // old route every position update.
+      // Se a rota mudou (reroute), limpar qualquer preview antigo.
+      if (currentSignature != _lastRouteSignature) {
+        _lastRouteSignature = currentSignature;
+        _previewRoute = null;
+        print('[NavigationPage] Route signature changed: $currentSignature');
+      }
+    });
 
     if (_isFollowingUser) {
       _followUserPosition();
@@ -246,8 +288,39 @@ class _NavigationPageState extends State<NavigationPage>
     return '${arrivalTime.hour.toString().padLeft(2, '0')}:${arrivalTime.minute.toString().padLeft(2, '0')}';
   }
 
+  void _handleManualMapInteraction(String source) {
+    // Cancel any existing idle timer
+    _idleTimer?.cancel();
+
+    if (_isFollowingUser) {
+      setState(() {
+        _isFollowingUser = false;
+      });
+    }
+
+    // Start a new 5-second timer to auto-recenter
+    _idleTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && !_isFollowingUser) {
+        setState(() {
+          _isFollowingUser = true;
+        });
+        _followUserPosition();
+      }
+    });
+  }
+
+  void _onCompassPressed() {
+    _handleManualMapInteraction("Compass Press");
+  }
+
+  String _routeSignature(RouteModel route) {
+    final ids = route.waypoints.map((w) => w.nodeId).join('>');
+    return '${route.waypoints.length}|$ids';
+  }
+
   @override
   Widget build(BuildContext context) {
+    print('[NavigationPage-HASH] build() - ControllerHash: ${_controller.hashCode} - ActiveRouteHash: ${_activeRoute.hashCode} - ControllerRouteHash: ${_controller.route.hashCode}');
     final tracker = _controller.tracker;
 
     final userPosition = LatLng(tracker.currentY, tracker.currentX);
@@ -264,18 +337,20 @@ class _NavigationPageState extends State<NavigationPage>
           children: [
             // Mapa de fundo com rota destacada
             StadiumMapPage(
-              highlightedRoute: _controller.route,
-              highlightedPOI: widget.destination,
+              key: const ValueKey('nav-map-active'),
+              highlightedRoute: _activeRoute,
+              highlightedPOI: _currentDestination,
               mapController: _animatedMapController.mapController,
               isNavigating: true,
               isFollowingUser: _isFollowingUser,
               userPosition: userPosition,
               userHeading: _controller.heading,
-              routeStartWaypointIndex: _controller.tracker.currentWaypointIndex,
+              routeStartWaypointIndex: _controller.routeStartWaypointIndex,
               initialFloor: _controller.currentLevel,
               showHeatmap: _showHeatmap,
               isEmergency: widget.isEmergency,
               onTapPOI: widget.isEmergency ? null : _showSwitchDestinationSheet,
+              onCompassPressed: _onCompassPressed,
               previewRoute: _previewRoute,
               onToggleNavigationHeatmap: () {
                 setState(() {
@@ -296,30 +371,7 @@ class _NavigationPageState extends State<NavigationPage>
                   : (_isBottomSheetExpanded ? 360 : 200),
               onPositionChanged: (camera, hasGesture) {
                 if (hasGesture) {
-                  // Cancel any existing idle timer
-                  _idleTimer?.cancel();
-
-                  if (_isFollowingUser) {
-                    print(
-                      "[NavigationPage] 🖐️ Manual gesture detected. Disabling follow mode.",
-                    );
-                    setState(() {
-                      _isFollowingUser = false;
-                    });
-                  }
-
-                  // Start a new 5-second timer to auto-recenter
-                  _idleTimer = Timer(const Duration(seconds: 5), () {
-                    if (mounted && !_isFollowingUser) {
-                      print(
-                        "[NavigationPage] ⏳ 5 seconds of inactivity. Auto-resuming follow mode.",
-                      );
-                      setState(() {
-                        _isFollowingUser = true;
-                      });
-                      _followUserPosition();
-                    }
-                  });
+                  _handleManualMapInteraction("Gesture");
                 }
               },
             ),
@@ -347,7 +399,7 @@ class _NavigationPageState extends State<NavigationPage>
                   arrivalTime: _getArrivalTime(),
                   remainingTime: _controller.formattedRemainingTime,
                   remainingDistance: _controller.formattedRemainingDistance,
-                  destination: widget.destination,
+                  destination: _currentDestination,
                   onEndRoute: _endNavigation,
                   isEmergency: widget.isEmergency,
                   onExpansionChanged: (expanded) {
@@ -482,6 +534,31 @@ class _NavigationPageState extends State<NavigationPage>
                         }
 
                         _controller.applyNewRoute(nodeIds);
+                        // Snapshot the route immediately so _activeRoute is updated for build()
+                        if (mounted) {
+                          setState(() {
+                            _activeRoute = _controller.route;
+                          });
+                        }
+
+                        // Resolve the new destination POI and update state
+                        POIModel? newDestination;
+                        try {
+                          final mapService = MapService();
+                          final allPOIs = await mapService.getAllPOIs();
+                          newDestination = allPOIs.firstWhere(
+                            (p) => p.id == capturedNewDestinationId,
+                            orElse: () => _currentDestination,
+                          );
+                        } catch (e) {
+                          print('[NavigationPage] Could not resolve new destination POI: $e');
+                        }
+                        if (mounted && newDestination != null) {
+                          _controller.updateDestination(newDestination);
+                          setState(() {
+                            _currentDestination = newDestination!;
+                          });
+                        }
 
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -512,6 +589,8 @@ class _NavigationPageState extends State<NavigationPage>
                   },
                 ),
               ),
+
+
           ],
         ),
       ),

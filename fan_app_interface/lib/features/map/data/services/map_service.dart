@@ -127,28 +127,24 @@ class MapService {
 
   /// GET /nodes - Buscar todos os POIs a partir dos nós
   /// O endpoint /pois do backend é muito restritivo, por isso filtramos client-side
-  /// Tipos POI: gate, restroom, food, bar, emergency_exit, first_aid, information, merchandise, stairs, ramp
+  /// Tipos POI: gate, restroom, food, bar, emergency_exit, first_aid, information, merchandise
   Future<List<POIModel>> getAllPOIs() async {
     // Tipos que consideramos POIs (excluindo corridor, normal, seat, row_aisle)
     const poiTypes = [
-      'gate',
       'restroom',
       'food',
       'bar',
       'emergency_exit',
       'first_aid',
       'information',
-      'merchandise',
-      'stairs',
-      'ramp',
-      'poi', // Tipo genérico
+      'poi', // generic type
       'entrance',
-      'shop',
       'wc',
       'library',
       'parking',
       'cafe',
       'restaurant',
+      'cgd',
     ];
 
     final response = await http
@@ -188,7 +184,14 @@ class MapService {
       }
     }
 
-    return staticPois.map(_applyForcedEmergencyExit).toList();
+    return staticPois
+        .map(_applyForcedEmergencyExit)
+        .where(
+          (poi) =>
+              poi.category.toLowerCase() != 'stairs' &&
+              poi.category.toLowerCase() != 'ramp',
+        )
+        .toList();
   }
 
   /// GET /pois/osm - Buscar POIs dinâmicos do OpenStreetMap

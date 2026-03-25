@@ -136,7 +136,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get floor => 'Floor';
 
   @override
-  String get heatmap => 'Heat map';
+  String get heatmap => 'Congestion';
 
   @override
   String get accessibility => 'Accessibility';
@@ -262,4 +262,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get gpsRequiredMessage => 'Cannot calculate route without GPS location.';
+
+  @override
+  String get savedPlaces => 'Favorites';
+
+  @override
+  String get noSavedPlaces => 'You haven\'t saved any places yet.';
+
+  @override
+  String get more => 'More';
+
+  @override
+  String get useStairs => 'Use the stairs';
+
+  @override
+  String get useRamp => 'Use the ramp';
+
+  @override
+  String get routeCalculationError => 'Route Calculation Error';
+
+  @override
+  String get routeCalculationErrorMessage => 'It was not possible to calculate a route to the destination.';
 }

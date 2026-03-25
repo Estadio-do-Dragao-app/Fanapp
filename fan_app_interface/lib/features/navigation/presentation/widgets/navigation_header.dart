@@ -110,6 +110,10 @@ class NavigationHeader extends StatelessWidget {
         return Icons.arrow_upward;
       case 'arrive':
         return Icons.location_on;
+      case 'stairs':
+        return Icons.stairs;
+      case 'ramp':
+        return Icons.accessible;
       default:
         return Icons.arrow_upward;
     }
@@ -125,6 +129,10 @@ class NavigationHeader extends StatelessWidget {
         return localizations.continueStraight;
       case 'arrive_at_destination':
         return localizations.arriveAtDestination;
+      case 'stairs':
+        return localizations.useStairs;
+      case 'ramp':
+        return localizations.useRamp;
       default:
         return '';
     }

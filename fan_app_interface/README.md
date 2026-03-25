@@ -1,16 +1,27 @@
-# fan_app_interface
+# Fan App Interface
 
-A new Flutter project.
+A Flutter mobile application designed for fans, featuring real-time map navigation, POI discovery, and emergency evacuation routing.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+To run this project for the first time, follow these steps:
 
-A few resources to get you started if this is your first Flutter project:
+### 1. Prerequisites
+- **Flutter SDK**: Ensure you have Flutter installed (compatible with v3.10.1+).
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 2. Installation
+Clone the repository and fetch dependencies:
+```bash
+flutter pub get
+```
+
+### 3. Running the App
+Run the app on your connected device or emulator:
+```bash
+flutter run
+```
+
+## Devices
+- **Mobile**: For the best experience, run on an **Android** or **iOS** device.
+

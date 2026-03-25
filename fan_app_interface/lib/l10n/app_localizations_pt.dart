@@ -136,7 +136,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get floor => 'Piso';
 
   @override
-  String get heatmap => 'Mapa de calor';
+  String get heatmap => 'Congestionamento';
 
   @override
   String get accessibility => 'Acessibilidade';
@@ -262,4 +262,25 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get gpsRequiredMessage => 'Não é possível calcular a rota sem a sua localização (GPS).';
+
+  @override
+  String get savedPlaces => 'Favoritos';
+
+  @override
+  String get noSavedPlaces => 'Ainda não guardou nenhum lugar.';
+
+  @override
+  String get more => 'Mais';
+
+  @override
+  String get useStairs => 'Use as escadas';
+
+  @override
+  String get useRamp => 'Use a rampa';
+
+  @override
+  String get routeCalculationError => 'Erro de cálculo de rota';
+
+  @override
+  String get routeCalculationErrorMessage => 'Não foi possível calcular uma rota para o destino.';
 }
