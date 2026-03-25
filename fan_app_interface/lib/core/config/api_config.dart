@@ -30,7 +30,7 @@ class ApiConfig {
   /// Broker MQTT para clientes (host sem http://)
   static String get mqttBroker =>
       _baseHost.replaceAll('http://', '').replaceAll('https://', '');
-  static const int mqttPort = 1884;
+  static const int mqttPort = 1883;
   static const int mqttWebSocketPort = 9002;
 
   // ==================== TIMEOUTS ====================
