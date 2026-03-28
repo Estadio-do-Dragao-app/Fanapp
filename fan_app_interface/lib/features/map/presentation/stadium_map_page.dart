@@ -142,6 +142,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
   double _currentZoom = 17.0;
 
   // Heatmap data state removed in favor of StreamBuilder
+  Timer? _heatmapTimer; // Timer for periodic heatmap updates
 
   // Ticket data (temporariamente desativado)
   // TicketModel? _userTicket;
@@ -309,6 +310,14 @@ class StadiumMapPageState extends State<StadiumMapPage>
     return '${route.waypoints.length}|$ids';
   }
 
+  /// Load or refresh heatmap data
+  Future<void> _loadHeatmapData() async {
+    // Ensure MQTT connection is active for heatmap streaming
+    if (!_congestionService.isConnected) {
+      await _congestionService.connect();
+    }
+  }
+
   /// Inicia atualização periódica do heatmap (cada 10 segundos)
   void _startHeatmapUpdates() {
     _loadHeatmapData(); // Carregar imediatamente
@@ -322,12 +331,6 @@ class StadiumMapPageState extends State<StadiumMapPage>
   void _stopHeatmapUpdates() {
     _heatmapTimer?.cancel();
     _heatmapTimer = null;
-  }
-
-  String _buildRouteSignature(RouteModel? route) {
-    if (route == null) return 'null';
-    final ids = route.waypoints.map((w) => w.nodeId).join('>');
-    return '${route.waypoints.length}|$ids';
   }
 
   /// Public method to reload map data (called from parent)
