@@ -192,7 +192,7 @@ class MqttService {
         // Check for expiry_time
         if (jsonData.containsKey('expiry_time') && jsonData['expiry_time'] != null) {
           try {
-            final expiryTime = DateTime.parse(jsonData['expiry_time']);
+            final expiryTime = DateTime.parse(jsonData['expiry_time']).toUtc();
             if (DateTime.now().toUtc().isAfter(expiryTime)) {
               print('[MqttService] 🕰️ Ignored expired message on $topic');
               continue;

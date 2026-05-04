@@ -1,8 +1,8 @@
-# Privacy Policy — Urban Navigation Navigator
+# Privacy Policy — Public Area Navigator
 
 Last Updated: May 3, 2026
 
-Welcome to our Urban Navigation Service. We value your privacy and operate under the principle of **Privacy by Design**. This policy explains how we handle your information.
+Welcome to Public Area Navigator. We value your privacy and operate under the principle of **Privacy by Design**. This policy explains how we handle your information.
 
 ## 1. Data We Collect
 *   **Approximate Location (GPS):** Collected only when the app is active and with your explicit consent.
@@ -16,7 +16,7 @@ We process this data to:
 *   Analyze crowd density to suggest safer, less congested paths.
 
 ## 3. Legal Basis
-The legal basis for processing your location data is your **Explicit Consent** (GDPR Article 6(1)(a)). You can withdraw this consent at any time through the app settings.
+The legal basis for processing your location data is your **Explicit Consent** (GDPR Article 6(1)(a)). You can withdraw this consent at any time by opening app settings, navigating to Privacy, and toggling consent off. When you withdraw consent, we stop all data collection immediately and clear any pending operations.
 
 ## 4. Data Retention (How long we keep data)
 *   **Real-time GPS:** Processed in volatile memory (RAM) and **permanently deleted after 20 seconds**.

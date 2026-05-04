@@ -19,34 +19,32 @@ class ConsentModal extends StatelessWidget {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('privacy_consent_accepted', value);
     
-    if (value) {
-      // Generate or get an anonymous User ID for audit logs
-      String? userId = prefs.getString('anonymous_user_id');
-      if (userId == null) {
-        userId = const Uuid().v4();
-        await prefs.setString('anonymous_user_id', userId);
-      }
-      
-      // Send audit log to backend (fire and forget)
-      try {
-        // Use the IP address of your machine or service
-        // In local dev with adb reverse, localhost:8001 points to WaitTime-Service
-        final url = Uri.parse('http://localhost:8001/api/v1/privacy/consent');
-        http.post(
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': 'dragao_secret_key_2026'
-          },
-          body: jsonEncode({
-            'user_id': userId,
-            'action': 'granted',
-            'timestamp': DateTime.now().toUtc().toIso8601String(),
-          }),
-        ).timeout(const Duration(seconds: 3));
-      } catch (e) {
-        debugPrint('Failed to send consent audit: $e');
-      }
+    // Generate or get an anonymous User ID for audit logs
+    String? userId = prefs.getString('anonymous_user_id');
+    if (userId == null) {
+      userId = const Uuid().v4();
+      await prefs.setString('anonymous_user_id', userId);
+    }
+    
+    // Send audit log to backend for both granted and denied
+    try {
+      // Use the IP address of your machine or service
+      // In local dev with adb reverse, localhost:8001 points to WaitTime-Service
+      final url = Uri.parse('http://localhost:8001/api/v1/privacy/consent');
+      await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': 'dragao_secret_key_2026'
+        },
+        body: jsonEncode({
+          'user_id': userId,
+          'action': value ? 'granted' : 'denied',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+        }),
+      ).timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('Failed to send consent audit: $e');
     }
   }
 
@@ -109,10 +107,11 @@ class ConsentModal extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () {
-            // Refusing consent closes the app or denies features
-            // For now we just close the dialog but you can handle app exit if required
-            // Normally, without consent they can't use the app.
+          onPressed: () async {
+            await setConsented(false);
+            Navigator.of(context).pop();
+            // Deny tracking by disabling LocationService
+            // In production, navigate to a blocked screen or exit the app
           },
           child: const Text(
             'Decline',

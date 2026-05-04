@@ -39,7 +39,7 @@ class PrivacyPolicyPage extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              'Our legal basis for processing your data is your explicit consent (Art. 5.1.a GDPR). You are asked to provide this consent upon starting the application for the first time.',
+              'Our legal basis for processing your data is your consent under Art. 6(1)(a) GDPR, subject to the conditions set out in Art. 7 GDPR. You are asked to provide this consent upon starting the application for the first time.',
             ),
             SizedBox(height: 16),
             Text(

@@ -59,12 +59,25 @@ class _HomeState extends State<Home> {
     WaittimeCache().start();
     // Iniciar timer de 30s (só verifica quando heatmap está desligado)
     _startHealthCheckTimer();
-    // Conectar MQTT primeiro, depois configurar listeners
-    _initMqttAndAlerts();
-
+    
+    // Check consent BEFORE initializing MQTT and LocationService
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkPrivacyConsent();
+      _initializeWithConsent();
     });
+  }
+
+  Future<void> _initializeWithConsent() async {
+    final consented = await ConsentModal.hasConsented();
+    if (!consented && mounted) {
+      // Show consent modal before initializing services
+      ConsentModal.show(context, onAccepted: () {
+        // Now initialize MQTT and alerts after consent accepted
+        _initMqttAndAlerts();
+      });
+    } else if (consented && mounted) {
+      // User already consented, initialize normally
+      _initMqttAndAlerts();
+    }
   }
 
   Future<void> _checkPrivacyConsent() async {

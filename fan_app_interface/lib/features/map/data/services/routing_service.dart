@@ -41,7 +41,7 @@ class RoutingService {
       Uri.parse('$baseUrl/api/route'),
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': 'dragao_secret_key_2026'
+        'X-API-Key': const String.fromEnvironment('API_KEY', defaultValue: 'dragao_secret_key_2026')
       },
       body: json.encode(request.toJson()),
     );
