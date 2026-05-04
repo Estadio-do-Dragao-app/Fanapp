@@ -189,6 +189,19 @@ class MqttService {
       try {
         final jsonData = json.decode(data) as Map<String, dynamic>;
 
+        // Check for expiry_time
+        if (jsonData.containsKey('expiry_time') && jsonData['expiry_time'] != null) {
+          try {
+            final expiryTime = DateTime.parse(jsonData['expiry_time']).toUtc();
+            if (DateTime.now().toUtc().isAfter(expiryTime)) {
+              print('[MqttService] 🕰️ Ignored expired message on $topic');
+              continue;
+            }
+          } catch (e) {
+            print('[MqttService] Invalid expiry_time format: $e');
+          }
+        }
+
         // Route message to appropriate stream
         // Handle wildcard topics first (waittime/queues)
         if (topic.startsWith('stadium/services/waittime/')) {
@@ -206,6 +219,24 @@ class MqttService {
             break;
           case topicAlerts:
             _alertsController.add(jsonData);
+            
+            // Send ACK if priority is CRITICAL
+            if (jsonData['priority'] == 'CRITICAL') {
+              final ackMessage = {
+                'alert_id': jsonData['alert_id'] ?? jsonData['id'],
+                'client_id': _clientId,
+                'status': 'received',
+                'timestamp': DateTime.now().toUtc().toIso8601String()
+              };
+              final builder = MqttClientPayloadBuilder();
+              builder.addString(json.encode(ackMessage));
+              _client!.publishMessage(
+                'alerts/ack/$_clientId',
+                MqttQos.exactlyOnce, // QoS 2
+                builder.payload!,
+              );
+              print('[MqttService] ✅ Sent ACK for alert ${ackMessage['alert_id']}');
+            }
             break;
           case topicSecurity:
             _securityController.add(jsonData);
