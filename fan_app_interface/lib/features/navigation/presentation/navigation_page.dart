@@ -451,8 +451,10 @@ class _NavigationPageState extends State<NavigationPage>
                     // FIX 7: simplified and corrected category normalisation
                     if (capturedCategory != null &&
                         capturedCategory.isNotEmpty) {
-                      if (capturedCategory.toLowerCase() == 'wc') {
+                      if (capturedCategory.toUpperCase() == 'WC') {
                         capturedCategory = 'WC';
+                      } else if (capturedCategory.toUpperCase() == 'POI') {
+                        capturedCategory = 'POI';
                       } else {
                         capturedCategory =
                             capturedCategory[0].toUpperCase() +

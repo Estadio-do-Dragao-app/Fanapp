@@ -44,7 +44,7 @@ class MapService {
   /// GET /map - Retorna mapa completo (nodes, edges, closures)
   Future<Map<String, dynamic>> getCompleteMap() async {
     final response = await http
-        .get(Uri.parse('$baseUrl/map'))
+        .get(Uri.parse('$baseUrl/map'), headers: {'X-API-Key': 'dragao_secret_key_2026'})
         .timeout(const Duration(seconds: ApiConfig.httpTimeout));
 
     if (response.statusCode == 200) {

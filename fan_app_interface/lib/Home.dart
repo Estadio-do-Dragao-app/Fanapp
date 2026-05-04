@@ -11,6 +11,7 @@ import 'features/map/data/services/congestion_service.dart';
 import 'features/map/data/services/waittime_cache.dart';
 import 'features/navigation/data/services/user_position_service.dart';
 import 'core/services/mqtt_service.dart';
+import 'features/privacy/presentation/consent_modal.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -60,6 +61,19 @@ class _HomeState extends State<Home> {
     _startHealthCheckTimer();
     // Conectar MQTT primeiro, depois configurar listeners
     _initMqttAndAlerts();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPrivacyConsent();
+    });
+  }
+
+  Future<void> _checkPrivacyConsent() async {
+    final consented = await ConsentModal.hasConsented();
+    if (!consented && mounted) {
+      ConsentModal.show(context, onAccepted: () {
+        // Continue normally
+      });
+    }
   }
 
   Future<void> _initMqttAndAlerts() async {
