@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../../../../core/services/mqtt_service.dart';
 
 /// Model for cell congestion data from MQTT
@@ -82,7 +83,7 @@ class CongestionService {
       _mqttSubscription = _mqttService.congestionStream.listen(
         _onCongestionUpdate,
       );
-      print('[CongestionService] Connected to MQTT broker');
+      debugPrint('[CongestionService] Connected to MQTT broker');
     }
     return connected;
   }
@@ -93,7 +94,7 @@ class CongestionService {
     _cellData[cellData.cellId] = cellData;
     _lastUpdate[cellData.cellId] = DateTime.now();
     
-    print(
+    debugPrint(
       '[CongestionService] Stored cell ${cellData.cellId} with level ${cellData.congestionLevel}. Total cells: ${_cellData.length}',
     );
   }

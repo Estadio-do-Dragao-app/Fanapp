@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../map/presentation/stadium_map_page.dart';
+import '../../map/presentation/fan_map_page.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/map_service.dart';
 import '../../map/data/services/routing_service.dart';
@@ -33,7 +33,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       body: Stack(
         children: [
           Positioned.fill(
-            child: StadiumMapPage(
+            child: FanMapPage(
               customPOIsToShow: exits,
               zoomOutToPOIs: exits.isNotEmpty,
               isEmergency: true,
@@ -236,7 +236,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
               Positioned.fill(
                 child: ImageFiltered(
                   imageFilter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                  child: StadiumMapPage(
+                  child: FanMapPage(
                     customPOIsToShow: _exits ?? [],
                     zoomOutToPOIs: _exits != null && _exits!.isNotEmpty,
                     isEmergency: true,

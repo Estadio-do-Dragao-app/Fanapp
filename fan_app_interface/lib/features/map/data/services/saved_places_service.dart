@@ -14,7 +14,7 @@ class SavedPlacesService {
     if (!places.any((p) => p.id == poi.id)) {
       places.add(poi);
       await _savePlaces(places);
-      print('[SavedPlacesService] 💾 Lugar guardado: ${poi.name}');
+      print('[SavedPlacesService] Lugar guardado: ${poi.name}');
     }
   }
 
@@ -23,7 +23,7 @@ class SavedPlacesService {
     final places = await getSavedPlaces();
     places.removeWhere((p) => p.id == id);
     await _savePlaces(places);
-    print('[SavedPlacesService] 🗑️ Lugar removido: $id');
+    print('[SavedPlacesService] Lugar removido: $id');
   }
 
   /// Obtém todos os lugares guardados
@@ -39,7 +39,7 @@ class SavedPlacesService {
       final List<dynamic> jsonList = json.decode(jsonString);
       return jsonList.map((j) => POIModel.fromJson(j)).toList();
     } catch (e) {
-      print('[SavedPlacesService] ⚠️ Erro ao carregar lugares: $e');
+      print('[SavedPlacesService] Erro ao carregar lugares: $e');
       return [];
     }
   }
@@ -54,7 +54,7 @@ class SavedPlacesService {
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_savedPlacesKey);
-    print('[SavedPlacesService] 🗑️ Todos os lugares removidos');
+    print('[SavedPlacesService] Todos os lugares removidos');
   }
 
   /// Persiste a lista de lugares

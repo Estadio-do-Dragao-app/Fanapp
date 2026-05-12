@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:fan_app_interface/features/emergency/presentation/alert.dart';
-import 'package:fan_app_interface/features/map/presentation/stadium_map_page.dart';
+import 'package:fan_app_interface/features/map/presentation/fan_map_page.dart';
 import 'package:fan_app_interface/core/utils/top_feedback.dart';
 import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
@@ -124,7 +124,7 @@ class _MyAppState extends State<MyApp> {
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const Home(),
       routes: {
-        '/map': (context) => const StadiumMapPage(),
+        '/map': (context) => const FanMapPage(),
         '/emergency-alert': (context) => const EmergencyAlertPage(),
       },
     );

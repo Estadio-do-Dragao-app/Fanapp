@@ -22,28 +22,28 @@ class WaittimeCache extends ChangeNotifier {
 
   /// Start listening to MQTT wait time updates or HTTP polling
   void start() {
-    print('[WaittimeCache] start() called. isWeb=$kIsWeb, isListening=$_isListening');
+    debugPrint('[WaittimeCache] start() called. isWeb=$kIsWeb, isListening=$_isListening');
     if (_isListening) {
-      print('[WaittimeCache] Already listening, skipping');
+      debugPrint('[WaittimeCache] Already listening, skipping');
       return;
     }
     
     if (kIsWeb) {
       // Start HTTP Polling for Web platform where MQTT TCP is unsupported
-      print('[WaittimeCache] 🌐 Web platform detected: Using HTTP polling fallback');
+      debugPrint('[WaittimeCache] Web platform detected: Using HTTP polling fallback');
       _fetchWaitTimes(); // Initial fetch
       _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchWaitTimes());
     } else {
       // Subscribe to MQTT stream for Mobile platforms
       _subscription = _mqttService.queuesStream.listen(
         _onWaittimeUpdate,
-        onError: (e) => print('[WaittimeCache] Stream error: $e'),
-        onDone: () => print('[WaittimeCache] Stream done'),
+        onError: (e) => debugPrint('[WaittimeCache] Stream error: $e'),
+        onDone: () => debugPrint('[WaittimeCache] Stream done'),
       );
     }
     
     _isListening = true;
-    print('[WaittimeCache] ✅ Now listening to waittime updates');
+    debugPrint('[WaittimeCache] Now listening to waittime updates');
   }
 
   Future<void> _fetchWaitTimes() async {
@@ -69,12 +69,12 @@ class WaittimeCache extends ChangeNotifier {
         }
         
         if (changed) {
-          print('[WaittimeCache] HTTP Polling: Updated data for ${_cache.length} POIs');
+          debugPrint('[WaittimeCache] HTTP Polling: Updated data for ${_cache.length} POIs');
           notifyListeners();
         }
       }
     } catch (e) {
-      print('[WaittimeCache] HTTP Polling error: $e');
+      debugPrint('[WaittimeCache] HTTP Polling error: $e');
     }
   }
 
@@ -85,7 +85,7 @@ class WaittimeCache extends ChangeNotifier {
 
     if (poiId != null && minutes != null) {
       _cache[poiId] = (minutes is int) ? minutes.toDouble() : minutes as double;
-      print('[WaittimeCache] MQTT Updated $poiId: ${_cache[poiId]} min');
+      debugPrint('[WaittimeCache] MQTT Updated $poiId: ${_cache[poiId]} min');
       notifyListeners();
     }
   }

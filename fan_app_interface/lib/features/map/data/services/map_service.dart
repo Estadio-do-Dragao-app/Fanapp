@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import '../models/node_model.dart';
 import '../models/edge_model.dart';
 import '../models/poi_model.dart';
@@ -8,21 +9,31 @@ import '../models/tile_model.dart';
 import 'local_map_cache.dart';
 import '../../../../core/config/api_config.dart';
 import '../../../../core/config/map_config.dart';
+import '../../../../core/config/app_env.dart';
 
 /// Service para comunicar com o Map-Service
-/// Backend: https://github.com/Estadio-do-Dragao-app/Map-Service
 class MapService {
   static String get baseUrl => ApiConfig.mapService;
 
-  static const Set<String> _forcedEmergencyExitNames = {
-    'nave desportiva da ua',
-    'universidade - antiga reitoria b',
-    'universidade - antiga reuturia b',
-  };
+  Future<http.Response> _performGet(String url, {Map<String, String>? headers}) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(Duration(seconds: ApiConfig.httpTimeout));
+      stopwatch.stop();
+      debugPrint('[PerformanceInterceptor] GET $url completed in ${stopwatch.elapsedMilliseconds}ms');
+      return response;
+    } catch (e) {
+      stopwatch.stop();
+      debugPrint('[PerformanceInterceptor] GET $url failed after ${stopwatch.elapsedMilliseconds}ms: $e');
+      rethrow;
+    }
+  }
 
   POIModel _applyForcedEmergencyExit(POIModel poi) {
     final normalizedName = poi.name.trim().toLowerCase();
-    if (!_forcedEmergencyExitNames.contains(normalizedName)) {
+    if (!AppEnv.forcedEmergencyExitNames.contains(normalizedName)) {
       return poi;
     }
 
@@ -43,9 +54,7 @@ class MapService {
 
   /// GET /map - Retorna mapa completo (nodes, edges, closures)
   Future<Map<String, dynamic>> getCompleteMap() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/map'), headers: {'X-API-Key': 'dragao_secret_key_2026'})
-        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+    final response = await _performGet('$baseUrl/map', headers: {'X-API-Key': AppEnv.mapApiKey});
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -63,21 +72,13 @@ class MapService {
     }
 
     try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/nodes'))
-          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+      final response = await _performGet('$baseUrl/nodes');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        // PERFORMANCE: Filtrar seats - são ~6000+ nodes que não precisamos para navegação
-        // Seats são usados apenas para routing (endpoint /route), não para renderização/posição
-        final nodes = data
-            .map((json) => NodeModel.fromJson(json))
-            .where((node) => node.type != 'seat')
-            .toList();
-
-        // Meter Seats
-        // final nodes = data.map((json) => NodeModel.fromJson(json)).toList();
+        
+        // PERFORMANCE: Use compute to parse 6000+ nodes off the main thread
+        final nodes = await compute(_parseNodesList, response.body);
 
         // Salva no cache (sem seats para performance)
         await LocalMapCache.saveNodes(nodes);
@@ -94,6 +95,14 @@ class MapService {
     }
   }
 
+  static List<NodeModel> _parseNodesList(String responseBody) {
+    final List<dynamic> data = json.decode(responseBody);
+    return data
+        .map((json) => NodeModel.fromJson(json))
+        .where((node) => node.type != 'seat')
+        .toList();
+  }
+
   /// GET /edges - Todas as arestas (com cache)
   Future<List<EdgeModel>> getAllEdges() async {
     // Tenta cache primeiro (só se nodes também existirem para consistência)
@@ -103,9 +112,7 @@ class MapService {
     }
 
     try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/edges'))
-          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+      final response = await _performGet('$baseUrl/edges');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -147,9 +154,7 @@ class MapService {
       'cgd',
     ];
 
-    final response = await http
-        .get(Uri.parse('$baseUrl/nodes'))
-        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+    final response = await _performGet('$baseUrl/nodes');
 
     List<POIModel> staticPois = [];
     if (response.statusCode == 200) {
@@ -158,7 +163,7 @@ class MapService {
           .where((node) => poiTypes.contains(node['type']))
           .map((json) => POIModel.fromJson(json))
           .toList();
-      print(
+      debugPrint(
         '[MapService] ${staticPois.length} POIs estáticos carregados de ${data.length} nós',
       );
     }
@@ -174,12 +179,12 @@ class MapService {
             .where((p) => !existingNames.contains(p.name.toLowerCase()))
             .toList();
         staticPois.addAll(newOsmPois);
-        print(
+        debugPrint(
           '[MapService] +${newOsmPois.length} POIs do OSM (${osmPois.length} total, ${osmPois.length - newOsmPois.length} duplicados)',
         );
       } catch (e) {
-        print(
-          '[MapService] ⚠️ Falha ao buscar POIs OSM: $e (usando apenas estáticos)',
+        debugPrint(
+          '[MapService] Falha ao buscar POIs OSM: $e (usando apenas estáticos)',
         );
       }
     }
@@ -196,9 +201,7 @@ class MapService {
 
   /// GET /pois/osm - Buscar POIs dinâmicos do OpenStreetMap
   Future<List<POIModel>> getOSMPOIs() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/pois/osm'))
-        .timeout(const Duration(seconds: 35)); // Overpass pode demorar
+    final response = await _performGet('$baseUrl/pois/osm');
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -217,9 +220,7 @@ class MapService {
 
   /// GET /gates - Todos os portões/entradas
   Future<List<GateModel>> getAllGates() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/gates'))
-        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+    final response = await _performGet('$baseUrl/gates');
 
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
@@ -231,9 +232,7 @@ class MapService {
 
   /// GET /closures - Corredores fechados (para emergências)
   Future<List<Map<String, dynamic>>> getClosures() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/closures'))
-        .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+    final response = await _performGet('$baseUrl/closures');
 
     if (response.statusCode == 200) {
       return List<Map<String, dynamic>>.from(json.decode(response.body));
@@ -245,13 +244,7 @@ class MapService {
   /// GET /health - Verificar se o serviço está online
   Future<bool> isServiceHealthy() async {
     try {
-      final response = await http
-          .get(
-            Uri.parse('$baseUrl/health'),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 5));
-
+      final response = await _performGet('$baseUrl/health', headers: {'Content-Type': 'application/json'});
       return response.statusCode == 200;
     } catch (e) {
       return false;
@@ -262,9 +255,7 @@ class MapService {
   Future<List<dynamic>> getAllSeats() async {
     try {
       // Nota: Endpoint é /seats diretamente, não /api/seats
-      final response = await http
-          .get(Uri.parse('$baseUrl/seats'))
-          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+      final response = await _performGet('$baseUrl/seats');
 
       if (response.statusCode == 200) {
         // Formato esperado: {"seats": [...]} ou [...]
@@ -280,7 +271,7 @@ class MapService {
         return [];
       }
     } catch (e) {
-      print('Erro ao carregar seats: $e');
+      debugPrint('Erro ao carregar seats: $e');
       return [];
     }
   }
@@ -289,21 +280,19 @@ class MapService {
   /// Usado para obter coordenadas do lugar do utilizador
   Future<NodeModel?> getSeatById(String seatId) async {
     try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/seats/$seatId'))
-          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+      final response = await _performGet('$baseUrl/seats/$seatId');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return NodeModel.fromJson(data);
       } else {
-        print(
+        debugPrint(
           '[MapService] Seat $seatId não encontrado: ${response.statusCode}',
         );
         return null;
       }
     } catch (e) {
-      print('[MapService] Erro ao buscar seat $seatId: $e');
+      debugPrint('[MapService] Erro ao buscar seat $seatId: $e');
       return null;
     }
   }
@@ -315,21 +304,19 @@ class MapService {
       final url = level != null
           ? '$baseUrl/maps/grid/tiles?level=$level'
           : '$baseUrl/maps/grid/tiles';
-      final response = await http
-          .get(Uri.parse(url))
-          .timeout(const Duration(seconds: ApiConfig.httpTimeout));
+      final response = await _performGet(url);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List<dynamic> tiles = data['tiles'] ?? [];
-        print('[MapService] ${tiles.length} tiles carregados');
+        debugPrint('[MapService] ${tiles.length} tiles carregados');
         return tiles.map((json) => TileModel.fromJson(json)).toList();
       } else {
-        print('[MapService] Erro ao carregar tiles: ${response.statusCode}');
+        debugPrint('[MapService] Erro ao carregar tiles: ${response.statusCode}');
         return [];
       }
     } catch (e) {
-      print('[MapService] Erro ao carregar tiles: $e');
+      debugPrint('[MapService] Erro ao carregar tiles: $e');
       return [];
     }
   }

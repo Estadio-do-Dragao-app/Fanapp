@@ -1,21 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fan_app_interface/core/widgets/category_buttons.dart';
 import 'package:fan_app_interface/features/poi/presentation/destination_selection.dart';
-// import 'package:fan_app_interface/features/ticket/data/services/ticket_storage_service.dart';
-// import 'package:fan_app_interface/features/ticket/presentation/ticket_menu.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
-// import 'package:fan_app_interface/features/map/data/services/map_service.dart';
-// import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
-// import 'package:fan_app_interface/features/map/data/models/node_model.dart';
-// import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
-// import 'package:fan_app_interface/features/ticket/data/models/ticket_model.dart';
-// import 'package:fan_app_interface/features/poi/presentation/poi_details_sheet.dart';
-// import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
 
 import 'package:fan_app_interface/core/widgets/poi_icon.dart';
-// import 'package:fan_app_interface/core/utils/geographic_utils.dart';
-// import 'package:fan_app_interface/core/utils/top_feedback.dart';
-// import 'dart:math';
 
 /// Simple MapPage implementation that shows a placeholder 'map' area and a
 /// horizontal row of category buttons overlayed at the top.
@@ -37,40 +25,14 @@ class Navbar extends StatefulWidget {
 
 class _NavbarState extends State<Navbar> {
   final List<String> categoryIds = ['food', 'first_aid', 'wc', 'poi'];
-  /*
-  final TicketStorageService _ticketStorage = TicketStorageService();
-  final MapService _mapService = MapService();
-  final RoutingService _routingService = RoutingService();
-  */
   int selected = 0;
-  /*
 
-  // Fallback ID de nó
-  static const String userNodeId = 'N1';
-  */
   Future<void> _handleCategorySelect(
     int i,
     AppLocalizations localizations,
   ) async {
     setState(() => selected = i);
 
-    // TICKET FEATURE (temporariamente desativada)
-    // O fluxo abaixo foi preservado mas comentado para não executar:
-    // if (categoryIds[i] == 'seat') {
-    //   final ticket = await _ticketStorage.getTicket();
-    //   if (ticket == null) {
-    //     if (!mounted) return;
-    //     _showNoTicketDialog(localizations);
-    //     return;
-    //   }
-    //
-    //   if (!mounted) return;
-    //   await _navigateToSeat(ticket, localizations);
-    //   if (mounted) widget.onNavigationEnd?.call();
-    //   return;
-    // }
-
-    // Para outras categorias, comportamento normal
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -85,159 +47,6 @@ class _NavbarState extends State<Navbar> {
       if (mounted) widget.onNavigationEnd?.call();
     });
   }
-/*
-  /// Encontra o nó mais próximo de uma coordenada
-  String _findNearestNode(
-    double x,
-    double y,
-    int level,
-    List<NodeModel> nodes,
-  ) {
-    if (nodes.isEmpty) return userNodeId;
-
-    NodeModel? nearest;
-    double minDistance = double.infinity;
-
-    for (var node in nodes) {
-      if (node.level != level) continue;
-
-      final dx = node.x - x;
-      final dy = node.y - y;
-      final distance = sqrt(dx * dx + dy * dy);
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearest = node;
-      }
-    }
-
-    return nearest?.id ?? userNodeId;
-  }
-
-  /// Navega diretamente para o lugar do utilizador baseado no bilhete
-  Future<void> _navigateToSeat(
-    TicketModel ticket,
-    AppLocalizations localizations,
-  ) async {
-    // Verificar se o bilhete tem ID do seat no Map-Service
-    if (ticket.seatNodeId == null || ticket.seatNodeId!.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'O bilhete não tem lugar associado. Contacte o suporte.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    // Mostrar loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) =>
-          const Center(child: CircularProgressIndicator(color: Colors.white)),
-    );
-
-    try {
-      // Buscar coordenadas do seat no Map-Service
-      final seatNode = await _mapService.getSeatById(ticket.seatNodeId!);
-
-      if (seatNode == null) {
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lugar ${ticket.seatNodeId} não encontrado no mapa.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-
-      // Buscar todos os nós do mapa para calcular rota
-      final allNodes = await _mapService.getAllNodes();
-
-      // Criar POI com coordenadas reais do seat
-      final seatPOI = POIModel(
-        id: ticket.seatNodeId!,
-        name:
-            '${ticket.sectorId} - Fila ${ticket.rowId} - Lugar ${ticket.seatId}',
-        category: 'seat',
-        x: seatNode.x,
-        y: seatNode.y,
-        level: seatNode.level,
-      );
-
-      // Encontrar o nó mais próximo do lugar
-      final nearestNodeId = _findNearestNode(
-        seatPOI.x,
-        seatPOI.y,
-        seatPOI.level,
-        allNodes,
-      );
-
-      // Obter posição real do utilizador (GPS ou Saved)
-      final userPos = await GeographicUtils.getCurrentUserPosition();
-
-      if (userPos == null) {
-        if (!mounted) return;
-        Navigator.of(context).pop(); // Fechar loading
-        AppTopFeedback.showWarning(context, localizations.gpsRequiredMessage);
-        return;
-      }
-
-      double startX = userPos.x;
-      double startY = userPos.y;
-      int startLevel = userPos.level;
-
-      // Calcular rota
-      final route = await _routingService.getRouteToNode(
-        startX: startX,
-        startY: startY,
-        startLevel: startLevel,
-        nodeId: nearestNodeId,
-        avoidStairs: widget.avoidStairs,
-      );
-
-      if (!mounted) return;
-      Navigator.of(context).pop(); // Fechar loading
-
-      // Mostrar bottom sheet com detalhes e botão de navegação
-      POIDetailsSheet.show(
-        context,
-        poi: seatPOI,
-        route: route,
-        allNodes: allNodes,
-        onNavigate: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NavigationPage(
-                route: route,
-                destination: seatPOI,
-                nodes: allNodes,
-              ),
-            ),
-          );
-        },
-      );
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop(); // Fechar loading
-
-      // Mostrar erro
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erro ao calcular rota: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-*/
   Widget _buildSlideTransition(
     BuildContext context,
     Animation<double> animation,
@@ -251,43 +60,6 @@ class _NavbarState extends State<Navbar> {
     final offsetAnimation = animation.drive(tween);
     return SlideTransition(position: offsetAnimation, child: child);
   }
-
-  /*
-  // TICKET FEATURE (temporariamente desativada)
-  void _showNoTicketDialog(AppLocalizations localizations) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            const SizedBox(width: 12),
-            Text(localizations.noTicketScanned),
-          ],
-        ),
-        content: Text(localizations.noTicketScannedMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(localizations.cancel),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).pop();
-              TicketMenu.show(context);
-            },
-            icon: const Icon(Icons.qr_code_scanner),
-            label: Text(localizations.scanNow),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF161A3E),
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  */
 
   @override
   Widget build(BuildContext context) {

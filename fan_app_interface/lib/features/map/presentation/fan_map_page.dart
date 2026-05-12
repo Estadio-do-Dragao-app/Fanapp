@@ -33,7 +33,7 @@ import 'dart:async';
 import '../../../core/config/map_config.dart';
 
 /// Página principal do mapa interativo do estádio
-class StadiumMapPage extends StatefulWidget {
+class FanMapPage extends StatefulWidget {
   final RouteModel? highlightedRoute;
   final POIModel? highlightedPOI;
   final bool showAllPOIs;
@@ -62,7 +62,7 @@ class StadiumMapPage extends StatefulWidget {
   final VoidCallback? onCompassPressed;
   final double? navigationControlsBottomInset;
 
-  const StadiumMapPage({
+  const FanMapPage({
     super.key,
     this.initialFloor = 0,
     this.mapController,
@@ -100,10 +100,10 @@ class StadiumMapPage extends StatefulWidget {
   final bool zoomOutToPOIs;
 
   @override
-  State<StadiumMapPage> createState() => StadiumMapPageState();
+  State<FanMapPage> createState() => FanMapPageState();
 }
 
-class StadiumMapPageState extends State<StadiumMapPage>
+class FanMapPageState extends State<FanMapPage>
     with SingleTickerProviderStateMixin {
   static const double _controlsCardRightInset = 20;
   static const double _controlsCardBottomInset = 100;
@@ -200,7 +200,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         });
       }
     } on MissingPluginException catch (e) {
-      print('[StadiumMapPage] Geolocator plugin unavailable: $e');
+      print('[FanMapPage] Geolocator plugin unavailable: $e');
       if (mounted) {
         setState(() {
           _isLocationLayerAvailable = false;
@@ -267,19 +267,19 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   @override
-  void didUpdateWidget(StadiumMapPage oldWidget) {
+  void didUpdateWidget(FanMapPage oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     final oldSig = _buildRouteSignature(oldWidget.highlightedRoute);
     final newSig = _buildRouteSignature(widget.highlightedRoute);
-    print('[StadiumMapPage-HASH] didUpdateWidget - oldWidgetHash: ${oldWidget.hashCode} - newWidgetHash: ${widget.hashCode} - oldRouteHash: ${oldWidget.highlightedRoute.hashCode} - newRouteHash: ${widget.highlightedRoute.hashCode}');
+    print('[FanMapPage-HASH] didUpdateWidget - oldWidgetHash: ${oldWidget.hashCode} - newWidgetHash: ${widget.hashCode} - oldRouteHash: ${oldWidget.highlightedRoute.hashCode} - newRouteHash: ${widget.highlightedRoute.hashCode}');
     
     if (widget.highlightedRoute != oldWidget.highlightedRoute || oldSig != newSig) {
       setState(() {
         _currentRoute = widget.highlightedRoute;
       });
       if (widget.isNavigating) {
-        print('[StadiumMapPage] Route signature changed in navigation: $newSig');
+        print('[FanMapPage] Route signature changed in navigation: $newSig');
       }
     }
 
@@ -1342,7 +1342,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
 
     print(
-      '[StadiumMapPage] draw route RAW: total=${route.waypoints.length}, '
+      '[FanMapPage] draw route RAW: total=${route.waypoints.length}, '
       'rendered=${points.length}, gpsStart=${widget.userPosition != null}, '
       'sig=${_buildRouteSignature(route)} '
       '- RouteObjHash: ${route.hashCode} - WidgetRouteHash: ${widget.highlightedRoute.hashCode}',
