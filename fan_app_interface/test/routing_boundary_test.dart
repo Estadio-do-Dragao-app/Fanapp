@@ -38,9 +38,7 @@ void main() {
 
     test('getRouteToCoordinates handles unreachable nodes gracefully (Boundary test)', () async {
       // Nós de teste onde o destino está num nível que não existe nos nós conhecidos
-      final nodes = [
-        NodeModel(id: 'N1', x: 0.0, y: 0.0, level: 0, type: 'normal'),
-      ];
+      final nodes = <NodeModel>[];
 
       try {
         await routingService.getRouteToCoordinates(
