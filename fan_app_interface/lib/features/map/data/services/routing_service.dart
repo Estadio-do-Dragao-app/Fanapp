@@ -9,6 +9,10 @@ import 'local_map_cache.dart';
 /// Service para comunicar com o Routing-Service
 /// Nova API usa POST com coordenadas em vez de GET com node IDs
 class RoutingService {
+  final http.Client _client;
+  
+  RoutingService({http.Client? client}) : _client = client ?? http.Client();
+
   static String get baseUrl => ApiConfig.routingService;
 
   // Bloqueio de concorrência para evitar Race Conditions (vários pedidos em simultâneo)
@@ -17,7 +21,7 @@ class RoutingService {
   Future<http.Response> _performPost(String url, {Map<String, String>? headers, Object? body}) async {
     final stopwatch = Stopwatch()..start();
     try {
-      final response = await http
+      final response = await _client
           .post(Uri.parse(url), headers: headers, body: body)
           .timeout(Duration(seconds: ApiConfig.httpTimeout));
       stopwatch.stop();

@@ -1,14 +1,29 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
 import 'package:fan_app_interface/features/map/data/models/node_model.dart';
 import 'package:fan_app_interface/features/map/data/models/route_model.dart';
 
+/// Cliente HTTP de teste que falha instantaneamente para evitar timeouts de rede
+class FakeClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    return http.StreamedResponse(
+      Stream.value(utf8.encode('{"detail": "Unauthorized access - mock"}')),
+      401,
+    );
+  }
+}
+
 void main() {
   group('RoutingService Boundary & Invariant Tests (MS4)', () {
     late RoutingService routingService;
+    late FakeClient fakeClient;
 
     setUp(() {
-      routingService = RoutingService();
+      fakeClient = FakeClient();
+      routingService = RoutingService(client: fakeClient);
     });
 
     test('getRouteToCoordinates handles identical start and end points (Zero distance invariant)', () async {
