@@ -10,9 +10,20 @@ import '../config/app_env.dart';
 /// Receives real-time data from all backend services
 /// NOTE: MQTT only works on mobile (TCP). Web uses HTTP fallback.
 class MqttService {
-  static final MqttService _instance = MqttService._internal();
-  factory MqttService() => _instance;
-  MqttService._internal();
+  static MqttService? _instance;
+  
+  /// Factory constructor supports dependency injection for testing.
+  factory MqttService({MqttServerClient? client}) {
+    _instance ??= MqttService._internal(client);
+    return _instance!;
+  }
+  
+  MqttService._internal(this._client);
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = null;
+  }
 
   // Broker configuration (Service-to-Client-Broker)
   static String get _broker => AppEnv.mqttBroker;
@@ -101,7 +112,7 @@ class MqttService {
     
     try {
       debugPrint('[MqttService] Connecting via TCP: $_broker:$_port');
-      _client = MqttServerClient(_broker, _clientId);
+      _client ??= MqttServerClient(_broker, _clientId);
       _client!.port = _port;
 
       _client!.logging(on: false);

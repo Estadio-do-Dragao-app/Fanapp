@@ -61,6 +61,9 @@ class FanMapPage extends StatefulWidget {
   final VoidCallback? onRecenterNavigation;
   final VoidCallback? onCompassPressed;
   final double? navigationControlsBottomInset;
+  final MapService? mapService;
+  final RoutingService? routingService;
+  final CongestionService? congestionService;
 
   const FanMapPage({
     super.key,
@@ -93,6 +96,9 @@ class FanMapPage extends StatefulWidget {
     this.navigationControlsBottomInset,
     this.customPOIsToShow,
     this.zoomOutToPOIs = false,
+    this.mapService,
+    this.routingService,
+    this.congestionService,
   });
 
   final bool isEmergency;
@@ -112,9 +118,9 @@ class FanMapPageState extends State<FanMapPage>
 
   late final MapController _mapController;
   late final AnimationController _blinkController;
-  final MapService _mapService = MapService();
-  final RoutingService _routingService = RoutingService();
-  final CongestionService _congestionService = CongestionService();
+  late final MapService _mapService;
+  late final RoutingService _routingService;
+  late final CongestionService _congestionService;
 
   // Posição do utilizador (carregada do UserPositionService)
   double _userPositionX = 0.0;
@@ -157,6 +163,9 @@ class FanMapPageState extends State<FanMapPage>
     super.initState();
     // Usa controller fornecido ou cria um interno
     _mapController = widget.mapController ?? MapController();
+    _mapService = widget.mapService ?? MapService();
+    _routingService = widget.routingService ?? RoutingService();
+    _congestionService = widget.congestionService ?? CongestionService();
     // Inicializar com a rota passada como parâmetro
     _currentRoute = widget.highlightedRoute;
     // Usar o piso inicial fornecido

@@ -207,7 +207,7 @@ class RoutingService {
   /// GET /health - Verificar se o serviço está online
   Future<bool> isServiceHealthy() async {
     try {
-      final response = await http
+      final response = await _client
           .get(
             Uri.parse('$baseUrl/health'),
             headers: {'Content-Type': 'application/json'},

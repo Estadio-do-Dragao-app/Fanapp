@@ -53,12 +53,21 @@ class StadiumHeatmapData {
 /// Service for real-time congestion data via MQTT broker
 /// All data comes from Service-to-Client-Broker (port 1884)
 class CongestionService {
-  // Singleton pattern
-  static final CongestionService _instance = CongestionService._internal();
-  factory CongestionService() => _instance;
-  CongestionService._internal();
+  static CongestionService? _instance;
+  
+  factory CongestionService({MqttService? mqttService}) {
+    _instance ??= CongestionService._internal(mqttService ?? MqttService());
+    return _instance!;
+  }
+  
+  CongestionService._internal(this._mqttService);
 
-  final MqttService _mqttService = MqttService();
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = null;
+  }
+
+  final MqttService _mqttService;
 
   // Local store for MQTT updates
   final Map<String, CellCongestionData> _cellData = {};

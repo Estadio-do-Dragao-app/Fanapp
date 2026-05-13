@@ -1,29 +1,25 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:mocktail/mocktail.dart';
 import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
 import 'package:fan_app_interface/features/map/data/models/node_model.dart';
 import 'package:fan_app_interface/features/map/data/models/route_model.dart';
 
-/// Cliente HTTP de teste que falha instantaneamente para evitar timeouts de rede
-class FakeClient extends http.BaseClient {
-  @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    return http.StreamedResponse(
-      Stream.value(utf8.encode('{"detail": "Unauthorized access - mock"}')),
-      401,
-    );
-  }
-}
+class MockHttpClient extends Mock implements http.Client {}
 
 void main() {
   group('RoutingService Boundary & Invariant Tests (MS4)', () {
     late RoutingService routingService;
-    late FakeClient fakeClient;
+    late MockHttpClient mockClient;
+
+    setUpAll(() {
+      registerFallbackValue(Uri());
+    });
 
     setUp(() {
-      fakeClient = FakeClient();
-      routingService = RoutingService(client: fakeClient);
+      mockClient = MockHttpClient();
+      routingService = RoutingService(client: mockClient);
     });
 
     test('getRouteToCoordinates handles identical start and end points (Zero distance invariant)', () async {
@@ -75,6 +71,39 @@ void main() {
           isTrue
         );
       }
+    });
+
+    test('getRouteToCoordinates successfully returns route using fallback node', () async {
+      final nodes = [
+        NodeModel(id: 'N1', x: 10.0, y: 10.0, level: 0, type: 'normal'),
+      ];
+
+      final mockRouteResponse = {
+        'path': [
+          {'x': 0.0, 'y': 0.0, 'level': 0},
+          {'x': 10.0, 'y': 10.0, 'level': 0}
+        ],
+        'distance': 14.14,
+        'duration': 2.0,
+        'has_stairs': false,
+      };
+
+      when(() => mockClient.post(any(), headers: any(named: 'headers'), body: any(named: 'body')))
+          .thenAnswer((_) async => http.Response(json.encode(mockRouteResponse), 200));
+
+      final route = await routingService.getRouteToCoordinates(
+        startX: 0.0,
+        startY: 0.0,
+        startLevel: 0,
+        endX: 9.9, // Close to N1, so it falls back to N1
+        endY: 9.9,
+        endLevel: 0,
+        allNodes: nodes,
+      );
+
+      expect(route.waypoints.length, 2);
+      expect(route.totalDistance, 14.14);
+      verify(() => mockClient.post(any(), headers: any(named: 'headers'), body: any(named: 'body'))).called(1);
     });
     
     test('RouteModel.fromJson handles missing or negative distance gracefully (Invariant Violation)', () {

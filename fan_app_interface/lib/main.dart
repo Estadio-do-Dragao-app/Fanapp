@@ -12,7 +12,7 @@ import 'features/navigation/data/services/user_position_service.dart';
 import 'core/services/location_service.dart';
 import 'core/config/api_config.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalMapCache.init();
   await ApiConfig.init(); // Detetar backend (VM ou Local)

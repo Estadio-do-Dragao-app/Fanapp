@@ -11,14 +11,17 @@ import '../../../../core/config/api_config.dart';
 import '../../../../core/config/map_config.dart';
 import '../../../../core/config/app_env.dart';
 
-/// Service para comunicar com o Map-Service
 class MapService {
+  final http.Client _client;
+
+  MapService({http.Client? client}) : _client = client ?? http.Client();
+
   static String get baseUrl => ApiConfig.mapService;
 
   Future<http.Response> _performGet(String url, {Map<String, String>? headers}) async {
     final stopwatch = Stopwatch()..start();
     try {
-      final response = await http
+      final response = await _client
           .get(Uri.parse(url), headers: headers)
           .timeout(Duration(seconds: ApiConfig.httpTimeout));
       stopwatch.stop();

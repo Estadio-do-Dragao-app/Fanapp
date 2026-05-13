@@ -40,6 +40,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cd fan_app_interface
+          # Create the directory if it doesn't exist
+          mkdir -p $HOME/.sonar
           # Install sonar-scanner locally
           export SONAR_SCANNER_VERSION=5.0.1.3006
           export SONAR_SCANNER_HOME=$HOME/.sonar/sonar-scanner-$SONAR_SCANNER_VERSION-linux
