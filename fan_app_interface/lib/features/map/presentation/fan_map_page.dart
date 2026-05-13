@@ -109,8 +109,6 @@ class FanMapPageState extends State<FanMapPage>
   static const double _controlsCardBottomInset = 100;
   static const double _controlsCardHeight = 116;
   static const double _controlsCardGapAbovePanel = 16;
-  static const double _emergencyButtonGap = 12;
-  static const double _emergencyButtonSize = 50;
 
   late final MapController _mapController;
   late final AnimationController _blinkController;

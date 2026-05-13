@@ -34,10 +34,18 @@ jobs:
           cd fan_app_interface
           flutter test --coverage
 
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@884b79409bbd464b2a59edc326a4b77dc56b2195 # v3.1.0
+      - name: Run SonarCloud Scan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          projectBaseDir: fan_app_interface
+        run: |
+          cd fan_app_interface
+          # Install sonar-scanner locally
+          export SONAR_SCANNER_VERSION=5.0.1.3006
+          export SONAR_SCANNER_HOME=$HOME/.sonar/sonar-scanner-$SONAR_SCANNER_VERSION-linux
+          curl -sSLo $HOME/.sonar/sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$SONAR_SCANNER_VERSION-linux.zip
+          unzip -qo $HOME/.sonar/sonar-scanner.zip -d $HOME/.sonar/
+          export PATH=$SONAR_SCANNER_HOME/bin:$PATH
+          
+          # Run the scan directly on the runner where Flutter SDK is available
+          sonar-scanner

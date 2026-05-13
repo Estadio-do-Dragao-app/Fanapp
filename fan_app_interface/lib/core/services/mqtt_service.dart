@@ -177,78 +177,87 @@ class MqttService {
   /// Handle incoming MQTT messages
   void _onMessage(List<MqttReceivedMessage<MqttMessage>> messages) {
     for (var message in messages) {
-      final topic = message.topic;
-      final payload = message.payload as MqttPublishMessage;
-      final data = MqttPublishPayload.bytesToStringAsString(
-        payload.payload.message,
-      );
+      _processMessage(message);
+    }
+  }
 
-      try {
-        final dynamic parsedData = json.decode(data);
-        if (parsedData is! Map<String, dynamic>) {
-          debugPrint('[MqttService] Invalid payload format (not a Map) on $topic');
-          return;
-        }
-        
-        final jsonData = parsedData;
+  void _processMessage(MqttReceivedMessage<MqttMessage> message) {
+    final topic = message.topic;
+    final payload = message.payload as MqttPublishMessage;
+    final data = MqttPublishPayload.bytesToStringAsString(payload.payload.message);
 
-        // Check for expiry_time
-        if (jsonData.containsKey('expiry_time') && jsonData['expiry_time'] != null) {
-          try {
-            final expiryTime = DateTime.parse(jsonData['expiry_time'].toString()).toUtc();
-            if (DateTime.now().toUtc().isAfter(expiryTime)) {
-              debugPrint('[MqttService] Ignored expired message on $topic');
-              continue;
-            }
-          } catch (e) {
-            debugPrint('[MqttService] Invalid expiry_time format: $e');
-          }
-        }
-
-        // Route message to appropriate stream
-        // Handle wildcard topics first (waittime/queues)
-        if (topic.startsWith(topicQueues.replaceAll('#', ''))) {
-          debugPrint('[MqttService] Emitting to queuesStream: ${jsonData['poi']} = ${jsonData['minutes']} min');
-          _queuesController.add(jsonData);
-        } else if (topic.startsWith(topicRouting.replaceAll('#', ''))) {
-          _routingController.add(jsonData);
-        } else if (topic == topicCongestion) {
-          debugPrint('[MqttService] Congestion message received: ${jsonData['cell_id']}');
-          _congestionController.add(jsonData);
-        } else if (topic == topicAlerts) {
-          _alertsController.add(jsonData);
-          
-          // Send ACK if priority is CRITICAL
-          if (jsonData['priority'] == 'CRITICAL') {
-            final ackMessage = {
-              'alert_id': jsonData['alert_id'] ?? jsonData['id'],
-              'client_id': _clientId,
-              'status': 'received',
-              'timestamp': DateTime.now().toUtc().toIso8601String()
-            };
-            final builder = MqttClientPayloadBuilder();
-            builder.addString(json.encode(ackMessage));
-            _client!.publishMessage(
-              'alerts/ack/$_clientId',
-              MqttQos.exactlyOnce, // QoS 2
-              builder.payload!,
-            );
-            debugPrint('[MqttService] Sent ACK for alert ${ackMessage['alert_id']}');
-          }
-        } else if (topic == topicSecurity) {
-          _securityController.add(jsonData);
-        } else if (topic == topicMaintenance) {
-          _maintenanceController.add(jsonData);
-        } else if (topic == topicAllEvents) {
-          _allEventsController.add(jsonData);
-        } else if (topic == topicGps) {
-          // High frequency data - ignored by client to avoid lag
-        }
-
-        debugPrint('[MqttService] Received on $topic: ${jsonData.keys.toList()}');
-      } catch (e) {
-        debugPrint('[MqttService] Error parsing message on $topic: $e');
+    try {
+      final dynamic parsedData = json.decode(data);
+      if (parsedData is! Map<String, dynamic>) {
+        debugPrint('[MqttService] Invalid payload format (not a Map) on $topic');
+        return;
       }
+
+      if (_isMessageExpired(parsedData, topic)) return;
+
+      _routeMessage(topic, parsedData);
+
+      debugPrint('[MqttService] Received on $topic: ${parsedData.keys.toList()}');
+    } catch (e) {
+      debugPrint('[MqttService] Error parsing message on $topic: $e');
+    }
+  }
+
+  bool _isMessageExpired(Map<String, dynamic> jsonData, String topic) {
+    if (!jsonData.containsKey('expiry_time') || jsonData['expiry_time'] == null) {
+      return false;
+    }
+    
+    try {
+      final expiryTime = DateTime.parse(jsonData['expiry_time'].toString()).toUtc();
+      if (DateTime.now().toUtc().isAfter(expiryTime)) {
+        debugPrint('[MqttService] Ignored expired message on $topic');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[MqttService] Invalid expiry_time format: $e');
+    }
+    return false;
+  }
+
+  void _routeMessage(String topic, Map<String, dynamic> jsonData) {
+    if (topic.startsWith(topicQueues.replaceAll('#', ''))) {
+      debugPrint('[MqttService] Emitting to queuesStream: ${jsonData['poi']} = ${jsonData['minutes']} min');
+      _queuesController.add(jsonData);
+    } else if (topic.startsWith(topicRouting.replaceAll('#', ''))) {
+      _routingController.add(jsonData);
+    } else if (topic == topicCongestion) {
+      debugPrint('[MqttService] Congestion message received: ${jsonData['cell_id']}');
+      _congestionController.add(jsonData);
+    } else if (topic == topicAlerts) {
+      _handleAlertMessage(jsonData);
+    } else if (topic == topicSecurity) {
+      _securityController.add(jsonData);
+    } else if (topic == topicMaintenance) {
+      _maintenanceController.add(jsonData);
+    } else if (topic == topicAllEvents) {
+      _allEventsController.add(jsonData);
+    }
+  }
+
+  void _handleAlertMessage(Map<String, dynamic> jsonData) {
+    _alertsController.add(jsonData);
+    
+    if (jsonData['priority'] == 'CRITICAL') {
+      final ackMessage = {
+        'alert_id': jsonData['alert_id'] ?? jsonData['id'],
+        'client_id': _clientId,
+        'status': 'received',
+        'timestamp': DateTime.now().toUtc().toIso8601String()
+      };
+      final builder = MqttClientPayloadBuilder();
+      builder.addString(json.encode(ackMessage));
+      _client!.publishMessage(
+        'alerts/ack/$_clientId',
+        MqttQos.exactlyOnce,
+        builder.payload!,
+      );
+      debugPrint('[MqttService] Sent ACK for alert ${ackMessage['alert_id']}');
     }
   }
 
