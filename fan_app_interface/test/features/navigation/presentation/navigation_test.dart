@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
@@ -22,14 +21,21 @@ Widget _wrap(Widget child) {
   );
 }
 
+// Coordenadas muito próximas (distância < 50m) para evitar recálculo automático
+// 1 grau ≈ 111 km, então 0.0001 grau ≈ 11 metros
+const double _lat1 = 0.0;
+const double _lng1 = 0.0;
+const double _lat2 = 0.0001;
+const double _lng2 = 0.0;
+
 RouteModel _makeRoute() {
   return RouteModel(
     path: [
-      PathNode(nodeId: 'n1', x: 0, y: 0, level: 0, distanceFromStart: 0, estimatedTime: 0),
-      PathNode(nodeId: 'n2', x: 10, y: 0, level: 0, distanceFromStart: 10, estimatedTime: 15),
+      PathNode(nodeId: 'n1', x: _lng1, y: _lat1, level: 0, distanceFromStart: 0, estimatedTime: 0),
+      PathNode(nodeId: 'n2', x: _lng2, y: _lat2, level: 0, distanceFromStart: 11, estimatedTime: 8),
     ],
-    totalDistance: 10,
-    estimatedTime: 15,
+    totalDistance: 11,
+    estimatedTime: 8,
     congestionLevel: 0,
     warnings: [],
   );
@@ -39,20 +45,18 @@ void main() {
   group('NavigationController unit tests', () {
     late NavigationController controller;
     final nodes = [
-      NodeModel(id: 'n1', x: 0, y: 0, level: 0, type: 'node'),
-      NodeModel(id: 'n2', x: 10, y: 0, level: 0, type: 'node'),
+      NodeModel(id: 'n1', x: _lng1, y: _lat1, level: 0, type: 'node'),
+      NodeModel(id: 'n2', x: _lng2, y: _lat2, level: 0, type: 'node'),
     ];
 
     setUp(() {
-      final dest = POIModel(id: 'poi1', name: 'WC', x: 10, y: 0, level: 0, category: 'wc');
-      // IMPORTANTE: O nome do parâmetro deve ser 'route' ou 'initialRoute' conforme o código real.
-      // Se o erro persistir, altere para o nome correto (verifique no navigation_controller.dart).
+      final dest = POIModel(id: 'poi1', name: 'WC', x: _lng2, y: _lat2, level: 0, category: 'wc');
       controller = NavigationController(
-        route: _makeRoute(),  // ALTERAR para 'initialRoute' se necessário
+        route: _makeRoute(),
         destination: dest,
         allNodes: nodes,
-        initialX: 0,
-        initialY: 0,
+        initialX: _lng1,
+        initialY: _lat1,
         initialLevel: 0,
       );
     });
@@ -86,7 +90,7 @@ void main() {
     });
 
     test('updateUserPosition does not throw', () {
-      expect(() => controller.updateUserPosition(1.0, 0.5), returnsNormally);
+      expect(() => controller.updateUserPosition(_lng1 + 0.00001, _lat1), returnsNormally);
     });
 
     test('hasArrived is false initially', () {
@@ -96,17 +100,17 @@ void main() {
 
   group('NavigationPage Widget Tests', () {
     testWidgets('renders without crash with a valid route', (tester) async {
-      final dest = POIModel(id: 'poi1', name: 'Balneário', x: 10, y: 0, level: 0, category: 'wc');
+      final dest = POIModel(id: 'poi1', name: 'Balneário', x: _lng2, y: _lat2, level: 0, category: 'wc');
       await tester.pumpWidget(_wrap(
         NavigationPage(
           route: _makeRoute(),
           destination: dest,
           nodes: [
-            NodeModel(id: 'n1', x: 0, y: 0, level: 0, type: 'node'),
-            NodeModel(id: 'n2', x: 10, y: 0, level: 0, type: 'node'),
+            NodeModel(id: 'n1', x: _lng1, y: _lat1, level: 0, type: 'node'),
+            NodeModel(id: 'n2', x: _lng2, y: _lat2, level: 0, type: 'node'),
           ],
-          initialX: 0,
-          initialY: 0,
+          initialX: _lng1,
+          initialY: _lat1,
           initialLevel: 0,
         ),
       ));
@@ -115,17 +119,17 @@ void main() {
     });
 
     testWidgets('shows destination name on screen', (tester) async {
-      final dest = POIModel(id: 'poi1', name: 'Balneário Norte', x: 10, y: 0, level: 0, category: 'wc');
+      final dest = POIModel(id: 'poi1', name: 'Balneário Norte', x: _lng2, y: _lat2, level: 0, category: 'wc');
       await tester.pumpWidget(_wrap(
         NavigationPage(
           route: _makeRoute(),
           destination: dest,
           nodes: [
-            NodeModel(id: 'n1', x: 0, y: 0, level: 0, type: 'node'),
-            NodeModel(id: 'n2', x: 10, y: 0, level: 0, type: 'node'),
+            NodeModel(id: 'n1', x: _lng1, y: _lat1, level: 0, type: 'node'),
+            NodeModel(id: 'n2', x: _lng2, y: _lat2, level: 0, type: 'node'),
           ],
-          initialX: 0,
-          initialY: 0,
+          initialX: _lng1,
+          initialY: _lat1,
           initialLevel: 0,
         ),
       ));
