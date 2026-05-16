@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fan_app_interface/l10n/app_localizations.dart';
 import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
@@ -46,7 +45,7 @@ void main() {
     setUp(() {
       final dest = POIModel(id: 'poi1', name: 'WC', x: 10, y: 0, level: 0, category: 'wc');
       controller = NavigationController(
-        route: _makeRoute(),  // Nome do parâmetro conforme o código real
+        initialRoute: _makeRoute(),   // Nome correto do parâmetro
         destination: dest,
         allNodes: nodes,
         initialX: 0,

@@ -67,13 +67,15 @@ void main() {
       expect(LocalMapCache.hasValidCache(), isFalse);
     });
 
-    test('hasValidCache returns true after saving nodes', () async {
+    test('hasValidCache returns true after saving nodes and edges', () async {
       await LocalMapCache.saveNodes([]);
+      await LocalMapCache.saveEdges([]);
       expect(LocalMapCache.hasValidCache(), isTrue);
     });
 
     test('clear removes all data', () async {
       await LocalMapCache.saveNodes([NodeModel(id: 'n1', x: 0, y: 0, level: 0, type: 'node')]);
+      await LocalMapCache.saveEdges([]);
       await LocalMapCache.clear();
       expect(LocalMapCache.getNodes(), isEmpty);
       expect(LocalMapCache.hasValidCache(), isFalse);
