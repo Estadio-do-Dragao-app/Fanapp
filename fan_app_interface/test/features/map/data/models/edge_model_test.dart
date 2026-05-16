@@ -9,39 +9,49 @@ void main() {
         'from': 'N1',
         'to': 'N2',
         'weight': 12.5,
-        'level': 0,
-        'type': 'corridor',
       };
 
       final edge = EdgeModel.fromJson(json);
 
       expect(edge.id, 'E1');
-      expect(edge.from, 'N1');
-      expect(edge.to, 'N2');
+      expect(edge.fromId, 'N1');
+      expect(edge.toId, 'N2');
       expect(edge.weight, 12.5);
-      expect(edge.level, 0);
-      expect(edge.type, 'corridor');
     });
 
-    test('fromJson handles missing optional fields with defaults', () {
+    test('fromJson handles alternative field names (from_id, to_id, w)', () {
       final json = {
         'id': 'E2',
-        'from': 'N1',
-        'to': 'N3',
+        'from_id': 'N3',
+        'to_id': 'N4',
+        'w': 8.0,
       };
 
-      // Should not throw
-      expect(() => EdgeModel.fromJson(json), returnsNormally);
+      final edge = EdgeModel.fromJson(json);
+      expect(edge.id, 'E2');
+      expect(edge.fromId, 'N3');
+      expect(edge.toId, 'N4');
+      expect(edge.weight, 8.0);
+    });
+
+    test('fromJson provides defaults for missing fields', () {
+      final json = {
+        'id': 'E3',
+      };
+
+      final edge = EdgeModel.fromJson(json);
+      expect(edge.id, 'E3');
+      expect(edge.fromId, 'unknown_from');
+      expect(edge.toId, 'unknown_to');
+      expect(edge.weight, 1.0);
     });
 
     test('toJson should return correct Map', () {
       final edge = EdgeModel(
         id: 'E1',
-        from: 'N1',
-        to: 'N2',
+        fromId: 'N1',
+        toId: 'N2',
         weight: 10.0,
-        level: 1,
-        type: 'stairs',
       );
 
       final json = edge.toJson();
@@ -49,19 +59,7 @@ void main() {
       expect(json['id'], 'E1');
       expect(json['from'], 'N1');
       expect(json['to'], 'N2');
-      expect(json['weight'], 10.0);
-      expect(json['level'], 1);
-      expect(json['type'], 'stairs');
-    });
-
-    test('two edges with same id should be considered equal (if == is overridden)', () {
-      final e1 = EdgeModel(id: 'E1', from: 'N1', to: 'N2', weight: 5.0, level: 0, type: 'corridor');
-      final e2 = EdgeModel(id: 'E1', from: 'N1', to: 'N2', weight: 5.0, level: 0, type: 'corridor');
-
-      // Basic structural equality check
-      expect(e1.id, e2.id);
-      expect(e1.from, e2.from);
-      expect(e1.to, e2.to);
+      expect(json['w'], 10.0);
     });
   });
 }

@@ -5,15 +5,12 @@ import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
 
 void main() {
   group('SavedPlacesService', () {
-    late SavedPlacesService service;
-
     setUp(() {
       SharedPreferences.setMockInitialValues({});
-      service = SavedPlacesService();
     });
 
     test('getSavedPlaces returns empty list when nothing saved', () async {
-      final places = await service.getSavedPlaces();
+      final places = await SavedPlacesService.getSavedPlaces();
       expect(places, isEmpty);
     });
 
@@ -27,8 +24,8 @@ void main() {
         level: 0,
       );
 
-      await service.savePlace(poi);
-      final places = await service.getSavedPlaces();
+      await SavedPlacesService.savePlace(poi);
+      final places = await SavedPlacesService.getSavedPlaces();
 
       expect(places, isNotEmpty);
       expect(places.any((p) => p.id == 'poi_test_1'), isTrue);
@@ -44,15 +41,15 @@ void main() {
         level: 1,
       );
 
-      await service.savePlace(poi);
-      await service.removePlace('poi_test_2');
-      final places = await service.getSavedPlaces();
+      await SavedPlacesService.savePlace(poi);
+      await SavedPlacesService.removePlace('poi_test_2');
+      final places = await SavedPlacesService.getSavedPlaces();
 
       expect(places.any((p) => p.id == 'poi_test_2'), isFalse);
     });
 
     test('isSaved returns false for unsaved POI', () async {
-      final result = await service.isSaved('nonexistent_id');
+      final result = await SavedPlacesService.isSaved('nonexistent_id');
       expect(result, isFalse);
     });
 
@@ -66,8 +63,8 @@ void main() {
         level: 0,
       );
 
-      await service.savePlace(poi);
-      final result = await service.isSaved('poi_test_3');
+      await SavedPlacesService.savePlace(poi);
+      final result = await SavedPlacesService.isSaved('poi_test_3');
       expect(result, isTrue);
     });
 
@@ -81,11 +78,19 @@ void main() {
         level: 0,
       );
 
-      await service.savePlace(poi);
-      await service.savePlace(poi);
-      final places = await service.getSavedPlaces();
+      await SavedPlacesService.savePlace(poi);
+      await SavedPlacesService.savePlace(poi);
+      final places = await SavedPlacesService.getSavedPlaces();
 
       expect(places.where((p) => p.id == 'poi_dup').length, 1);
+    });
+
+    test('clearAll removes all saved places', () async {
+      final poi = POIModel(id: 'clear_me', name: 'To Clear', category: 'wc', x: 0, y: 0, level: 0);
+      await SavedPlacesService.savePlace(poi);
+      await SavedPlacesService.clearAll();
+      final places = await SavedPlacesService.getSavedPlaces();
+      expect(places, isEmpty);
     });
   });
 }

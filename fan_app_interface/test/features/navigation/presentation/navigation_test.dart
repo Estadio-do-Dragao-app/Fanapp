@@ -8,9 +8,6 @@ import 'package:fan_app_interface/features/navigation/domain/navigation_controll
 import 'package:fan_app_interface/features/map/data/models/route_model.dart';
 import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
 import 'package:fan_app_interface/features/map/data/models/node_model.dart';
-import 'package:fan_app_interface/features/map/data/services/routing_service.dart';
-
-class MockRoutingService extends Mock implements RoutingService {}
 
 Widget _wrap(Widget child) {
   return MaterialApp(
@@ -49,78 +46,66 @@ void main() {
     setUp(() {
       final dest = POIModel(id: 'poi1', name: 'WC', x: 10, y: 0, level: 0, category: 'wc');
       controller = NavigationController(
-        route: _makeRoute(),
+        initialRoute: _makeRoute(),
         destination: dest,
         allNodes: nodes,
         initialX: 0,
         initialY: 0,
+        initialLevel: 0,
       );
     });
 
+    tearDown(() {
+      controller.dispose();
+    });
+
     test('initial route is set correctly', () {
-      expect(controller.route.path.length, 2);
-      expect(controller.route.path.first.nodeId, 'n1');
+      expect(controller.route.waypoints.length, 2);
+      expect(controller.route.waypoints.first.nodeId, 'n1');
     });
 
-    test('isNavigating is true after start', () {
-      controller.start();
-      expect(controller.isNavigating, isTrue);
+    test('isNavigating is true after construction', () {
+      expect(controller.isNavigating, true);
     });
 
-    test('stop sets isNavigating to false', () {
-      controller.start();
-      controller.stop();
-      expect(controller.isNavigating, isFalse);
+    test('endNavigation sets isNavigating to false', () async {
+      await controller.endNavigation();
+      expect(controller.isNavigating, false);
     });
 
     test('applyNewRoute replaces path with new node ids', () {
       controller.applyNewRoute(['n2', 'n1']);
-      expect(controller.route.path.first.nodeId, 'n2');
-      expect(controller.route.path.last.nodeId, 'n1');
+      expect(controller.route.waypoints.first.nodeId, 'n2');
+      expect(controller.route.waypoints.last.nodeId, 'n1');
     });
 
     test('applyNewRoute with unknown nodes does not crash', () {
       expect(() => controller.applyNewRoute(['unknown_x']), returnsNormally);
     });
 
-    test('updatePosition does not throw', () {
-      controller.start();
-      expect(() => controller.updatePosition(1.0, 0.5, level: 0), returnsNormally);
+    test('updateUserPosition does not throw', () {
+      expect(() => controller.updateUserPosition(1.0, 0.5), returnsNormally);
     });
 
-    test('hasArrived is false at start', () {
-      expect(controller.hasArrived, isFalse);
-    });
-
-    test('remainingDistance decreases as user advances', () {
-      controller.start();
-      final before = controller.remainingDistance;
-      controller.updatePosition(5.0, 0.0, level: 0);
-      final after = controller.remainingDistance;
-      expect(after, lessThanOrEqualTo(before));
+    test('hasArrived is false initially', () {
+      expect(controller.hasArrived, false);
     });
   });
 
   group('NavigationPage Widget Tests', () {
-    late MockRoutingService mockRoutingService;
-
-    setUp(() {
-      mockRoutingService = MockRoutingService();
-    });
-
     testWidgets('renders without crash with a valid route', (tester) async {
       final dest = POIModel(id: 'poi1', name: 'Balneário', x: 10, y: 0, level: 0, category: 'wc');
       await tester.pumpWidget(_wrap(
         NavigationPage(
           route: _makeRoute(),
           destination: dest,
-          allNodes: [
+          nodes: [
             NodeModel(id: 'n1', x: 0, y: 0, level: 0, type: 'node'),
             NodeModel(id: 'n2', x: 10, y: 0, level: 0, type: 'node'),
           ],
-          routingService: mockRoutingService,
           initialX: 0,
           initialY: 0,
+          initialLevel: 0,
         ),
       ));
       await tester.pump();
@@ -133,39 +118,18 @@ void main() {
         NavigationPage(
           route: _makeRoute(),
           destination: dest,
-          allNodes: [
+          nodes: [
             NodeModel(id: 'n1', x: 0, y: 0, level: 0, type: 'node'),
             NodeModel(id: 'n2', x: 10, y: 0, level: 0, type: 'node'),
           ],
-          routingService: mockRoutingService,
           initialX: 0,
           initialY: 0,
+          initialLevel: 0,
         ),
       ));
       await tester.pumpAndSettle();
 
       expect(find.text('Balneário Norte'), findsOneWidget);
-    });
-
-    testWidgets('shows estimated time from route', (tester) async {
-      final dest = POIModel(id: 'poi1', name: 'Gate B', x: 10, y: 0, level: 0, category: 'entrance');
-      await tester.pumpWidget(_wrap(
-        NavigationPage(
-          route: _makeRoute(),
-          destination: dest,
-          allNodes: [
-            NodeModel(id: 'n1', x: 0, y: 0, level: 0, type: 'node'),
-            NodeModel(id: 'n2', x: 10, y: 0, level: 0, type: 'node'),
-          ],
-          routingService: mockRoutingService,
-          initialX: 0,
-          initialY: 0,
-        ),
-      ));
-      await tester.pumpAndSettle();
-
-      // Should display something with time info
-      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -13,32 +13,43 @@ void main() {
       viewModel.dispose();
     });
 
-    test('initial state has no selected tab', () {
-      expect(viewModel.selectedIndex, 0);
+    test('initial state has default values', () {
+      expect(viewModel.showHeatmap, false);
+      expect(viewModel.isHeatmapAvailable, true);
+      expect(viewModel.currentFloor, 0);
+      expect(viewModel.avoidStairs, false);
+      expect(viewModel.isFilterExpanded, false);
+      expect(viewModel.isPOIPanelOpen, false);
     });
 
-    test('setSelectedIndex updates index and notifies listeners', () {
+    test('setHeatmap updates value and notifies', () {
       int notifyCount = 0;
       viewModel.addListener(() => notifyCount++);
 
-      viewModel.setSelectedIndex(1);
+      viewModel.setHeatmap(true);
 
-      expect(viewModel.selectedIndex, 1);
+      expect(viewModel.showHeatmap, true);
       expect(notifyCount, greaterThan(0));
     });
 
-    test('setSelectedIndex to same value still updates', () {
-      viewModel.setSelectedIndex(0);
-      final before = viewModel.selectedIndex;
-      viewModel.setSelectedIndex(0);
-      expect(viewModel.selectedIndex, before);
+    test('setFloor updates current floor', () {
+      viewModel.setFloor(2);
+      expect(viewModel.currentFloor, 2);
     });
 
-    test('setSelectedIndex handles multiple updates in sequence', () {
-      viewModel.setSelectedIndex(0);
-      viewModel.setSelectedIndex(1);
-      viewModel.setSelectedIndex(2);
-      expect(viewModel.selectedIndex, 2);
+    test('setAvoidStairs updates value', () {
+      viewModel.setAvoidStairs(true);
+      expect(viewModel.avoidStairs, true);
+    });
+
+    test('setFilterExpanded updates value', () {
+      viewModel.setFilterExpanded(true);
+      expect(viewModel.isFilterExpanded, true);
+    });
+
+    test('setPOIPanelOpen updates value', () {
+      viewModel.setPOIPanelOpen(true);
+      expect(viewModel.isPOIPanelOpen, true);
     });
 
     test('dispose does not throw', () {
