@@ -2,6 +2,7 @@ import 'package:latlong2/latlong.dart';
 
 import 'package:geolocator/geolocator.dart';
 import '../../features/navigation/data/services/user_position_service.dart';
+import '../services/permission_service.dart';
 
 class GeographicUtils {
   static const Distance _distanceCalculator = Distance();
@@ -77,21 +78,9 @@ class GeographicUtils {
     
     
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw Exception('Location services are disabled.');
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          throw Exception('Location permissions are denied');
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are permanently denied');
+      bool hasPermission = await PermissionService.ensureLocationPermission();
+      if (!hasPermission) {
+        throw Exception('Location permission denied or services disabled');
       }
 
       // Tentar obter a última posição conhecida (instantâneo)

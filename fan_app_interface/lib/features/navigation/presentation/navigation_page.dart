@@ -8,7 +8,7 @@ import '../../map/data/models/node_model.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../map/data/services/map_service.dart';
-import '../../map/presentation/stadium_map_page.dart';
+import '../../map/presentation/fan_map_page.dart';
 import '../../poi/presentation/poi_details_sheet.dart';
 import '../domain/navigation_controller.dart';
 import '../domain/models/reroute_event.dart';
@@ -107,7 +107,7 @@ class _NavigationPageState extends State<NavigationPage>
         print('[NavigationPage] Emergency mode: reroute change ignored.');
         return;
       }
-      print("[NavigationPage] 🔔 Reroute event received!");
+      print("[NavigationPage] Reroute event received!");
       setState(() {
         _rerouteEvent = event;
         _showReroutePopup = true;
@@ -119,7 +119,7 @@ class _NavigationPageState extends State<NavigationPage>
     // _controller.route field which may be stale due to rapid async callbacks.
     _controller.routeChangeStream.listen((newRoute) {
       if (!mounted) return;
-      print('[NavigationPage] 🗺️ routeChangeStream: new route hash=${newRoute.hashCode} len=${newRoute.waypoints.length}');
+      print('[NavigationPage] routeChangeStream: new route hash=${newRoute.hashCode} len=${newRoute.waypoints.length}');
       setState(() {
         _activeRoute = newRoute;
         final sig = _routeSignature(newRoute);
@@ -145,7 +145,7 @@ class _NavigationPageState extends State<NavigationPage>
     final currentRoute = _controller.route; // snapshot before async yields
     final currentSignature = _routeSignature(currentRoute);
     print(
-      '[NavigationPage-HASH] 🔄 Update: index=${_controller.tracker.currentWaypointIndex} - ControllerHash: ${_controller.hashCode} - Mounted: $mounted - RouteObjHash: ${currentRoute.hashCode}',
+      '[NavigationPage-HASH] Update: index=${_controller.tracker.currentWaypointIndex} - ControllerHash: ${_controller.hashCode} - Mounted: $mounted - RouteObjHash: ${currentRoute.hashCode}',
     );
     setState(() {
       // NOTE: _activeRoute is only updated by routeChangeStream - do NOT
@@ -336,7 +336,7 @@ class _NavigationPageState extends State<NavigationPage>
         body: Stack(
           children: [
             // Mapa de fundo com rota destacada
-            StadiumMapPage(
+            FanMapPage(
               key: const ValueKey('nav-map-active'),
               highlightedRoute: _activeRoute,
               highlightedPOI: _currentDestination,
@@ -431,7 +431,7 @@ class _NavigationPageState extends State<NavigationPage>
                     String? capturedCategory = _rerouteEvent?.category;
                     final originalCategory = widget.destination.category;
 
-                    print('[NavigationPage] 🔍 Debug Reroute Values:');
+                    print('[NavigationPage] Debug Reroute Values:');
                     print(
                       '  - Event Dest ID: "${_rerouteEvent?.newDestinationId}"',
                     );
@@ -444,7 +444,7 @@ class _NavigationPageState extends State<NavigationPage>
                         originalCategory.isNotEmpty) {
                       capturedCategory = originalCategory;
                       print(
-                        '[NavigationPage] 📦 Using original destination category: $capturedCategory',
+                        '[NavigationPage] Using original destination category: $capturedCategory',
                       );
                     }
 
@@ -494,14 +494,14 @@ class _NavigationPageState extends State<NavigationPage>
                             .split('-')
                             .first;
                         print(
-                          '[NavigationPage] 📦 Extracted category from POI ID: $effectiveCategory',
+                          '[NavigationPage] Extracted category from POI ID: $effectiveCategory',
                         );
                       }
 
                       if (effectiveCategory != null &&
                           effectiveCategory.isNotEmpty) {
                         print(
-                          '[NavigationPage] 🔄 Requesting nearest $effectiveCategory from ($currentX, $currentY) level=$currentLevel',
+                          '[NavigationPage] Requesting nearest $effectiveCategory from ($currentX, $currentY) level=$currentLevel',
                         );
                         newRoute = await _routingService
                             .getRouteToNearestCategory(
@@ -513,7 +513,7 @@ class _NavigationPageState extends State<NavigationPage>
                             );
                       } else {
                         print(
-                          '[NavigationPage] 🔄 Requesting route to specific POI $capturedNewDestinationId',
+                          '[NavigationPage] Requesting route to specific POI $capturedNewDestinationId',
                         );
                         newRoute = await _routingService.getRouteToPOI(
                           startX: currentX,
@@ -529,7 +529,7 @@ class _NavigationPageState extends State<NavigationPage>
                             .map((p) => p.nodeId)
                             .toList();
                         print(
-                          '[NavigationPage] ✅ New route received with ${nodeIds.length} nodes',
+                          '[NavigationPage] New route received with ${nodeIds.length} nodes',
                         );
                         if (mounted) {
                           Navigator.pop(context); // Dismiss loading dialog
@@ -572,7 +572,7 @@ class _NavigationPageState extends State<NavigationPage>
                         }
                       }
                     } catch (e) {
-                      print('[NavigationPage] ❌ Failed to get new route: $e');
+                      print('[NavigationPage] Failed to get new route: $e');
                       if (mounted) {
                         Navigator.pop(context); // Dismiss loading dialog
                         ScaffoldMessenger.of(context).showSnackBar(

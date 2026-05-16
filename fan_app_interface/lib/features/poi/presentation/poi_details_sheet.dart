@@ -160,7 +160,7 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
               if ([
                     'wc',
                     'food',
-                    // 'ticket', // Ticket feature temporarily disabled
+                    // 'ticket' is decommissioned
                     'store',
                     'bar',
                     'bar_p',

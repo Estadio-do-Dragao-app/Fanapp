@@ -33,7 +33,7 @@ import 'dart:async';
 import '../../../core/config/map_config.dart';
 
 /// Página principal do mapa interativo do estádio
-class StadiumMapPage extends StatefulWidget {
+class FanMapPage extends StatefulWidget {
   final RouteModel? highlightedRoute;
   final POIModel? highlightedPOI;
   final bool showAllPOIs;
@@ -61,8 +61,11 @@ class StadiumMapPage extends StatefulWidget {
   final VoidCallback? onRecenterNavigation;
   final VoidCallback? onCompassPressed;
   final double? navigationControlsBottomInset;
+  final MapService? mapService;
+  final RoutingService? routingService;
+  final CongestionService? congestionService;
 
-  const StadiumMapPage({
+  const FanMapPage({
     super.key,
     this.initialFloor = 0,
     this.mapController,
@@ -93,6 +96,9 @@ class StadiumMapPage extends StatefulWidget {
     this.navigationControlsBottomInset,
     this.customPOIsToShow,
     this.zoomOutToPOIs = false,
+    this.mapService,
+    this.routingService,
+    this.congestionService,
   });
 
   final bool isEmergency;
@@ -100,23 +106,21 @@ class StadiumMapPage extends StatefulWidget {
   final bool zoomOutToPOIs;
 
   @override
-  State<StadiumMapPage> createState() => StadiumMapPageState();
+  State<FanMapPage> createState() => FanMapPageState();
 }
 
-class StadiumMapPageState extends State<StadiumMapPage>
+class FanMapPageState extends State<FanMapPage>
     with SingleTickerProviderStateMixin {
   static const double _controlsCardRightInset = 20;
   static const double _controlsCardBottomInset = 100;
   static const double _controlsCardHeight = 116;
   static const double _controlsCardGapAbovePanel = 16;
-  static const double _emergencyButtonGap = 12;
-  static const double _emergencyButtonSize = 50;
 
   late final MapController _mapController;
   late final AnimationController _blinkController;
-  final MapService _mapService = MapService();
-  final RoutingService _routingService = RoutingService();
-  final CongestionService _congestionService = CongestionService();
+  late final MapService _mapService;
+  late final RoutingService _routingService;
+  late final CongestionService _congestionService;
 
   // Posição do utilizador (carregada do UserPositionService)
   double _userPositionX = 0.0;
@@ -159,6 +163,9 @@ class StadiumMapPageState extends State<StadiumMapPage>
     super.initState();
     // Usa controller fornecido ou cria um interno
     _mapController = widget.mapController ?? MapController();
+    _mapService = widget.mapService ?? MapService();
+    _routingService = widget.routingService ?? RoutingService();
+    _congestionService = widget.congestionService ?? CongestionService();
     // Inicializar com a rota passada como parâmetro
     _currentRoute = widget.highlightedRoute;
     // Usar o piso inicial fornecido
@@ -200,7 +207,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
         });
       }
     } on MissingPluginException catch (e) {
-      print('[StadiumMapPage] Geolocator plugin unavailable: $e');
+      print('[FanMapPage] Geolocator plugin unavailable: $e');
       if (mounted) {
         setState(() {
           _isLocationLayerAvailable = false;
@@ -267,19 +274,19 @@ class StadiumMapPageState extends State<StadiumMapPage>
   }
 
   @override
-  void didUpdateWidget(StadiumMapPage oldWidget) {
+  void didUpdateWidget(FanMapPage oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     final oldSig = _buildRouteSignature(oldWidget.highlightedRoute);
     final newSig = _buildRouteSignature(widget.highlightedRoute);
-    print('[StadiumMapPage-HASH] didUpdateWidget - oldWidgetHash: ${oldWidget.hashCode} - newWidgetHash: ${widget.hashCode} - oldRouteHash: ${oldWidget.highlightedRoute.hashCode} - newRouteHash: ${widget.highlightedRoute.hashCode}');
+    print('[FanMapPage-HASH] didUpdateWidget - oldWidgetHash: ${oldWidget.hashCode} - newWidgetHash: ${widget.hashCode} - oldRouteHash: ${oldWidget.highlightedRoute.hashCode} - newRouteHash: ${widget.highlightedRoute.hashCode}');
     
     if (widget.highlightedRoute != oldWidget.highlightedRoute || oldSig != newSig) {
       setState(() {
         _currentRoute = widget.highlightedRoute;
       });
       if (widget.isNavigating) {
-        print('[StadiumMapPage] Route signature changed in navigation: $newSig');
+        print('[FanMapPage] Route signature changed in navigation: $newSig');
       }
     }
 
@@ -1342,7 +1349,7 @@ class StadiumMapPageState extends State<StadiumMapPage>
     }
 
     print(
-      '[StadiumMapPage] draw route RAW: total=${route.waypoints.length}, '
+      '[FanMapPage] draw route RAW: total=${route.waypoints.length}, '
       'rendered=${points.length}, gpsStart=${widget.userPosition != null}, '
       'sig=${_buildRouteSignature(route)} '
       '- RouteObjHash: ${route.hashCode} - WidgetRouteHash: ${widget.highlightedRoute.hashCode}',

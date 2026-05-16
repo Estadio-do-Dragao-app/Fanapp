@@ -21,15 +21,13 @@ class POIModel {
 
   factory POIModel.fromJson(Map<String, dynamic> json) {
     return POIModel(
-      id: json['id'] as String,
-      name:
-          json['name'] as String? ??
-          'Unnamed', // Handle nullable name if occurs
-      category: json['type'] as String? ?? 'unknown',
-      description: json['description'] as String? ?? '',
-      x: (json['x'] as num).toDouble(),
-      y: (json['y'] as num).toDouble(),
-      level: json['level'] as int,
+      id: json['id']?.toString() ?? 'unknown_poi',
+      name: json['name']?.toString() ?? 'Unnamed', 
+      category: json['type']?.toString() ?? 'unknown',
+      description: json['description']?.toString() ?? '',
+      x: (json['x'] as num?)?.toDouble() ?? 0.0,
+      y: (json['y'] as num?)?.toDouble() ?? 0.0,
+      level: json['level'] as int? ?? 0,
     );
   }
 

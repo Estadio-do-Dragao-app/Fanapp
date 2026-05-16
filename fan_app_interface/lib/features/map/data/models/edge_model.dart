@@ -13,10 +13,10 @@ class EdgeModel {
 
   factory EdgeModel.fromJson(Map<String, dynamic> json) {
     return EdgeModel(
-      id: json['id'] as String,
-      fromId: json['from'] ?? json['from_id'], // Handle both formats if needed
-      toId: json['to'] ?? json['to_id'],
-      weight: (json['w'] ?? json['weight'] ?? 0).toDouble(),
+      id: json['id']?.toString() ?? 'unknown_edge',
+      fromId: (json['from'] ?? json['from_id'])?.toString() ?? 'unknown_from',
+      toId: (json['to'] ?? json['to_id'])?.toString() ?? 'unknown_to',
+      weight: ((json['w'] ?? json['weight']) as num?)?.toDouble() ?? 1.0,
     );
   }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'l10n/app_localizations.dart';
 import 'features/map/presentation/pages/map_page.dart';
 import 'features/poi/presentation/navbar.dart';
@@ -7,11 +6,7 @@ import 'features/hub/presentation/search_bar.dart';
 import 'features/hub/presentation/menu_button.dart';
 import 'features/map/presentation/filter_button.dart';
 import 'features/poi/presentation/saved_places_sheet.dart';
-import 'features/map/data/services/congestion_service.dart';
-import 'features/map/data/services/waittime_cache.dart';
-import 'features/navigation/data/services/user_position_service.dart';
-import 'core/services/mqtt_service.dart';
-import 'features/privacy/presentation/consent_modal.dart';
+import 'home_view_model.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -21,321 +16,178 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  // GlobalKey para acessar o state do MapPage (agora público)
   final GlobalKey<MapPageState> _mapPageKey = GlobalKey<MapPageState>();
-  final CongestionService _congestionService = CongestionService();
-
-  // Estado do heatmap
-  bool _showHeatmap = false;
-  bool _isHeatmapAvailable = true;
-  Timer? _healthCheckTimer;
-  StreamSubscription? _alertSubscription;
-
-  // Estado do piso
-  int _currentFloor = 0;
-
-  // Estado de acessibilidade
-  bool _avoidStairs = false;
-
-  // GlobalKey para acessar o FilterButton e fechá-lo de fora
-  final GlobalKey<FilterButtonState> _filterButtonKey =
-      GlobalKey<FilterButtonState>();
-  bool _isFilterExpanded = false;
-  bool _isPOIPanelOpen = false;
-
-  void _openEmergencyTestFlow() {
-    if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil('/emergency-alert', (route) => false);
-  }
+  final GlobalKey<FilterButtonState> _filterButtonKey = GlobalKey<FilterButtonState>();
+  late final HomeViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialFilter();
-    _checkCongestionHealth();
-    // Iniciar cache de tempos de espera
-    WaittimeCache().start();
-    // Iniciar timer de 30s (só verifica quando heatmap está desligado)
-    _startHealthCheckTimer();
-    
-    // Check consent BEFORE initializing MQTT and LocationService
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeWithConsent();
-    });
-  }
-
-  Future<void> _initializeWithConsent() async {
-    final consented = await ConsentModal.hasConsented();
-    if (!consented && mounted) {
-      // Show consent modal before initializing services
-      ConsentModal.show(context, onAccepted: () {
-        // Now initialize MQTT and alerts after consent accepted
-        _initMqttAndAlerts();
-      });
-    } else if (consented && mounted) {
-      // User already consented, initialize normally
-      _initMqttAndAlerts();
-    }
-  }
-
-  Future<void> _checkPrivacyConsent() async {
-    final consented = await ConsentModal.hasConsented();
-    if (!consented && mounted) {
-      ConsentModal.show(context, onAccepted: () {
-        // Continue normally
-      });
-    }
-  }
-
-  Future<void> _initMqttAndAlerts() async {
-    // Conectar MQTT primeiro
-    await MqttService().connect();
-    // Depois configurar listener de alertas
-    _alertSubscription = MqttService().alertsStream.listen((data) {
-      if (!mounted) return;
-      print('[Home] Received alert: $data');
-      _openEmergencyTestFlow(); // Remove todas as rotas anteriores da stack
-    });
-  }
-
-  Future<void> _loadInitialFilter() async {
-    final pos = await UserPositionService.getPosition();
-    if (mounted && pos != null) {
-      setState(() {
-        _currentFloor = pos.level;
-      });
-    }
+    _viewModel = HomeViewModel();
+    _viewModel.onEmergencyAlert = _openEmergencyTestFlow;
+    _viewModel.initConsent(context);
   }
 
   @override
   void dispose() {
-    _healthCheckTimer?.cancel();
-    _alertSubscription?.cancel();
+    _viewModel.dispose();
     super.dispose();
   }
 
-  /// Inicia timer de verificação de saúde (30 segundos)
-  void _startHealthCheckTimer() {
-    _healthCheckTimer?.cancel();
-    _healthCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      // Só verifica quando heatmap está desligado
-      if (!_showHeatmap) {
-        _checkCongestionHealth();
-      }
-    });
-  }
-
-  Future<void> _checkCongestionHealth() async {
-    final isConnected = await _congestionService.connect();
-    _updateHealthStatus(isConnected);
-  }
-
-  /// Atualiza estado de disponibilidade (chamado pelo timer ou pelo MapPage)
-  void _updateHealthStatus(bool isHealthy) {
-    if (mounted && _isHeatmapAvailable != isHealthy) {
-      setState(() {
-        _isHeatmapAvailable = isHealthy;
-        // Desativar heatmap automaticamente se serviço falhar
-        if (!isHealthy && _showHeatmap) {
-          _showHeatmap = false;
-        }
-      });
-    }
-  }
-
-  /// Callback chamado quando há erro de conexão do heatmap (10s updates)
-  void _onHeatmapConnectionError() {
-    _updateHealthStatus(false);
-  }
-
-  /// Callback chamado quando heatmap recebe dados com sucesso
-  void _onHeatmapConnectionSuccess() {
-    if (!_isHeatmapAvailable) {
-      _updateHealthStatus(true);
-    }
+  void _openEmergencyTestFlow() {
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/emergency-alert', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          MapPage(
-            key: _mapPageKey,
-            showHeatmap: _showHeatmap,
-            onHeatmapConnectionError: _onHeatmapConnectionError,
-            onHeatmapConnectionSuccess: _onHeatmapConnectionSuccess,
-            onFloorChanged: (floor) {
-              if (_currentFloor != floor) {
-                setState(() {
-                  _currentFloor = floor;
-                });
-              }
-            },
-            currentFloor: _currentFloor,
-            avoidStairs: _avoidStairs,
-            onPOIPanelChanged: (isOpen) {
-              setState(() {
-                _isPOIPanelOpen = isOpen;
-              });
-            },
-          ),
-          // Invisible tap detector to close filter when tapping elsewhere
-          if (_isFilterExpanded)
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () {
-                  _filterButtonKey.currentState?.closeMenu();
-                  setState(() {
-                    _isFilterExpanded = false;
-                  });
+      body: ListenableBuilder(
+        listenable: _viewModel,
+        builder: (context, _) {
+          return Stack(
+            children: [
+              MapPage(
+                key: _mapPageKey,
+                showHeatmap: _viewModel.showHeatmap,
+                onHeatmapConnectionError: () => _viewModel.updateHealthStatus(false),
+                onHeatmapConnectionSuccess: () {
+                  if (!_viewModel.isHeatmapAvailable) _viewModel.updateHealthStatus(true);
                 },
-                child: Container(color: Colors.transparent),
+                onFloorChanged: _viewModel.setFloor,
+                currentFloor: _viewModel.currentFloor,
+                avoidStairs: _viewModel.avoidStairs,
+                onPOIPanelChanged: _viewModel.setPOIPanelOpen,
               ),
-            ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 240,
-              child: Navbar(
-                avoidStairs: _avoidStairs,
-                onNavigationEnd: () {
-                  _mapPageKey.currentState?.reloadUserPosition();
-                },
-              ),
-            ),
-          ),
-          // Filter button - top right below navbar
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 130,
-            right: 16,
-            child: FilterButton(
-              key: _filterButtonKey,
-              showHeatmap: _showHeatmap,
-              isHeatmapAvailable: _isHeatmapAvailable,
-              onHeatmapChanged: (value) {
-                print('[Home] 🔥 Heatmap toggle changed: $value');
-                setState(() {
-                  _showHeatmap = value;
-                });
-                // Se está a ligar, verificar saúde imediatamente
-                if (value) {
-                  _checkCongestionHealth();
-                }
-              },
-              avoidStairs: _avoidStairs,
-              onAvoidStairsChanged: (value) {
-                setState(() {
-                  _avoidStairs = value;
-                });
-              },
-              onExpandedChanged: () {
-                setState(() {
-                  _isFilterExpanded =
-                      _filterButtonKey.currentState?.isExpanded ?? false;
-                });
-              },
-            ),
-          ),
-          if (!_isPOIPanelOpen)
-            Positioned(
-              bottom: 16,
-              left: 16,
-              right: 92,
-              child: GestureDetector(
-                onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    useSafeArea: true,
-                    isDismissible: true,
-                    enableDrag: true,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(30),
-                        topRight: Radius.circular(30),
-                      ),
-                    ),
-                    builder: (context) {
-                      return SearchBarBottomSheet(
-                        avoidStairs: _avoidStairs,
-                        onPOISelected: (poi) {
-                          _mapPageKey.currentState?.openPOIDetails(poi);
-                        },
-                        onNavigationEnd: () {
-                          print(
-                            "[Home] Navigation from Search ended. Reloading position.",
-                          );
-                          _mapPageKey.currentState?.reloadUserPosition();
-                        },
-                      );
+              if (_viewModel.isFilterExpanded)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () {
+                      _filterButtonKey.currentState?.closeMenu();
+                      _viewModel.setFilterExpanded(false);
                     },
-                  );
-                },
-                child: Container(
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161A3E),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    child: Container(color: Colors.transparent),
                   ),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 16),
-                      Transform(
-                        alignment: Alignment.center,
-                        transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
-                        child: const Icon(
-                          Icons.search,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          AppLocalizations.of(context)!.search,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'Gabarito',
-                            fontSize: 20,
-                          ),
-                        ),
-                      ),
-                    ],
+                ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: 240,
+                  child: Navbar(
+                    avoidStairs: _viewModel.avoidStairs,
+                    onNavigationEnd: () {
+                      _mapPageKey.currentState?.reloadUserPosition();
+                    },
                   ),
                 ),
               ),
-            ),
-          if (!_isPOIPanelOpen)
-            Positioned(
-              bottom: 16,
-              right: 16,
-              child: MenuButton(
-                icon: Icons.star,
-                onTap: () async {
-                  await SavedPlacesSheet.show(
-                    context,
-                    onPOISelected: (poi) {
-                      _mapPageKey.currentState?.openPOIDetails(poi);
-                    },
-                  );
-                },
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 130,
+                right: 16,
+                child: FilterButton(
+                  key: _filterButtonKey,
+                  showHeatmap: _viewModel.showHeatmap,
+                  isHeatmapAvailable: _viewModel.isHeatmapAvailable,
+                  onHeatmapChanged: _viewModel.setHeatmap,
+                  avoidStairs: _viewModel.avoidStairs,
+                  onAvoidStairsChanged: _viewModel.setAvoidStairs,
+                  onExpandedChanged: () {
+                    _viewModel.setFilterExpanded(_filterButtonKey.currentState?.isExpanded ?? false);
+                  },
+                ),
               ),
-            ),
-        ],
+              if (!_viewModel.isPOIPanelOpen)
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  right: 92,
+                  child: GestureDetector(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        useSafeArea: true,
+                        isDismissible: true,
+                        enableDrag: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(30),
+                            topRight: Radius.circular(30),
+                          ),
+                        ),
+                        builder: (context) {
+                          return SearchBarBottomSheet(
+                            avoidStairs: _viewModel.avoidStairs,
+                            onPOISelected: (poi) {
+                              _mapPageKey.currentState?.openPOIDetails(poi);
+                            },
+                            onNavigationEnd: () {
+                              _mapPageKey.currentState?.reloadUserPosition();
+                            },
+                          );
+                        },
+                      );
+                    },
+                    child: Container(
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF161A3E),
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 16),
+                          Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
+                            child: const Icon(Icons.search, color: Colors.white, size: 30),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              AppLocalizations.of(context)!.search,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Gabarito',
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (!_viewModel.isPOIPanelOpen)
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: MenuButton(
+                    icon: Icons.star,
+                    onTap: () async {
+                      await SavedPlacesSheet.show(
+                        context,
+                        onPOISelected: (poi) {
+                          _mapPageKey.currentState?.openPOIDetails(poi);
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
