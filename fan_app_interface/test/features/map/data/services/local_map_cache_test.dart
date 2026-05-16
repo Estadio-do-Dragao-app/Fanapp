@@ -4,13 +4,14 @@ import 'package:hive/hive.dart';
 import 'package:fan_app_interface/features/map/data/services/local_map_cache.dart';
 import 'package:fan_app_interface/features/map/data/models/node_model.dart';
 import 'package:fan_app_interface/features/map/data/models/edge_model.dart';
-import 'package:fan_app_interface/features/map/data/models/poi_model.dart';
 
 void main() {
+  late Directory tempDir;
+
   setUpAll(() async {
-    final tempDir = await Directory.systemTemp.createTemp('hive_test_');
+    tempDir = await Directory.systemTemp.createTemp('hive_test_');
     Hive.init(tempDir.path);
-    await LocalMapCache.init();
+    await Hive.openBox(LocalMapCache.boxName);
   });
 
   tearDown(() async {
@@ -19,6 +20,7 @@ void main() {
 
   tearDownAll(() async {
     await Hive.deleteFromDisk();
+    await tempDir.delete(recursive: true);
   });
 
   group('LocalMapCache', () {
@@ -37,6 +39,7 @@ void main() {
     });
 
     test('getNodes returns empty list when cache is empty', () {
+      LocalMapCache.clear();
       final loaded = LocalMapCache.getNodes();
       expect(loaded, isEmpty);
     });
@@ -54,11 +57,13 @@ void main() {
     });
 
     test('getEdges returns empty list when cache is empty', () {
+      LocalMapCache.clear();
       final loaded = LocalMapCache.getEdges();
       expect(loaded, isEmpty);
     });
 
     test('hasValidCache returns false initially', () {
+      LocalMapCache.clear();
       expect(LocalMapCache.hasValidCache(), isFalse);
     });
 
@@ -87,9 +92,7 @@ void main() {
       for (int i = 0; i < 25; i++) {
         LocalMapCache.saveRouteToCache('key_$i', i);
       }
-      // First key should be evicted
       expect(LocalMapCache.getRouteFromCache('key_0'), isNull);
-      // Last key should exist
       expect(LocalMapCache.getRouteFromCache('key_24'), 24);
     });
 

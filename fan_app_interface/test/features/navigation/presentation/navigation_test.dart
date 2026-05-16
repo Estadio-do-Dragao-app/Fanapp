@@ -46,7 +46,7 @@ void main() {
     setUp(() {
       final dest = POIModel(id: 'poi1', name: 'WC', x: 10, y: 0, level: 0, category: 'wc');
       controller = NavigationController(
-        initialRoute: _makeRoute(),
+        route: _makeRoute(),  // Nome do parâmetro conforme o código real
         destination: dest,
         allNodes: nodes,
         initialX: 0,
