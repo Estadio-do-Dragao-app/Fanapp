@@ -341,7 +341,7 @@ class NavigationController extends ChangeNotifier {
 
               if (impliedSpeed > _maxPlausibleSpeed * _noiseMultiplier) {
                 print(
-                  '[NavigationController] ⚠️ GPS NOISE ignored: '
+                  '[NavigationController] GPS NOISE ignored: '
                   'impliedSpeed=${impliedSpeed.toStringAsFixed(1)} m/s '
                   '(limit=${(_maxPlausibleSpeed * _noiseMultiplier).toStringAsFixed(1)} m/s), '
                   'jump=${dist.toStringAsFixed(1)}m in ${timeDelta.toStringAsFixed(1)}s',
@@ -368,7 +368,7 @@ class NavigationController extends ChangeNotifier {
   /// Pausar GPS tracking (ex: antes de recalcular rota)
   void pauseGpsTracking() {
     _gpsSubscription?.pause();
-    print('[NavigationController] ⏸ GPS tracking paused');
+    print('[NavigationController] GPS tracking paused');
   }
 
   /// Retomar GPS tracking após pausa
@@ -376,7 +376,7 @@ class NavigationController extends ChangeNotifier {
     if (_isNavigating &&
         _gpsSubscription != null &&
         _gpsSubscription!.isPaused) {
-      print('[NavigationController] ▶ GPS tracking resumed');
+      print('[NavigationController] GPS tracking resumed');
       _gpsSubscription?.resume();
     }
   }
@@ -419,7 +419,7 @@ class NavigationController extends ChangeNotifier {
       level: _currentLevel,
     );
     print(
-      '[NavigationController] 💾 Posição final guardada: x=$finalX, y=$finalY, node=${finalNode.id}',
+      '[NavigationController] Posição final guardada: x=$finalX, y=$finalY, node=${finalNode.id}',
     );
 
     notifyListeners();
@@ -442,7 +442,7 @@ class NavigationController extends ChangeNotifier {
       level: _currentLevel,
     );
     print(
-      '[NavigationController] 💾 Posição guardada ao terminar: x=$finalX, y=$finalY, node=${finalNode.id}',
+      '[NavigationController] Posição guardada ao terminar: x=$finalX, y=$finalY, node=${finalNode.id}',
     );
 
     notifyListeners();
@@ -561,7 +561,7 @@ class NavigationController extends ChangeNotifier {
       destinationY: newDestination.y,
       destinationLevel: newDestination.level,
     );
-    print('[NavigationController] 🎯 Destination updated to: ${newDestination.id} (${newDestination.name})');
+    print('[NavigationController] Destination updated to: ${newDestination.id} (${newDestination.name})');
     notifyListeners();
   }
 

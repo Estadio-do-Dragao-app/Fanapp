@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../../../../core/services/mqtt_service.dart';
 
 /// Model for cell congestion data from MQTT
@@ -52,12 +53,21 @@ class StadiumHeatmapData {
 /// Service for real-time congestion data via MQTT broker
 /// All data comes from Service-to-Client-Broker (port 1884)
 class CongestionService {
-  // Singleton pattern
-  static final CongestionService _instance = CongestionService._internal();
-  factory CongestionService() => _instance;
-  CongestionService._internal();
+  static CongestionService? _instance;
+  
+  factory CongestionService({MqttService? mqttService}) {
+    _instance ??= CongestionService._internal(mqttService ?? MqttService());
+    return _instance!;
+  }
+  
+  CongestionService._internal(this._mqttService);
 
-  final MqttService _mqttService = MqttService();
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = null;
+  }
+
+  final MqttService _mqttService;
 
   // Local store for MQTT updates
   final Map<String, CellCongestionData> _cellData = {};
@@ -82,7 +92,7 @@ class CongestionService {
       _mqttSubscription = _mqttService.congestionStream.listen(
         _onCongestionUpdate,
       );
-      print('[CongestionService] Connected to MQTT broker');
+      debugPrint('[CongestionService] Connected to MQTT broker');
     }
     return connected;
   }
@@ -93,7 +103,7 @@ class CongestionService {
     _cellData[cellData.cellId] = cellData;
     _lastUpdate[cellData.cellId] = DateTime.now();
     
-    print(
+    debugPrint(
       '[CongestionService] Stored cell ${cellData.cellId} with level ${cellData.congestionLevel}. Total cells: ${_cellData.length}',
     );
   }

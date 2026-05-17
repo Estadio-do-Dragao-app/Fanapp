@@ -17,11 +17,11 @@ class NodeModel {
 
   factory NodeModel.fromJson(Map<String, dynamic> json) {
     return NodeModel(
-      id: json['id'] as String,
-      x: (json['x'] as num).toDouble(),
-      y: (json['y'] as num).toDouble(),
-      level: json['level'] as int,
-      type: json['type'] as String,
+      id: json['id']?.toString() ?? 'unknown_node',
+      x: (json['x'] as num?)?.toDouble() ?? 0.0,
+      y: (json['y'] as num?)?.toDouble() ?? 0.0,
+      level: json['level'] as int? ?? 0,
+      type: json['type']?.toString() ?? 'normal',
     );
   }
 

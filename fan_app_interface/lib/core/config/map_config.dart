@@ -1,17 +1,13 @@
+import 'app_env.dart';
+
 /// Configuração do modo do mapa — Indoor vs Outdoor
 ///
-/// Para trocar de modo, basta alterar o valor de [mode]:
-///   - MapMode.outdoor → OSM tiles (POIs OSM opcionais)
-///   - MapMode.indoor  → FloorPlanLayer + POIs estáticos da BD
-///
-/// Tudo o resto (navegação, routing, coordenadas GPS) funciona igual.
+/// Para trocar de modo, basta alterar o valor no AppEnv via --dart-define.
 class MapConfig {
   // ==================== MODO ====================
-  // Alterar AQUI para trocar entre indoor e outdoor:
-  static const MapMode mode = MapMode.outdoor;
+  static MapMode get mode => AppEnv.isOutdoorMode ? MapMode.outdoor : MapMode.indoor;
 
-  // Quando true, mostra apenas POIs da BD do Map-Service.
-  static const bool onlyDatabasePOIs = true;
+  static bool get onlyDatabasePOIs => AppEnv.onlyDatabasePOIs;
 
   // ==================== FLAGS DERIVADAS ====================
 

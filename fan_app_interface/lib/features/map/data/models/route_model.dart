@@ -63,10 +63,17 @@ class RouteModel {
   });
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
+    // MS4 Invariant Validation: Distance cannot be negative.
+    double rawDistance = ((json['total_distance'] ?? json['distance']) as num?)?.toDouble() ?? 0.0;
+    if (rawDistance < 0.0) rawDistance = 0.0;
+    
+    double rawTime = ((json['estimated_time'] ?? json['duration']) as num?)?.toDouble() ?? 0.0;
+    if (rawTime < 0.0) rawTime = 0.0;
+
     return RouteModel(
-      path: (json['path'] as List).map((p) => PathNode.fromJson(p)).toList(),
-      totalDistance: (json['total_distance'] as num).toDouble(),
-      estimatedTime: (json['estimated_time'] as num).toDouble(),
+      path: (json['path'] as List?)?.map((p) => PathNode.fromJson(p)).toList() ?? [],
+      totalDistance: rawDistance,
+      estimatedTime: rawTime,
       congestionLevel: (json['congestion_level'] as num?)?.toDouble() ?? 0.0,
       waitTime: json['wait_time'] != null
           ? (json['wait_time'] as num).toDouble()
@@ -135,12 +142,12 @@ class PathNode {
 
   factory PathNode.fromJson(Map<String, dynamic> json) {
     return PathNode(
-      nodeId: json['node_id'] as String,
-      x: (json['x'] as num).toDouble(),
-      y: (json['y'] as num).toDouble(),
-      level: json['level'] as int,
-      distanceFromStart: (json['distance_from_start'] as num).toDouble(),
-      estimatedTime: (json['estimated_time'] as num).toDouble(),
+      nodeId: (json['node_id'] ?? json['id'])?.toString() ?? 'unknown_node',
+      x: (json['x'] as num?)?.toDouble() ?? 0.0,
+      y: (json['y'] as num?)?.toDouble() ?? 0.0,
+      level: json['level'] as int? ?? 0,
+      distanceFromStart: (json['distance_from_start'] as num?)?.toDouble() ?? 0.0,
+      estimatedTime: (json['estimated_time'] as num?)?.toDouble() ?? 0.0,
     );
   }
 

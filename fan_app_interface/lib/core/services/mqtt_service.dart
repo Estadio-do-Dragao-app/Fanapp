@@ -1,32 +1,44 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
-import '../config/api_config.dart';
+
+import '../config/app_env.dart';
 
 /// Service for MQTT communication with the Service-to-Client-Broker
 /// Receives real-time data from all backend services
 /// NOTE: MQTT only works on mobile (TCP). Web uses HTTP fallback.
 class MqttService {
-  static final MqttService _instance = MqttService._internal();
-  factory MqttService() => _instance;
-  MqttService._internal();
+  static MqttService? _instance;
+  
+  /// Factory constructor supports dependency injection for testing.
+  factory MqttService({MqttServerClient? client}) {
+    _instance ??= MqttService._internal(client);
+    return _instance!;
+  }
+  
+  MqttService._internal(this._client);
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = null;
+  }
 
   // Broker configuration (Service-to-Client-Broker)
-  static String get _broker => ApiConfig.mqttBroker;
-  static const int _port = ApiConfig.mqttPort;
-  static const String _clientId = 'fanapp_flutter';
+  static String get _broker => AppEnv.mqttBroker;
+  static int get _port => AppEnv.mqttPort;
+  static String get _clientId => AppEnv.mqttClientId;
 
   // Topics from Stadium Event Generator / Services
-  static const String topicAllEvents = 'stadium/events/all';
-  static const String topicCongestion = 'stadium/services/congestion';
-  static const String topicQueues = 'stadium/services/waittime/#';
-  static const String topicMaintenance = 'stadium/events/maintenance';
-  static const String topicSecurity = 'stadium/events/security';
-  static const String topicAlerts = 'alerts/broadcast';
-  static const String topicRouting = 'stadium/services/routing/#';
-  static const String topicGps = 'stadium/location/gps';
+  static String get topicAllEvents => AppEnv.topicAllEvents;
+  static String get topicCongestion => AppEnv.topicCongestion;
+  static String get topicQueues => AppEnv.topicQueues;
+  static String get topicMaintenance => AppEnv.topicMaintenance;
+  static String get topicSecurity => AppEnv.topicSecurity;
+  static String get topicAlerts => AppEnv.topicAlerts;
+  static String get topicRouting => AppEnv.topicRouting;
+  static String get topicGps => AppEnv.topicGps;
 
   MqttServerClient? _client;
   bool _isConnected = false;
@@ -45,8 +57,6 @@ class MqttService {
   final _allEventsController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _routingController = StreamController<Map<String, dynamic>>.broadcast();
-  final _waittimeController =
-      StreamController<Map<String, dynamic>>.broadcast();
 
   /// Streams for different event types
   Stream<Map<String, dynamic>> get congestionStream =>
@@ -59,7 +69,6 @@ class MqttService {
   Stream<Map<String, dynamic>> get allEventsStream =>
       _allEventsController.stream;
   Stream<Map<String, dynamic>> get routingStream => _routingController.stream;
-  Stream<Map<String, dynamic>> get waittimeStream => _waittimeController.stream;
 
   /// Publish user location (GPS) to the broker
   /// This is used for anonymous crowd tracking
@@ -93,7 +102,7 @@ class MqttService {
 
     // MQTT TCP is not available on Web platform
     if (kIsWeb) {
-      print(
+      debugPrint(
         '[MqttService] MQTT not supported on web platform. Use HTTP fallback.',
       );
       return false;
@@ -102,8 +111,8 @@ class MqttService {
     _isConnecting = true;
     
     try {
-      print('[MqttService] Connecting via TCP: $_broker:$_port');
-      _client = MqttServerClient(_broker, _clientId);
+      debugPrint('[MqttService] Connecting via TCP: $_broker:$_port');
+      _client ??= MqttServerClient(_broker, _clientId);
       _client!.port = _port;
 
       _client!.logging(on: false);
@@ -123,18 +132,18 @@ class MqttService {
       await _client!.connect();
 
       if (_client!.connectionStatus!.state == MqttConnectionState.connected) {
-        print('[MqttService] Connected successfully');
+        debugPrint('[MqttService] Connected successfully');
         _isConnected = true;
         _isConnecting = false;
         _subscribeToTopics();
         return true;
       } else {
-        print('[MqttService] Connection failed: ${_client!.connectionStatus}');
+        debugPrint('[MqttService] Connection failed: ${_client!.connectionStatus}');
         _isConnecting = false;
         return false;
       }
     } catch (e) {
-      print('[MqttService] Connection error: $e');
+      debugPrint('[MqttService] Connection error: $e');
       _isConnecting = false;
       return false;
     }
@@ -146,7 +155,7 @@ class MqttService {
       _client!.disconnect();
       _isConnected = false;
       _isSubscribed = false;
-      print('[MqttService] Disconnected');
+      debugPrint('[MqttService] Disconnected');
     }
   }
 
@@ -162,14 +171,13 @@ class MqttService {
       topicAlerts,
       topicSecurity,
       topicMaintenance,
-      topicMaintenance,
       topicAllEvents,
       topicRouting,
     ];
 
     for (var topic in topics) {
       _client!.subscribe(topic, MqttQos.atLeastOnce);
-      print('[MqttService] Subscribed to: $topic');
+      debugPrint('[MqttService] Subscribed to: $topic');
     }
 
     // Listen for incoming messages
@@ -180,72 +188,108 @@ class MqttService {
   /// Handle incoming MQTT messages
   void _onMessage(List<MqttReceivedMessage<MqttMessage>> messages) {
     for (var message in messages) {
-      final topic = message.topic;
-      final payload = message.payload as MqttPublishMessage;
-      final data = MqttPublishPayload.bytesToStringAsString(
-        payload.payload.message,
-      );
+      _processMessage(message);
+    }
+  }
 
-      try {
-        final jsonData = json.decode(data) as Map<String, dynamic>;
+  void _processMessage(MqttReceivedMessage<MqttMessage> message) {
+    final topic = message.topic;
+    final payload = message.payload as MqttPublishMessage;
+    final data = MqttPublishPayload.bytesToStringAsString(payload.payload.message);
 
-        // Route message to appropriate stream
-        // Handle wildcard topics first (waittime/queues)
-        if (topic.startsWith('stadium/services/waittime/')) {
-          print('[MqttService] 📤 Emitting to queuesStream: ${jsonData['poi']} = ${jsonData['minutes']} min');
-          _queuesController.add(jsonData);
-        } else if (topic.startsWith('stadium/services/routing/')) {
-          _routingController.add(jsonData);
-        }
-        // Then handle exact matches
-
-        switch (topic) {
-          case topicCongestion:
-            print('[MqttService] 🔥 Congestion message received: ${jsonData['cell_id']}');
-            _congestionController.add(jsonData);
-            break;
-          case topicAlerts:
-            _alertsController.add(jsonData);
-            break;
-          case topicSecurity:
-            _securityController.add(jsonData);
-            break;
-          case topicMaintenance:
-            _maintenanceController.add(jsonData);
-            break;
-          case topicAllEvents:
-            _allEventsController.add(jsonData);
-            break;
-          case topicGps:
-            // High frequency data - ignored by client to avoid lag
-            break;
-        }
-
-        print('[MqttService] Received on $topic: ${jsonData.keys.toList()}');
-      } catch (e) {
-        print('[MqttService] Error parsing message on $topic: $e');
+    try {
+      final dynamic parsedData = json.decode(data);
+      if (parsedData is! Map<String, dynamic>) {
+        debugPrint('[MqttService] Invalid payload format (not a Map) on $topic');
+        return;
       }
+
+      if (_isMessageExpired(parsedData, topic)) return;
+
+      _routeMessage(topic, parsedData);
+
+      debugPrint('[MqttService] Received on $topic: ${parsedData.keys.toList()}');
+    } catch (e) {
+      debugPrint('[MqttService] Error parsing message on $topic: $e');
+    }
+  }
+
+  bool _isMessageExpired(Map<String, dynamic> jsonData, String topic) {
+    if (!jsonData.containsKey('expiry_time') || jsonData['expiry_time'] == null) {
+      return false;
+    }
+    
+    try {
+      final expiryTime = DateTime.parse(jsonData['expiry_time'].toString()).toUtc();
+      if (DateTime.now().toUtc().isAfter(expiryTime)) {
+        debugPrint('[MqttService] Ignored expired message on $topic');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[MqttService] Invalid expiry_time format: $e');
+    }
+    return false;
+  }
+
+  void _routeMessage(String topic, Map<String, dynamic> jsonData) {
+    if (topic.startsWith(topicQueues.replaceAll('#', ''))) {
+      debugPrint('[MqttService] Emitting to queuesStream: ${jsonData['poi']} = ${jsonData['minutes']} min');
+      _queuesController.add(jsonData);
+    } else if (topic.startsWith(topicRouting.replaceAll('#', ''))) {
+      _routingController.add(jsonData);
+    } else if (topic == topicCongestion) {
+      debugPrint('[MqttService] Congestion message received: ${jsonData['cell_id']}');
+      _congestionController.add(jsonData);
+    } else if (topic == topicAlerts) {
+      _handleAlertMessage(jsonData);
+    } else if (topic == topicSecurity) {
+      _securityController.add(jsonData);
+    } else if (topic == topicMaintenance) {
+      _maintenanceController.add(jsonData);
+    } else if (topic == topicAllEvents) {
+      _allEventsController.add(jsonData);
+    }
+  }
+
+  void _handleAlertMessage(Map<String, dynamic> jsonData) {
+    _alertsController.add(jsonData);
+    
+    if (jsonData['priority'] == 'CRITICAL') {
+      final ackMessage = {
+        'alert_id': jsonData['alert_id'] ?? jsonData['id'],
+        'client_id': _clientId,
+        'status': 'received',
+        'timestamp': DateTime.now().toUtc().toIso8601String()
+      };
+      final builder = MqttClientPayloadBuilder();
+      builder.addString(json.encode(ackMessage));
+      _client!.publishMessage(
+        'alerts/ack/$_clientId',
+        MqttQos.exactlyOnce,
+        builder.payload!,
+      );
+      debugPrint('[MqttService] Sent ACK for alert ${ackMessage['alert_id']}');
     }
   }
 
   void _onConnected() {
-    print('[MqttService] Connected callback');
+    debugPrint('[MqttService] Connected callback');
     _isConnected = true;
   }
 
   void _onDisconnected() {
-    print('[MqttService] Disconnected callback');
+    debugPrint('[MqttService] Disconnected callback');
     _isConnected = false;
   }
 
   void _onAutoReconnect() {
-    print('[MqttService] Auto-reconnecting...');
+    debugPrint('[MqttService] Auto-reconnecting...');
     _isConnected = false;
     _isSubscribed = false; // Reset subscription flag so we re-subscribe after reconnect
   }
 
   void _onAutoReconnected() {
-    print('[MqttService] Auto-reconnected successfully');
+    debugPrint('[MqttService] Auto-reconnected successfully');
     _isConnected = true;
     _subscribeToTopics(); // Re-subscribe to topics after auto-reconnection
   }

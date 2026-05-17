@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math';
-import '../../map/presentation/stadium_map_page.dart';
+import '../../map/presentation/fan_map_page.dart';
 import '../../map/data/models/poi_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/models/route_model.dart';
@@ -516,7 +516,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
             height: MediaQuery.of(context).size.height * 0.4,
             child: Stack(
               children: [
-                StadiumMapPage(
+                FanMapPage(
                   mapController: _animatedMapController.mapController,
                   highlightedRoute: _selectedRoute,
                   highlightedPOI: selectedPOI,

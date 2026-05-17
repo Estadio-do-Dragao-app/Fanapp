@@ -3,13 +3,36 @@ import 'package:http/http.dart' as http;
 import '../models/route_model.dart';
 import '../models/node_model.dart';
 import '../../../../core/config/api_config.dart';
+import '../../../../core/config/app_env.dart';
+import 'local_map_cache.dart';
 
 /// Service para comunicar com o Routing-Service
-/// Backend: https://github.com/Estadio-do-Dragao-app/Routing-Service
-///
 /// Nova API usa POST com coordenadas em vez de GET com node IDs
 class RoutingService {
+  final http.Client _client;
+  
+  RoutingService({http.Client? client}) : _client = client ?? http.Client();
+
   static String get baseUrl => ApiConfig.routingService;
+
+  // Bloqueio de concorrência para evitar Race Conditions (vários pedidos em simultâneo)
+  bool _isRouting = false;
+
+  Future<http.Response> _performPost(String url, {Map<String, String>? headers, Object? body}) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final response = await _client
+          .post(Uri.parse(url), headers: headers, body: body)
+          .timeout(Duration(seconds: ApiConfig.httpTimeout));
+      stopwatch.stop();
+      print('[PerformanceInterceptor] POST $url completed in ${stopwatch.elapsedMilliseconds}ms');
+      return response;
+    } catch (e) {
+      stopwatch.stop();
+      print('[PerformanceInterceptor] POST $url failed after ${stopwatch.elapsedMilliseconds}ms: $e');
+      rethrow;
+    }
+  }
 
   /// POST /api/route - Calcula rota entre posição inicial e destino
   ///
@@ -25,38 +48,64 @@ class RoutingService {
     required String destinationId,
     bool avoidStairs = false,
   }) async {
-    final request = RouteRequest(
-      start: Coordinates(x: startX, y: startY, level: startLevel),
-      destinationType: destinationType,
-      destinationId: destinationId,
-      avoidStairs: avoidStairs,
-    );
+    if (_isRouting) {
+      print('[RoutingService] Route calculation already in progress. Ignoring duplicate request.');
+      throw Exception('Route calculation already in progress');
+    }
 
-    print(
-      '[RoutingService] POST /api/route: startLevel=$startLevel, dest=$destinationType:$destinationId',
-    );
-    print('[RoutingService] Request body: ${json.encode(request.toJson())}');
-
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/route'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode(request.toJson()),
-    );
-
-    if (response.statusCode == 200) {
-      final decoded = json.decode(response.body);
-      print('[RoutingService] Rota recebida com ${decoded['path']?.length ?? 0} nodes');
-      // No log de debug, podemos ver o primeiro nó para confirmar as coordenadas
-      if (decoded['path'] != null && decoded['path'].isNotEmpty) {
-        final firstWp = decoded['path'][0];
-        print('[RoutingService] Primeiro nó (${firstWp['node_id']}): x=${firstWp['x']}, y=${firstWp['y']}');
-      }
-      return RouteModel.fromJson(decoded);
-    } else {
-      final errorBody = response.body;
-      throw Exception(
-        'Failed to get route: ${response.statusCode} - $errorBody',
+    _isRouting = true;
+    try {
+      // 1. Verificar Cache
+      final cacheKey = LocalMapCache.generateRouteKey(
+        startX: startX,
+        startY: startY,
+        startLevel: startLevel,
+        destinationType: destinationType,
+        destinationId: destinationId,
+        avoidStairs: avoidStairs,
       );
+
+      final cachedRoute = LocalMapCache.getRouteFromCache(cacheKey);
+      if (cachedRoute != null) {
+        print('[RoutingService] Rota retornada do Cache LRU');
+        return RouteModel.fromJson(cachedRoute);
+      }
+
+      final request = RouteRequest(
+        start: Coordinates(x: startX, y: startY, level: startLevel),
+        destinationType: destinationType,
+        destinationId: destinationId,
+        avoidStairs: avoidStairs,
+      );
+
+      print(
+        '[RoutingService] POST /api/route: startLevel=$startLevel, dest=$destinationType:$destinationId',
+      );
+
+      final response = await _performPost(
+        '$baseUrl/api/route',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': AppEnv.mapApiKey
+        },
+        body: json.encode(request.toJson()),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        
+        // 2. Guardar no Cache
+        LocalMapCache.saveRouteToCache(cacheKey, decoded);
+        
+        return RouteModel.fromJson(decoded);
+      } else {
+        final errorBody = response.body;
+        throw Exception(
+          'Failed to get route: ${response.statusCode} - $errorBody',
+        );
+      }
+    } finally {
+      _isRouting = false;
     }
   }
 
@@ -158,7 +207,7 @@ class RoutingService {
   /// GET /health - Verificar se o serviço está online
   Future<bool> isServiceHealthy() async {
     try {
-      final response = await http
+      final response = await _client
           .get(
             Uri.parse('$baseUrl/health'),
             headers: {'Content-Type': 'application/json'},

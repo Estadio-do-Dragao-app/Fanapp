@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import '../stadium_map_page.dart';
+import '../fan_map_page.dart';
 
 /// MapPage implementation with functional stadium map
 class MapPage extends StatefulWidget {
@@ -30,8 +30,8 @@ class MapPage extends StatefulWidget {
 }
 
 class MapPageState extends State<MapPage> {
-  final GlobalKey<StadiumMapPageState> _stadiumMapKey =
-      GlobalKey<StadiumMapPageState>();
+  final GlobalKey<FanMapPageState> _stadiumMapKey =
+      GlobalKey<FanMapPageState>();
 
   // Public method to zoom to POI
   void zoomToPOI(poi) {
@@ -53,7 +53,7 @@ class MapPageState extends State<MapPage> {
 
   @override
   Widget build(BuildContext context) {
-    return StadiumMapPage(
+    return FanMapPage(
       key: _stadiumMapKey,
       showHeatmap: widget.showHeatmap,
       onHeatmapConnectionError: widget.onHeatmapConnectionError,
