@@ -5,6 +5,8 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 
 import '../config/app_env.dart';
+import '../config/api_config.dart';
+
 
 /// Service for MQTT communication with the Service-to-Client-Broker
 /// Receives real-time data from all backend services
@@ -26,7 +28,8 @@ class MqttService {
   }
 
   // Broker configuration (Service-to-Client-Broker)
-  static String get _broker => AppEnv.mqttBroker;
+  static String get _broker => ApiConfig.mqttBroker;
+
   static int get _port => AppEnv.mqttPort;
   static String get _clientId => AppEnv.mqttClientId;
 
@@ -111,10 +114,13 @@ class MqttService {
     _isConnecting = true;
     
     try {
-      debugPrint('[MqttService] Connecting via TCP: $_broker:$_port');
-      _client ??= MqttServerClient(_broker, _clientId);
-      _client!.port = _port;
-
+      debugPrint('[MqttService] Connecting via secure MQTT (MQTTS): $_broker:${AppEnv.mqttPort}');
+      _client ??= MqttServerClient.withPort(_broker, _clientId, AppEnv.mqttPort);
+      
+      _client!.useWebSocket = false;
+      _client!.secure = true;
+      _client!.onBadCertificate = (dynamic cert) => !kReleaseMode; // Bypass self-signed ONLY in dev
+      
       _client!.logging(on: false);
       _client!.keepAlivePeriod = 30;
       _client!.autoReconnect = true;
@@ -125,6 +131,7 @@ class MqttService {
 
       final connMessage = MqttConnectMessage()
           .withClientIdentifier(_clientId)
+          .authenticateAs('fanapp', 'dragao_fan_2026')
           .startClean()
           .withWillQos(MqttQos.atLeastOnce);
       _client!.connectionMessage = connMessage;

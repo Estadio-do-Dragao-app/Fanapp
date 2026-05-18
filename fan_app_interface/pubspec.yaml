@@ -43,6 +43,7 @@ dependencies:
   latlong2: ^0.9.1
   http: ^1.2.2
   shared_preferences: ^2.3.3
+  flutter_secure_storage: ^9.2.2
   
   # Ticket Scanner
   mobile_scanner: ^5.1.1
@@ -85,6 +86,7 @@ flutter:
   generate: true
   assets:
     - assets/images/
+    - assets/certs/
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

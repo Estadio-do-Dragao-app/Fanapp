@@ -42,7 +42,7 @@ void main() {
     });
 
     test('mqttPort has default value', () {
-      expect(AppEnv.mqttPort, 1883);
+      expect(AppEnv.mqttPort, 8883);
     });
 
     test('mapCenterLat is a double', () {

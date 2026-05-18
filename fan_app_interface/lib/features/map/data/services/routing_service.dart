@@ -224,21 +224,17 @@ class RoutingService {
   /// Útil quando o backend não reconhece o ID do POI
   /// Implementa fallback para tentar múltiplos nós próximos caso o primeiro falhe
   Future<RouteModel> getRouteToCoordinates({
-    required double startX,
-    required double startY,
-    int startLevel = 0,
-    required double endX,
-    required double endY,
-    required int endLevel,
+    required Coordinates start,
+    required Coordinates end,
     required List<NodeModel> allNodes,
     bool avoidStairs = false,
   }) async {
     // Encontrar os 10 nós mais próximos do destino para ter alternativa
     // Aumentado para 10 porque algumas áreas têm vários nós desconectados no backend
     final nearestNodes = _findNearestNodes(
-      endX,
-      endY,
-      endLevel,
+      end.x,
+      end.y,
+      end.level,
       allNodes,
       count: 10,
     );
@@ -254,9 +250,9 @@ class RoutingService {
       try {
         // Tentar calcular rota
         return await getRoute(
-          startX: startX,
-          startY: startY,
-          startLevel: startLevel,
+          startX: start.x,
+          startY: start.y,
+          startLevel: start.level,
           destinationType: 'node',
           destinationId: node.id,
           avoidStairs: avoidStairs,

@@ -16,15 +16,15 @@ class ApiConfig {
 
     // Tentar primeiro o host do ambiente (API_BASE_URL)
     final hostIp = AppEnv.apiBaseUrl.replaceAll('http://', '').replaceAll('https://', '');
-    if (await _checkHost(hostIp, 8000)) {
+    if (await _checkHost(hostIp, 443, isHttps: true)) {
       _baseHost = AppEnv.apiBaseUrl;
       print('[ApiConfig] Conectado à API: $_baseHost');
       return;
     }
 
     // Se falhar, tentar localhost
-    if (await _checkHost(localHost, 8000)) {
-      _baseHost = 'http://$localHost';
+    if (await _checkHost(localHost, 443, isHttps: true)) {
+      _baseHost = 'https://$localHost';
       print('[ApiConfig] Conectado ao Localhost: $_baseHost');
       return;
     }
@@ -32,10 +32,12 @@ class ApiConfig {
     print('[ApiConfig] Aviso: Nenhum serviço backend detetado. A usar default.');
   }
 
-  static Future<bool> _checkHost(String host, int port) async {
+  static Future<bool> _checkHost(String host, int port, {bool isHttps = false}) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
     try {
-      final request = await client.getUrl(Uri.parse('http://$host:$port/health'));
+      final scheme = isHttps ? 'https' : 'http';
+      final uriStr = host.contains(':') ? '$scheme://$host/health' : '$scheme://$host:$port/health';
+      final request = await client.getUrl(Uri.parse(uriStr));
       final response = await request.close();
       return response.statusCode == 200;
     } catch (_) {
@@ -47,13 +49,13 @@ class ApiConfig {
 
   // ==================== SERVIÇOS ====================
 
-  static String get mapService => '$_baseHost:8000';
-  static String get waitTimeService => '$_baseHost:8001';
-  static String get routingService => '$_baseHost:8002';
+  static String get mapService => '$_baseHost/maps';
+  static String get waitTimeService => '$_baseHost/waittime';
+  static String get routingService => '$_baseHost/routing';
   
   // ==================== MQTT ====================
 
-  static String get mqttBroker => _baseHost.replaceAll('http://', '').replaceAll('https://', '');
+  static String get mqttBroker => _baseHost.replaceAll('http://', '').replaceAll('https://', '').split(':').first;
   static int get mqttPort => AppEnv.mqttPort;
   static int get mqttWebSocketPort => AppEnv.mqttWebSocketPort;
 

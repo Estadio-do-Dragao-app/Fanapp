@@ -78,8 +78,7 @@ class MapService {
       final response = await _performGet('$baseUrl/nodes');
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        
+
         // PERFORMANCE: Use compute to parse 6000+ nodes off the main thread
         final nodes = await compute(_parseNodesList, response.body);
 
