@@ -31,12 +31,8 @@ void main() {
       // Tenta rotear para o mesmo ponto
       try {
         await routingService.getRouteToCoordinates(
-          startX: 0.0,
-          startY: 0.0,
-          startLevel: 0,
-          endX: 0.0,
-          endY: 0.0,
-          endLevel: 0,
+          start: Coordinates(x: 0.0, y: 0.0, level: 0),
+          end: Coordinates(x: 0.0, y: 0.0, level: 0),
           allNodes: nodes,
         );
         // O serviço vai tentar comunicar com o backend e falhar se não houver um mock servidor.
@@ -53,12 +49,8 @@ void main() {
 
       try {
         await routingService.getRouteToCoordinates(
-          startX: 0.0,
-          startY: 0.0,
-          startLevel: 0,
-          endX: 100.0,
-          endY: 100.0,
-          endLevel: 99, // Nível que não existe
+          start: Coordinates(x: 0.0, y: 0.0, level: 0),
+          end: Coordinates(x: 100.0, y: 100.0, level: 99), // Nível que não existe
           allNodes: nodes,
         );
         fail('Should have thrown an exception for unreachable node');
@@ -92,12 +84,8 @@ void main() {
           .thenAnswer((_) async => http.Response(json.encode(mockRouteResponse), 200));
 
       final route = await routingService.getRouteToCoordinates(
-        startX: 0.0,
-        startY: 0.0,
-        startLevel: 0,
-        endX: 9.9, // Close to N1, so it falls back to N1
-        endY: 9.9,
-        endLevel: 0,
+        start: Coordinates(x: 0.0, y: 0.0, level: 0),
+        end: Coordinates(x: 9.9, y: 9.9, level: 0), // Close to N1, so it falls back to N1
         allNodes: nodes,
       );
 

@@ -1,7 +1,7 @@
-/// Route data from Routing-Service
-/// Endpoint: POST /api/route
-///
-/// New API uses coordinates for start position and destination_type for target
+// Route data from Routing-Service
+// Endpoint: POST /api/route
+//
+// New API uses coordinates for start position and destination_type for target
 
 // ========== REQUEST MODELS ==========
 

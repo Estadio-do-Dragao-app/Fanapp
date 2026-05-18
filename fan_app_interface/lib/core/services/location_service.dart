@@ -26,40 +26,44 @@ class LocationService {
   Future<void> startTracking() async {
     if (_isTracking) return;
 
-    bool serviceEnabled;
-    LocationPermission permission;
+    try {
+      bool serviceEnabled;
+      LocationPermission permission;
 
-    // Test if location services are enabled.
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      print('[LocationService] Location services are disabled.');
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        print('[LocationService] Location permissions are denied');
+      // Test if location services are enabled.
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        print('[LocationService] Location services are disabled.');
         return;
       }
-    }
-    
-    if (permission == LocationPermission.deniedForever) {
-      print('[LocationService] Location permissions are permanently denied.');
-      return;
-    }
 
-    _isTracking = true;
-    print('[LocationService] Tracking started');
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          print('[LocationService] Location permissions are denied');
+          return;
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        print('[LocationService] Location permissions are permanently denied.');
+        return;
+      }
 
-    // Initial position
-    _updateAndPublish();
+      _isTracking = true;
+      print('[LocationService] Tracking started');
 
-    // Periodic updates every 10 seconds
-    _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      // Initial position
       _updateAndPublish();
-    });
+
+      // Periodic updates every 10 seconds
+      _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+        _updateAndPublish();
+      });
+    } catch (e) {
+      print('[LocationService] Geolocator plugin is not supported on this platform: $e');
+    }
   }
 
   /// Stops tracking

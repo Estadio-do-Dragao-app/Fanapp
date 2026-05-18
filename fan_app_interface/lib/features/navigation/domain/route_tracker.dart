@@ -361,11 +361,7 @@ class RouteTracker {
   void _updateCurrentWaypoint() {
     if (_currentWaypointIndex >= route.waypoints.length) return;
 
-    // Skip conservador para evitar saltos errados entre ramos da rota.
     const int MAX_SKIP_AHEAD = 8;
-    const double PROXIMITY_DIST = 7.0; // meters – chegou ao nó
-    const double MAX_LATERAL_DIST = 14.0; // meters – tolerância lateral
-
     int bestNextWaypoint = _currentWaypointIndex;
 
     final maxLook = (_currentWaypointIndex + MAX_SKIP_AHEAD).clamp(
@@ -373,98 +369,10 @@ class RouteTracker {
       route.waypoints.length,
     );
 
-    for (int i = _currentWaypointIndex; i < maxLook; i++) {
-      final wp = route.waypoints[i];
-      final coords = getCorrectWaypointCoords(wp);
-
-      final pointDist = GeographicUtils.calculateDistance(
-        _userX,
-        _userY,
-        coords.x,
-        coords.y,
-      );
-
-      // CHEGADA AO NÓ: está dentro do raio de chegada
-      if (pointDist < PROXIMITY_DIST) {
-        if (i + 1 > bestNextWaypoint) {
-          bestNextWaypoint = i + 1;
-        }
-        continue; // continue scanning ahead
-      }
-
-      // PROJEÇÃO NO SEGMENTO: só considerar se existe um segmento anterior
-      if (i > 0) {
-        final prevWp = route.waypoints[i - 1];
-        final prevCoords = getCorrectWaypointCoords(prevWp);
-
-        final segLen = GeographicUtils.calculateDistance(
-          prevCoords.x,
-          prevCoords.y,
-          coords.x,
-          coords.y,
-        );
-        if (segLen < 0.5) continue; // segmento degenerado
-
-        final rawT = _rawProgressAlongSegment(
-          _userX,
-          _userY,
-          prevCoords.x,
-          prevCoords.y,
-          coords.x,
-          coords.y,
-        );
-        final segDist = GeographicUtils.pointToSegmentDistance(
-          _userX,
-          _userY,
-          prevCoords.x,
-          prevCoords.y,
-          coords.x,
-          coords.y,
-        );
-
-        // Só considerar se estamos lateralmente perto do segmento
-        // E se estamos a progredir no sentido do nó (t >= 0) — não atrás
-        if (segDist < MAX_LATERAL_DIST && rawT >= 0.0 && rawT <= 1.1) {
-          if (i > bestNextWaypoint) {
-            bestNextWaypoint = i;
-          }
-        }
-        // Se já passámos o nó (t > 0.85), o próximo alvo é o seguinte
-        if (segDist < MAX_LATERAL_DIST && rawT > 0.85) {
-          if (i + 1 > bestNextWaypoint) {
-            bestNextWaypoint = i + 1;
-          }
-        }
-      }
-    }
+    bestNextWaypoint = _scanAheadForBestWaypoint(maxLook, bestNextWaypoint);
 
     if (bestNextWaypoint <= _currentWaypointIndex) {
-      // Fallback: se a heurística acima não avançou, escolhemos o waypoint
-      // mais próximo à frente do índice atual para evitar ficar preso atrás.
-      int nearestAhead = _currentWaypointIndex;
-      double nearestDist = double.infinity;
-
-      for (int i = _currentWaypointIndex; i < route.waypoints.length; i++) {
-        final wp = route.waypoints[i];
-        final coords = getCorrectWaypointCoords(wp);
-        final dist = GeographicUtils.calculateDistance(
-          _userX,
-          _userY,
-          coords.x,
-          coords.y,
-        );
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestAhead = i;
-        }
-      }
-
-      // Só saltar automaticamente quando há alta confiança espacial e
-      // apenas para 1 waypoint à frente (evita pular grandes blocos).
-      final jump = nearestAhead - _currentWaypointIndex;
-      if (nearestAhead > _currentWaypointIndex && nearestDist < 12.0 && jump <= 1) {
-        bestNextWaypoint = nearestAhead;
-      }
+      bestNextWaypoint = _applyFallbackWaypoint(bestNextWaypoint);
     }
 
     if (bestNextWaypoint > _currentWaypointIndex) {
@@ -483,6 +391,74 @@ class RouteTracker {
       _currentWaypointIndex = bestNextWaypoint;
     }
   }
+
+  int _scanAheadForBestWaypoint(int maxLook, int bestNextWaypoint) {
+    const double PROXIMITY_DIST = 7.0; // meters – chegou ao nó
+    const double MAX_LATERAL_DIST = 14.0; // meters – tolerância lateral
+
+    for (int i = _currentWaypointIndex; i < maxLook; i++) {
+      final wp = route.waypoints[i];
+      final coords = getCorrectWaypointCoords(wp);
+
+      final pointDist = GeographicUtils.calculateDistance(
+        _userX, _userY, coords.x, coords.y,
+      );
+
+      if (pointDist < PROXIMITY_DIST) {
+        if (i + 1 > bestNextWaypoint) bestNextWaypoint = i + 1;
+        continue;
+      }
+
+      if (i > 0) {
+        final prevWp = route.waypoints[i - 1];
+        final prevCoords = getCorrectWaypointCoords(prevWp);
+
+        final segLen = GeographicUtils.calculateDistance(
+          prevCoords.x, prevCoords.y, coords.x, coords.y,
+        );
+        if (segLen < 0.5) continue;
+
+        final rawT = _rawProgressAlongSegment(
+          _userX, _userY, prevCoords.x, prevCoords.y, coords.x, coords.y,
+        );
+        final segDist = GeographicUtils.pointToSegmentDistance(
+          _userX, _userY, prevCoords.x, prevCoords.y, coords.x, coords.y,
+        );
+
+        if (segDist < MAX_LATERAL_DIST && rawT >= 0.0 && rawT <= 1.1) {
+          if (i > bestNextWaypoint) bestNextWaypoint = i;
+        }
+        if (segDist < MAX_LATERAL_DIST && rawT > 0.85) {
+          if (i + 1 > bestNextWaypoint) bestNextWaypoint = i + 1;
+        }
+      }
+    }
+    return bestNextWaypoint;
+  }
+
+  int _applyFallbackWaypoint(int bestNextWaypoint) {
+    int nearestAhead = _currentWaypointIndex;
+    double nearestDist = double.infinity;
+
+    for (int i = _currentWaypointIndex; i < route.waypoints.length; i++) {
+      final wp = route.waypoints[i];
+      final coords = getCorrectWaypointCoords(wp);
+      final dist = GeographicUtils.calculateDistance(
+        _userX, _userY, coords.x, coords.y,
+      );
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestAhead = i;
+      }
+    }
+
+    final jump = nearestAhead - _currentWaypointIndex;
+    if (nearestAhead > _currentWaypointIndex && nearestDist < 12.0 && jump <= 1) {
+      return nearestAhead;
+    }
+    return bestNextWaypoint;
+  }
+
 
   /// Retorna o progresso da rota (0.0 a 1.0)
   double get progress {

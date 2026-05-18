@@ -1,4 +1,4 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Serviço para persistir a posição do utilizador entre sessões
 class UserPositionService {
@@ -10,6 +10,8 @@ class UserPositionService {
   // Removes defaults
 
 
+  static const _storage = FlutterSecureStorage();
+
   /// Salva a posição atual do utilizador
   static Future<void> savePosition({
     required double x,
@@ -17,11 +19,10 @@ class UserPositionService {
     required String nodeId,
     required int level,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_keyX, x);
-    await prefs.setDouble(_keyY, y);
-    await prefs.setString(_keyNodeId, nodeId);
-    await prefs.setInt(_keyLevel, level);
+    await _storage.write(key: _keyX, value: x.toString());
+    await _storage.write(key: _keyY, value: y.toString());
+    await _storage.write(key: _keyNodeId, value: nodeId);
+    await _storage.write(key: _keyLevel, value: level.toString());
     print(
       '[UserPositionService] Posição salva: x=$x, y=$y, node=$nodeId, level=$level',
     );
@@ -30,17 +31,22 @@ class UserPositionService {
   /// Recupera a posição salva do utilizador, ou null se não houver
   static Future<({double x, double y, String nodeId, int level})?>
   getPosition() async {
-    final prefs = await SharedPreferences.getInstance();
-    final x = prefs.getDouble(_keyX);
-    final y = prefs.getDouble(_keyY);
-    final nodeId = prefs.getString(_keyNodeId);
-    final level = prefs.getInt(_keyLevel);
+    final xStr = await _storage.read(key: _keyX);
+    final yStr = await _storage.read(key: _keyY);
+    final nodeId = await _storage.read(key: _keyNodeId);
+    final levelStr = await _storage.read(key: _keyLevel);
     
-    if (x == null || y == null || nodeId == null || level == null) {
+    if (xStr == null || yStr == null || nodeId == null || levelStr == null) {
       print('[UserPositionService] Nenhuma posição encontrada.');
       return null;
     }
     
+    final x = double.tryParse(xStr);
+    final y = double.tryParse(yStr);
+    final level = int.tryParse(levelStr);
+    
+    if (x == null || y == null || level == null) return null;
+
     print(
       '[UserPositionService] Posição recuperada: x=$x, y=$y, node=$nodeId, level=$level',
     );
@@ -49,10 +55,9 @@ class UserPositionService {
 
   /// Apaga a posição guardada
   static Future<void> clearPosition() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyX);
-    await prefs.remove(_keyY);
-    await prefs.remove(_keyNodeId);
-    await prefs.remove(_keyLevel);
+    await _storage.delete(key: _keyX);
+    await _storage.delete(key: _keyY);
+    await _storage.delete(key: _keyNodeId);
+    await _storage.delete(key: _keyLevel);
   }
 }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 
 /// Centralized Environment Configuration
 /// Reads values from --dart-define or defaults to safe fallbacks.
@@ -8,25 +7,25 @@ class AppEnv {
   /// Base API URL (e.g., http://10.255.32.58)
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.255.32.58',
+    defaultValue: 'https://10.255.32.58',
   );
 
   /// Map Service URL
-  static String get mapServiceUrl => '$apiBaseUrl:8000';
+  static String get mapServiceUrl => '$apiBaseUrl/maps';
   
   /// Routing Service URL
-  static String get routingServiceUrl => '$apiBaseUrl:8002';
+  static String get routingServiceUrl => '$apiBaseUrl/routing';
   
   /// Wait Time Service URL
-  static String get waitTimeServiceUrl => '$apiBaseUrl:8001';
+  static String get waitTimeServiceUrl => '$apiBaseUrl/waittime';
 
   // ==================== MQTT CONFIG ====================
   
   /// MQTT Broker IP (without http://)
   static String get mqttBroker => apiBaseUrl.replaceAll('http://', '').replaceAll('https://', '');
   
-  static const int mqttPort = int.fromEnvironment('MQTT_PORT', defaultValue: 1883);
-  static const int mqttWebSocketPort = int.fromEnvironment('MQTT_WS_PORT', defaultValue: 9002);
+  static const int mqttPort = int.fromEnvironment('MQTT_PORT', defaultValue: 8883);
+  static const int mqttWebSocketPort = int.fromEnvironment('MQTT_WS_PORT', defaultValue: 9003);
   
   static const String mqttClientId = String.fromEnvironment('MQTT_CLIENT_ID', defaultValue: 'fanapp_flutter');
 
