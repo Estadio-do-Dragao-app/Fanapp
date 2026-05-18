@@ -38,5 +38,29 @@ void main() {
       expect(json['level'], 0);
       expect(json['type'], 'normal');
     });
+
+    test('fromJson provides defaults for missing fields', () {
+      final node = NodeModel.fromJson({});
+      expect(node.id, 'unknown_node');
+      expect(node.x, 0.0);
+      expect(node.y, 0.0);
+      expect(node.level, 0);
+      expect(node.type, 'normal');
+    });
+
+    test('fromJson handles integer id', () {
+      final node = NodeModel.fromJson({'id': 42, 'x': 1.0, 'y': 2.0, 'level': 0, 'type': 'stairs'});
+      expect(node.id, '42');
+      expect(node.type, 'stairs');
+    });
+
+    test('fromJson handles null values with defaults', () {
+      final node = NodeModel.fromJson({'id': null, 'x': null, 'y': null, 'level': null, 'type': null});
+      expect(node.id, 'unknown_node');
+      expect(node.x, 0.0);
+      expect(node.y, 0.0);
+      expect(node.level, 0);
+      expect(node.type, 'normal');
+    });
   });
 }

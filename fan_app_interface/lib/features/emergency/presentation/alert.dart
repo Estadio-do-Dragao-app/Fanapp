@@ -130,6 +130,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
 
       if (exits.isEmpty) {
         print('[EmergencyAlert] Nenhuma saída encontrada!');
+        if (!mounted) return;
         Navigator.of(context).pushReplacementNamed('/map');
         return;
       }
@@ -184,6 +185,7 @@ class _EmergencyAlertPageState extends State<EmergencyAlertPage>
       }
 
       if (nearestExit == null) {
+        if (!mounted) return;
         Navigator.of(context).pushReplacementNamed('/map');
         return;
       }
