@@ -117,38 +117,9 @@ class DynamicRouteManager {
       }
     }
 
-    // Calcular distância mínima aos segmentos restantes da rota.
-    // Retroceder 1 waypoint para incluir o segmento em que o utilizador
-    // provavelmente está (o tracker pode ter saltado à frente).
-    double minDistanceToRoute = double.infinity;
-    final startIdx = currentWaypointIndex.clamp(
-      0,
-      _currentRoute!.path.length - 1,
-    );
-    int validSegments = 0;
-
-    for (int i = startIdx; i < _currentRoute!.path.length - 1; i++) {
-      final wp1 = _currentRoute!.path[i];
-      final wp2 = _currentRoute!.path[i + 1];
-
-      // Nós não encontrados no Map Service têm coordenadas noutro CRS;
-      // usar as coordenadas de fallback causaria distâncias de 4584 km.
-      // Saltar estes segmentos.
-      final node1 = nodesMap[wp1.nodeId];
-      final node2 = nodesMap[wp2.nodeId];
-      if (node1 == null || node2 == null) continue;
-
-      validSegments++;
-      final dist = GeographicUtils.pointToSegmentDistance(
-        userX,
-        userY,
-        node1.x,
-        node1.y,
-        node2.x,
-        node2.y,
-      );
-      if (dist < minDistanceToRoute) minDistanceToRoute = dist;
-    }
+    final distanceInfo = _calculateMinDistanceToRoute(userX, userY, nodesMap);
+    double minDistanceToRoute = distanceInfo.minDistance;
+    int validSegments = distanceInfo.validSegments;
 
     // Se todos os segmentos têm nós desconhecidos, só recalcular se houver
     // forte evidência de afastamento do próximo objetivo.
@@ -169,7 +140,7 @@ class DynamicRouteManager {
     }
 
     print(
-      '[DynamicRouteManager] Distância à rota: ${minDistanceToRoute.toStringAsFixed(1)}m (from WP$startIdx, $validSegments segmentos válidos)',
+      '[DynamicRouteManager] Distância à rota: ${minDistanceToRoute.toStringAsFixed(1)}m ($validSegments segmentos válidos)',
     );
 
     // Threshold mais permissivo: 20m (o backend snapa o início da rota ao nó mais próximo,
@@ -200,6 +171,32 @@ class DynamicRouteManager {
       );
       await _recalculateRoute(userX, userY);
     }
+  }
+
+  ({double minDistance, int validSegments}) _calculateMinDistanceToRoute(
+    double userX,
+    double userY,
+    Map<String, NodeModel> nodesMap,
+  ) {
+    double minDistanceToRoute = double.infinity;
+    final startIdx = currentWaypointIndex.clamp(0, _currentRoute!.path.length - 1);
+    int validSegments = 0;
+
+    for (int i = startIdx; i < _currentRoute!.path.length - 1; i++) {
+      final wp1 = _currentRoute!.path[i];
+      final wp2 = _currentRoute!.path[i + 1];
+
+      final node1 = nodesMap[wp1.nodeId];
+      final node2 = nodesMap[wp2.nodeId];
+      if (node1 == null || node2 == null) continue;
+
+      validSegments++;
+      final dist = GeographicUtils.pointToSegmentDistance(
+        userX, userY, node1.x, node1.y, node2.x, node2.y,
+      );
+      if (dist < minDistanceToRoute) minDistanceToRoute = dist;
+    }
+    return (minDistance: minDistanceToRoute, validSegments: validSegments);
   }
 
   bool _isMovingAwayFromNextWaypoint(
@@ -307,12 +304,8 @@ class DynamicRouteManager {
         print('[DynamicRouteManager] getRoute fallback due to: $e');
         // Calcular nova rota usando coordenadas (evita 404 do lookup de POI fakes)
         newRoute = await _routingService.getRouteToCoordinates(
-          startX: userX,
-          startY: userY,
-          startLevel: currentLevel,
-          endX: destinationX,
-          endY: destinationY,
-          endLevel: destinationLevel,
+          start: Coordinates(x: userX, y: userY, level: currentLevel),
+          end: Coordinates(x: destinationX, y: destinationY, level: destinationLevel),
           allNodes: allNodes,
         );
       }

@@ -6,17 +6,17 @@ void main() {
     group('service URLs', () {
       test('mapServiceUrl includes apiBaseUrl', () {
         expect(AppEnv.mapServiceUrl, contains(AppEnv.apiBaseUrl));
-        expect(AppEnv.mapServiceUrl, contains(':8000'));
+        expect(AppEnv.mapServiceUrl, contains('/maps'));
       });
 
       test('routingServiceUrl includes apiBaseUrl', () {
         expect(AppEnv.routingServiceUrl, contains(AppEnv.apiBaseUrl));
-        expect(AppEnv.routingServiceUrl, contains(':8002'));
+        expect(AppEnv.routingServiceUrl, contains('/routing'));
       });
 
       test('waitTimeServiceUrl includes apiBaseUrl', () {
         expect(AppEnv.waitTimeServiceUrl, contains(AppEnv.apiBaseUrl));
-        expect(AppEnv.waitTimeServiceUrl, contains(':8001'));
+        expect(AppEnv.waitTimeServiceUrl, contains('/waittime'));
       });
     });
 
@@ -30,8 +30,8 @@ void main() {
         expect(AppEnv.mqttBroker, isNotEmpty);
       });
 
-      test('mqttWebSocketPort has default value 9002', () {
-        expect(AppEnv.mqttWebSocketPort, 9002);
+      test('mqttWebSocketPort has correct value', () {
+        expect(AppEnv.mqttWebSocketPort, 9003);
       });
 
       test('mqttClientId has default value', () {

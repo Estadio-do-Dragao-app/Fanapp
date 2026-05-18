@@ -1,4 +1,4 @@
-package com.example.fan_app_interface
+package pt.ua.pei.fanapp
 
 import io.flutter.embedding.android.FlutterActivity
 

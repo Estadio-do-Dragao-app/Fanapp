@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'dart:async';
-
+import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle, SystemChrome, DeviceOrientation;
+import 'package:flutter/foundation.dart' show kReleaseMode, kDebugMode;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:fan_app_interface/features/emergency/presentation/alert.dart';
 import 'package:fan_app_interface/features/map/presentation/fan_map_page.dart';
@@ -12,8 +15,56 @@ import 'features/navigation/data/services/user_position_service.dart';
 import 'core/services/location_service.dart';
 import 'core/config/api_config.dart';
 
+class SecureHttpOverrides extends HttpOverrides {
+  final List<int>? caBytes;
+
+  SecureHttpOverrides(this.caBytes);
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    HttpClient client;
+    if (caBytes != null && caBytes!.isNotEmpty) {
+      final secureContext = SecurityContext(withTrustedRoots: true);
+      try {
+        secureContext.setTrustedCertificatesBytes(caBytes!);
+        client = super.createHttpClient(secureContext);
+      } catch (e) {
+        debugPrint('[Security] Falha ao carregar custom CA no SecurityContext: $e');
+        client = super.createHttpClient(context);
+      }
+    } else {
+      client = super.createHttpClient(context);
+    }
+
+    // Bypasses globais APENAS em modo de desenvolvimento (Debug/Profile)
+    if (!kReleaseMode) {
+      client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+    }
+    return client;
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Bloquear a rotação do telemóvel para o modo vertical (Portrait)
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Tentar carregar certificado customizado dos assets
+  List<int>? caBytes;
+  try {
+    final ByteData data = await rootBundle.load('assets/certs/ca.crt');
+    caBytes = data.buffer.asUint8List();
+    debugPrint('[Security] Certificado customizado (ca.crt) detetado nos assets. A carregar...');
+  } catch (_) {
+    debugPrint('[Security] Nenhum ca.crt nos assets. A usar chaves de confiança do sistema.');
+  }
+
+  HttpOverrides.global = SecureHttpOverrides(caBytes);
+
   await LocalMapCache.init();
   await ApiConfig.init(); // Detetar backend (VM ou Local)
   
