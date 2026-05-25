@@ -138,10 +138,6 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
         return 'wc';
       case 'emergency_exit':
         return 'exit';
-      case 'merchandise':
-      case 'merchandising':
-      case 'store':
-        return 'shop';
       case 'parking':
       case 'parking_lot':
       case 'parkinglot':
