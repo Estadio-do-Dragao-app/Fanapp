@@ -23,6 +23,7 @@ class NavigationController extends ChangeNotifier {
   final double? initialX;
   final double? initialY;
   final int? initialLevel;
+  final bool avoidStairs;
 
   late RouteModel route;
   late RouteTracker _tracker;
@@ -86,6 +87,7 @@ class NavigationController extends ChangeNotifier {
     this.initialX,
     this.initialY,
     this.initialLevel,
+    this.avoidStairs = false,
   }) : initialRoute = route,
        _currentLevel = initialLevel ?? 0 {
     this.route = route;
@@ -101,6 +103,7 @@ class NavigationController extends ChangeNotifier {
       destinationLevel: destination.level,
       allNodes: allNodes,
       initialRoute: route,
+      avoidStairs: avoidStairs,
     );
 
     // Callback quando rota é recalculada
@@ -245,7 +248,7 @@ class NavigationController extends ChangeNotifier {
           startLevel: _currentLevel,
           destinationType: destination.category == 'seat' ? 'seat' : 'poi',
           destinationId: destination.id,
-          avoidStairs: false,
+          avoidStairs: avoidStairs,
         );
         final normalizedRoute = _normalizeRouteFromCurrentPosition(
           newRoute,

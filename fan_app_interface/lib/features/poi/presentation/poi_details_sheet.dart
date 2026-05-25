@@ -13,6 +13,7 @@ class POIDetailsSheet extends StatefulWidget {
   final List<NodeModel>? allNodes;
   final VoidCallback? onNavigate;
   final VoidCallback? onNavigationEnd;
+  final bool avoidStairs;
 
   const POIDetailsSheet({
     Key? key,
@@ -21,6 +22,7 @@ class POIDetailsSheet extends StatefulWidget {
     this.allNodes,
     this.onNavigate,
     this.onNavigationEnd,
+    this.avoidStairs = false,
   }) : super(key: key);
 
   /// Mostra o bottom sheet com detalhes do POI
@@ -31,6 +33,7 @@ class POIDetailsSheet extends StatefulWidget {
     List<NodeModel>? allNodes,
     VoidCallback? onNavigate,
     VoidCallback? onNavigationEnd,
+    bool avoidStairs = false,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -45,6 +48,7 @@ class POIDetailsSheet extends StatefulWidget {
         allNodes: allNodes,
         onNavigate: onNavigate,
         onNavigationEnd: onNavigationEnd,
+        avoidStairs: avoidStairs,
       ),
     ).then((_) {});
   }
@@ -203,6 +207,7 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                         route: widget.route!,
                         destination: widget.poi,
                         nodes: widget.allNodes!,
+                        avoidStairs: widget.avoidStairs,
                       ),
                     ),
                   );

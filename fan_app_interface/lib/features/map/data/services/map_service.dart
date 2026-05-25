@@ -136,7 +136,7 @@ class MapService {
 
   /// GET /nodes - Buscar todos os POIs a partir dos nós
   /// O endpoint /pois do backend é muito restritivo, por isso filtramos client-side
-  /// Tipos POI: gate, restroom, food, bar, emergency_exit, first_aid, information, merchandise
+  /// Tipos POI: restroom, food, bar, emergency_exit, first_aid, information
   Future<List<POIModel>> getAllPOIs() async {
     // Tipos que consideramos POIs (excluindo corridor, normal, seat, row_aisle)
     const poiTypes = [

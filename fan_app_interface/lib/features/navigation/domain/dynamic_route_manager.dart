@@ -21,6 +21,7 @@ class DynamicRouteManager {
   double destinationY;
   int destinationLevel;
   final List<NodeModel> allNodes;
+  final bool avoidStairs;
 
   RouteModel? _currentRoute;
   Timer? _recalculationTimer;
@@ -41,6 +42,7 @@ class DynamicRouteManager {
     required this.destinationLevel,
     required this.allNodes,
     required RouteModel initialRoute,
+    this.avoidStairs = false,
     RoutingService? routingService,
     CurrentUserPositionProvider? currentUserPositionProvider,
   }) : _routingService = routingService ?? RoutingService(),
@@ -298,7 +300,7 @@ class DynamicRouteManager {
           startLevel: currentLevel,
           destinationType: destinationType,
           destinationId: destinationId,
-          avoidStairs: false,
+          avoidStairs: avoidStairs,
         );
       } catch (e) {
         print('[DynamicRouteManager] getRoute fallback due to: $e');
@@ -307,6 +309,7 @@ class DynamicRouteManager {
           start: Coordinates(x: userX, y: userY, level: currentLevel),
           end: Coordinates(x: destinationX, y: destinationY, level: destinationLevel),
           allNodes: allNodes,
+          avoidStairs: avoidStairs,
         );
       }
 

@@ -353,8 +353,6 @@ class _SearchBarBottomSheetState extends State<SearchBarBottomSheet> {
         return loc.firstAid;
       case 'information':
         return loc.information;
-      case 'merchandise':
-        return loc.merchandising;
       default:
         return category;
     }
