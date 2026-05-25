@@ -674,6 +674,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                               initialX: _userX,
                               initialY: _userY,
                               initialLevel: _userLevel,
+                              avoidStairs: widget.avoidStairs,
                             ),
                           ),
                         );
