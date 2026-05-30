@@ -36,6 +36,10 @@ class POIStyle {
         return Icons.local_hospital;
       case 'information':
         return Icons.info_outline;
+      case 'departments':
+      case 'department':
+      case 'departamento':
+        return Icons.house;
       case 'stairs':
         return Icons.stairs;
       case 'ramp':
@@ -81,6 +85,9 @@ class POIStyle {
         return const Color(0xFF26A69A); // teal green
 
       case 'information':
+      case 'departments':
+      case 'department':
+      case 'departamento':
         return const Color(0xFF29B6F6); // bright cyan-blue
 
       case 'entrance':

@@ -12,7 +12,6 @@ import '../data/models/poi_model.dart';
 import '../data/models/node_model.dart';
 import '../data/models/edge_model.dart';
 import '../data/models/route_model.dart';
-import '../data/models/tile_model.dart';
 import '../data/services/map_service.dart';
 import '../data/services/routing_service.dart';
 import '../data/services/congestion_service.dart';
@@ -46,11 +45,9 @@ class FanMapPage extends StatefulWidget {
   final bool isNavigating;
   final LatLng? userPosition;
   final double? userHeading;
-  final int initialFloor;
   final bool simplifiedMode; // Skip FloorPlanLayer for performance
   final int routeStartWaypointIndex; // Índice onde começa a linha da rota
   final Function(POIModel)? onTapPOI;
-  final ValueChanged<int>? onFloorChanged;
   final bool avoidStairs;
   final void Function(MapCamera, bool)? onPositionChanged;
   final ValueChanged<bool>? onPOIPanelChanged;
@@ -67,7 +64,6 @@ class FanMapPage extends StatefulWidget {
 
   const FanMapPage({
     super.key,
-    this.initialFloor = 0,
     this.mapController,
     this.highlightedRoute,
     this.highlightedPOI,
@@ -77,7 +73,6 @@ class FanMapPage extends StatefulWidget {
     this.onHeatmapConnectionSuccess,
     this.onHeatmapConnectionError,
     this.onTapPOI,
-    this.onFloorChanged,
     this.isNavigating = false,
     this.userPosition,
     this.userHeading,
@@ -99,11 +94,16 @@ class FanMapPage extends StatefulWidget {
     this.mapService,
     this.routingService,
     this.congestionService,
+    this.positionStream,
   });
 
   final bool isEmergency;
   final List<POIModel>? customPOIsToShow;
   final bool zoomOutToPOIs;
+  /// Optional override for the plugin's location stream. When `null`
+  /// (default) the plugin uses raw device GPS — this is what we want
+  /// during navigation now that the dot follows raw GPS directly.
+  final Stream<LocationMarkerPosition?>? positionStream;
 
   @override
   State<FanMapPage> createState() => FanMapPageState();
@@ -127,11 +127,9 @@ class FanMapPageState extends State<FanMapPage>
   double _userPositionY = 0.0;
   int _userLevel = 0; // Guardar nível real do utilizador
   // Estado
-  int _currentFloor = 0;
   List<POIModel> _pois = [];
   List<NodeModel> _nodes = [];
   List<EdgeModel> _edges = [];
-  List<TileModel> _tiles = []; // Tiles para verificar walkable
   RouteModel? _currentRoute;
   bool _isLoading = true;
   String? _errorMessage;
@@ -168,8 +166,6 @@ class FanMapPageState extends State<FanMapPage>
     _congestionService = widget.congestionService ?? CongestionService();
     // Inicializar com a rota passada como parâmetro
     _currentRoute = widget.highlightedRoute;
-    // Usar o piso inicial fornecido
-    _currentFloor = widget.initialFloor;
     // Posição inicial: será carregada do UserPositionService
     _userPositionX = 0.0;
     _userPositionY = 0.0;
@@ -239,7 +235,7 @@ class FanMapPageState extends State<FanMapPage>
         setState(() {
           _userPositionX = 0.0;
           _userPositionY = 0.0;
-          _userLevel = _currentFloor;
+          _userLevel = 0;
         });
       }
       return;
@@ -261,14 +257,6 @@ class FanMapPageState extends State<FanMapPage>
         _userPositionX = x;
         _userPositionY = y;
         _userLevel = position.level;
-
-        if (updateFloor && !widget.isNavigating) {
-          if (_currentFloor != position.level) {
-            _currentFloor = position.level;
-            widget.onFloorChanged?.call(_currentFloor);
-            _loadMapData();
-          }
-        }
       });
     }
   }
@@ -296,12 +284,6 @@ class FanMapPageState extends State<FanMapPage>
           _showPOIDetails(_selectedPOI!);
         });
       }
-    }
-
-    if (widget.initialFloor != oldWidget.initialFloor) {
-      _currentFloor = widget.initialFloor;
-      loadUserPosition(updateFloor: false);
-      _loadMapData();
     }
 
     if (widget.showHeatmap && !oldWidget.showHeatmap) {
@@ -424,31 +406,18 @@ class FanMapPageState extends State<FanMapPage>
   );
 
   Future<void> _loadMapData() async {
-    final floorToLoad = _currentFloor;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      // Carregar POIs, nós, arestas, tiles e lugares guardados
-      // Usar a variável capturada para garantir consistência
-      final pois = await _mapService.getPOIsByFloor(floorToLoad);
+      // Carregar POIs, nós e arestas (todos os pisos — não há mais filtro)
+      final pois = await _mapService.getAllPOIs();
       final nodes = await _mapService.getAllNodes();
       final edges = await _mapService.getAllEdges();
-      final tiles = await _mapService.getAllTiles(level: floorToLoad);
-
-      // final savedPlaces = await SavedPlacesService.getSavedPlaces(); // Removed favorites
-      // Ticket feature disabled:
-      // final ticket = await _ticketStorage.getTicket();
-      // print(
-      //   "Loaded ticket from storage: ${ticket?.id} - Seat: ${ticket?.seatNodeId}",
-      // );
 
       if (!mounted) return;
-      if (_currentFloor != floorToLoad) {
-        return;
-      }
 
       /*
       // Ticket feature disabled:
@@ -476,7 +445,6 @@ class FanMapPageState extends State<FanMapPage>
         _pois = pois;
         _nodes = nodes;
         _edges = edges;
-        _tiles = tiles;
         // _savedPlaces = savedPlaces; // Removed favorites
         // _userTicket = ticket; // Ticket feature disabled
         _isLoading = false;
@@ -1169,7 +1137,7 @@ class FanMapPageState extends State<FanMapPage>
           FloorPlanLayer(
             edges: _edges,
             nodes: _nodes,
-            currentLevel: _currentFloor,
+            currentLevel: _userLevel,
             converter: _convertToLatLng,
           ),
 
@@ -1207,6 +1175,7 @@ class FanMapPageState extends State<FanMapPage>
         // Posição do utilizador (plugin gere GPS e permissões sozinho)
         if (_isLocationLayerAvailable)
           CurrentLocationLayer(
+            positionStream: widget.positionStream,
             alignPositionStream: _alignPositionStreamController.stream,
             alignPositionOnUpdate: widget.isNavigating && widget.isFollowingUser
                 ? AlignOnUpdate.always
@@ -1272,9 +1241,6 @@ class FanMapPageState extends State<FanMapPage>
     final data = <WeightedLatLng>[];
 
     heatmapData.sections.forEach((cellId, cellData) {
-      // Filtrar pelo piso atual
-      if (cellData.level != _currentFloor) return;
-
       // Extrair coordenadas do cellId (cell_X_Y ou cell_L_X_Y)
       final parts = cellId.split('_');
       double? x, y;
@@ -1339,13 +1305,25 @@ class FanMapPageState extends State<FanMapPage>
       points.add(widget.userPosition!);
     }
 
-    for (final wp in route.waypoints) {
+    // Em navegação: dot está no segmento [idx → idx+1], userPos já foi adicionado
+    // como ponto inicial. Começar em idx+1 para não criar linha retrógrada.
+    final start = widget.isNavigating
+        ? (widget.routeStartWaypointIndex + 1).clamp(0, route.waypoints.length)
+        : 0;
+    for (int i = start; i < route.waypoints.length; i++) {
+      final wp = route.waypoints[i];
       final node = nodesMap[wp.nodeId];
-      if (node != null) {
-        points.add(_convertToLatLng(node.x, node.y));
-      } else {
-        points.add(_convertToLatLng(wp.x, wp.y));
+      final px = node?.x ?? wp.x;
+      final py = node?.y ?? wp.y;
+      final latLng = _convertToLatLng(px, py);
+      // Descarta waypoints com coordenadas fora dos limites do estádio:
+      // são quase sempre nós obsoletos do mapa que o backend devolve
+      // mesmo já não existindo nos dados que o cliente tem.
+      if (!stadiumBounds.contains(latLng)) {
+        print('[FanMapPage] Skipping out-of-bounds waypoint ${wp.nodeId} ($px,$py)');
+        continue;
       }
+      points.add(latLng);
     }
 
     print(
@@ -1439,11 +1417,8 @@ class FanMapPageState extends State<FanMapPage>
     List<POIModel> poisToShow = [];
 
     if (widget.customPOIsToShow != null) {
-      // Isolates specific POIs if given (like emergency exits)
       poisToShow.addAll(widget.customPOIsToShow!);
     } else {
-      // 1. Mostrar POIs genéricos se o zoom permitir ou "Show All" estiver ativo
-      // MAS apenas se showOtherPOIs for true
       if (widget.showOtherPOIs && (showGenericPOIs || widget.showAllPOIs)) {
         poisToShow.addAll(
           _pois.where((p) => p.category != 'stairs' && p.category != 'ramp'),
@@ -1454,18 +1429,8 @@ class FanMapPageState extends State<FanMapPage>
     // 2. Garantir que o POI destacado (Destino ou Seleção) é SEMPRE visível em modo Preview
     // Em modo Navegação, respeita o piso.
     if (widget.highlightedPOI != null) {
-      // Se NÃO estamos navegando (Preview), mostramos sempre.
-      // Se ESTAMOS navegando, só mostramos se for do piso atual.
-      bool show =
-          !widget.isNavigating || widget.highlightedPOI!.level == _currentFloor;
-
-      if (show) {
-        // Always replace any same-id POI with highlightedPOI instance.
-        // This keeps marker coordinates stable across zoom-level filtering
-        // (generic list may carry slightly different coordinates).
-        poisToShow.removeWhere((p) => p.id == widget.highlightedPOI!.id);
-        poisToShow.add(widget.highlightedPOI!);
-      }
+      poisToShow.removeWhere((p) => p.id == widget.highlightedPOI!.id);
+      poisToShow.add(widget.highlightedPOI!);
     }
 
     final poiMarkers = poisToShow.map<Marker>((POIModel poi) {

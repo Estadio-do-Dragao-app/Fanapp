@@ -154,6 +154,9 @@ class MapService {
       'cafe',
       'restaurant',
       'cgd',
+      'departments',
+      'department',
+      'departamento',
     ];
 
     final response = await _performGet('$baseUrl/nodes');
