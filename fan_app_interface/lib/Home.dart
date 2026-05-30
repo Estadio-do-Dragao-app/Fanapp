@@ -55,8 +55,6 @@ class _HomeState extends State<Home> {
                 onHeatmapConnectionSuccess: () {
                   if (!_viewModel.isHeatmapAvailable) _viewModel.updateHealthStatus(true);
                 },
-                onFloorChanged: _viewModel.setFloor,
-                currentFloor: _viewModel.currentFloor,
                 avoidStairs: _viewModel.avoidStairs,
                 onPOIPanelChanged: _viewModel.setPOIPanelOpen,
               ),

@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Fan App (VM - 10.255.32.58)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define=API_BASE_URL=https://10.255.32.58",
+        "--dart-define=MAP_API_KEY=dragao_secret_key_2026",
+        "--dart-define=MQTT_PORT=8883",
+        "--dart-define=MQTT_WS_PORT=9003",
+        "--dart-define=HTTP_TIMEOUT_SECONDS=30",
+        "--dart-define=IS_OUTDOOR_MODE=true",
+        "--dart-define=ONLY_DATABASE_POIS=true"
+      ]
+    },
+    {
+      "name": "Fan App (Localhost)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define=API_BASE_URL=https://127.0.0.1",
+        "--dart-define=MAP_API_KEY=dragao_secret_key_2026",
+        "--dart-define=MQTT_PORT=8883",
+        "--dart-define=MQTT_WS_PORT=9003",
+        "--dart-define=HTTP_TIMEOUT_SECONDS=30",
+        "--dart-define=IS_OUTDOOR_MODE=true",
+        "--dart-define=ONLY_DATABASE_POIS=true"
+      ]
+    }
+  ]
+}

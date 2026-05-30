@@ -3,6 +3,8 @@ import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/services/routing_service.dart';
 import '../../../core/utils/geographic_utils.dart';
+import 'tracking/reroute_hysteresis.dart';
+import 'tracking/z_axis_guard.dart';
 
 typedef CurrentUserPositionProvider =
   Future<({double x, double y, int level})?> Function();
@@ -31,6 +33,23 @@ class DynamicRouteManager {
   double? _lastDistanceToDestination;
   int _movingAwayDestinationStreak = 0;
 
+  /// Histerese temporal: só dispara reroute se off-route por >= 3s.
+  final RerouteHysteresis _hysteresis = RerouteHysteresis(
+    offRouteMeters: 20.0,
+    sustainedDuration: const Duration(seconds: 3),
+    extremeOffRouteMeters: 50.0,
+    cooldown: const Duration(seconds: 10),
+  );
+
+  /// Indicador externo (opcional) — atalho validado pelo controller
+  /// (heading alinhado + velocidade ok). Quando true, hysteresis ignora.
+  bool shortcutValid = false;
+
+  /// Devolve true se o utilizador atravessou uma escada/rampa/elevador
+  /// recentemente (janela definida pelo controller, ex: 60s). Usado para
+  /// validar reroutes que aumentam o número de transições verticais.
+  final bool Function()? recentlyCrossedTransitionProvider;
+
   // Callbacks
   Function(RouteModel)? onRouteUpdated;
 
@@ -45,6 +64,7 @@ class DynamicRouteManager {
     this.avoidStairs = false,
     RoutingService? routingService,
     CurrentUserPositionProvider? currentUserPositionProvider,
+    this.recentlyCrossedTransitionProvider,
   }) : _routingService = routingService ?? RoutingService(),
        _currentUserPositionProvider =
            currentUserPositionProvider ?? GeographicUtils.getCurrentUserPosition {
@@ -66,6 +86,7 @@ class DynamicRouteManager {
     _movingAwayStreak = 0;
     _lastDistanceToDestination = null;
     _movingAwayDestinationStreak = 0;
+    _hysteresis.reset();
   }
 
   /// Updates the target destination (e.g. when a reroute goes to a different POI)
@@ -145,31 +166,22 @@ class DynamicRouteManager {
       '[DynamicRouteManager] Distância à rota: ${minDistanceToRoute.toStringAsFixed(1)}m ($validSegments segmentos válidos)',
     );
 
-    // Threshold mais permissivo: 20m (o backend snapa o início da rota ao nó mais próximo,
-    // que pode estar a ~15-20m do GPS do utilizador)
-    const double rerouteThreshold = 12.0;
-    // Só fazer bypass do cooldown em desvios verdadeiramente extremos (>50m)
-    const double extremeDeviation = 35.0;
+    // Histerese temporal: só dispara se off-route sustentado por 3s+
+    // (ou desvio extremo > 50m). Atalho validado pelo controller faz override.
+    final shouldFire = _hysteresis.shouldTrigger(
+      perpDistMeters: minDistanceToRoute,
+      now: DateTime.now(),
+      atShortcutValid: shortcutValid,
+    );
 
-    if (minDistanceToRoute > extremeDeviation) {
+    if (shouldFire) {
       print(
-        '[DynamicRouteManager] EXTREME off-route (${minDistanceToRoute.toStringAsFixed(1)}m). Recalculating.',
-      );
-      _lastRouteUpdateTime = null; // reset cooldown
-      await _recalculateRoute(userX, userY);
-    } else if (minDistanceToRoute > rerouteThreshold) {
-      print(
-        '[DynamicRouteManager] Off-route (${minDistanceToRoute.toStringAsFixed(1)}m > ${rerouteThreshold}m). Recalculating.',
+        '[DynamicRouteManager] Hysteresis fired: perp=${minDistanceToRoute.toStringAsFixed(1)}m. Recalculating.',
       );
       await _recalculateRoute(userX, userY);
-    } else if (movingAwayFromTarget) {
+    } else if (movingAwayFromTarget || movingAwayFromDestination) {
       print(
-        '[DynamicRouteManager] Moving away from next waypoint. Recalculating.',
-      );
-      await _recalculateRoute(userX, userY);
-    } else if (movingAwayFromDestination) {
-      print(
-        '[DynamicRouteManager] Moving away from destination. Recalculating.',
+        '[DynamicRouteManager] Moving-away streak detected (target=$movingAwayFromTarget, dest=$movingAwayFromDestination). Recalculating.',
       );
       await _recalculateRoute(userX, userY);
     }
@@ -313,6 +325,25 @@ class DynamicRouteManager {
         );
       }
 
+      // Veto da heurística de transições: se a nova rota tem mais
+      // stairs/ramp/elevator que a actual (a partir do índice corrente) e
+      // o ZAxisGuard não registou transição recente, é quase certo que o
+      // backend está a propor uma travessia de piso indevida — descartar.
+      final oldTransitions = _countTransitions(
+        _currentRoute?.path ?? const [],
+        from: currentWaypointIndex,
+      );
+      final newTransitions = _countTransitions(newRoute.path, from: 0);
+      final crossedRecently = recentlyCrossedTransitionProvider?.call() ?? false;
+      if (newTransitions > oldTransitions && !crossedRecently) {
+        print(
+          '[DynamicRouteManager] Reroute rejeitado: nova rota teria '
+          '$newTransitions transições vs $oldTransitions actuais '
+          '(user não atravessou escadas/rampa recentemente).',
+        );
+        return;
+      }
+
       _currentRoute = newRoute;
       currentWaypointIndex = 0;
       _lastRouteUpdateTime = DateTime.now();
@@ -320,6 +351,7 @@ class DynamicRouteManager {
       _movingAwayStreak = 0;
       _lastDistanceToDestination = null;
       _movingAwayDestinationStreak = 0;
+      _hysteresis.reset();
 
       final nodeIds = newRoute.path.map((p) => p.nodeId).toList();
 
@@ -333,6 +365,23 @@ class DynamicRouteManager {
     } catch (e) {
       print('[DynamicRouteManager] Erro ao recalcular rota: $e');
     }
+  }
+
+  /// Conta nós de transição (escadas/rampa/elevador) num path a partir do
+  /// índice `from`. Usado para detectar reroutes que adicionam travessias
+  /// de piso indevidas.
+  int _countTransitions(List<PathNode> path, {required int from}) {
+    if (path.isEmpty) return 0;
+    final nodesMap = {for (var n in allNodes) n.id: n};
+    final start = from.clamp(0, path.length);
+    int count = 0;
+    for (int i = start; i < path.length; i++) {
+      final node = nodesMap[path[i].nodeId];
+      if (node != null && ZAxisGuard.transitionTypes.contains(node.type)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   /// Encontra o nó mais próximo da posição atual (para determinar o nível)

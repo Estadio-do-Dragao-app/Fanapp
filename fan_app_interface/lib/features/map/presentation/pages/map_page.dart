@@ -7,9 +7,7 @@ class MapPage extends StatefulWidget {
   final bool showHeatmap;
   final VoidCallback? onHeatmapConnectionError;
   final VoidCallback? onHeatmapConnectionSuccess;
-  final ValueChanged<int>? onFloorChanged;
   final MapController? mapController;
-  final int currentFloor;
   final bool avoidStairs;
   final ValueChanged<bool>? onPOIPanelChanged;
 
@@ -19,8 +17,6 @@ class MapPage extends StatefulWidget {
     this.showHeatmap = false,
     this.onHeatmapConnectionError,
     this.onHeatmapConnectionSuccess,
-    this.onFloorChanged,
-    this.currentFloor = 0,
     this.avoidStairs = false,
     this.onPOIPanelChanged,
   });
@@ -58,8 +54,6 @@ class MapPageState extends State<MapPage> {
       showHeatmap: widget.showHeatmap,
       onHeatmapConnectionError: widget.onHeatmapConnectionError,
       onHeatmapConnectionSuccess: widget.onHeatmapConnectionSuccess,
-      onFloorChanged: widget.onFloorChanged,
-      initialFloor: widget.currentFloor,
       avoidStairs: widget.avoidStairs,
       onPOIPanelChanged: widget.onPOIPanelChanged,
     );
