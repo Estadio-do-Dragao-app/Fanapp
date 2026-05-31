@@ -94,7 +94,15 @@ void main() {
     final controller = StreamController<({double x, double y})>();
     manager.startMonitoring(controller.stream);
 
-    // Posição significativamente fora da linha da rota (> 12m).
+    // Posição significativamente fora da linha da rota (~33m).
+    // Hysteresis: trigger só após 3s sustentado (não-extremo).
+    controller.add((x: -8.629900, y: 41.160300));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    // Ainda dentro da janela de histerese — sem reroute.
+    expect(fakeRouting.getRouteCalls, 0);
+
+    // Sustentar off-route por > 3 s e emitir nova amostra.
+    await Future<void>.delayed(const Duration(milliseconds: 3200));
     controller.add((x: -8.629900, y: 41.160300));
     await Future<void>.delayed(const Duration(milliseconds: 120));
 

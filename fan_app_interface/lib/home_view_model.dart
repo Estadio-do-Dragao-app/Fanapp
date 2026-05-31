@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'core/services/mqtt_service.dart';
 import 'features/map/data/services/congestion_service.dart';
-import 'features/navigation/data/services/user_position_service.dart';
 import 'features/privacy/presentation/consent_modal.dart';
 import 'features/map/data/services/waittime_cache.dart';
 
@@ -11,7 +10,6 @@ class HomeViewModel extends ChangeNotifier {
 
   bool showHeatmap = false;
   bool isHeatmapAvailable = true;
-  int currentFloor = 0;
   bool avoidStairs = false;
   bool isFilterExpanded = false;
   bool isPOIPanelOpen = false;
@@ -22,7 +20,6 @@ class HomeViewModel extends ChangeNotifier {
   void Function()? onEmergencyAlert;
 
   HomeViewModel() {
-    _loadInitialFilter();
     _checkCongestionHealth();
     WaittimeCache().start();
     _startHealthCheckTimer();
@@ -51,14 +48,6 @@ class HomeViewModel extends ChangeNotifier {
         debugPrint('[HomeViewModel] Ignored non-critical alert in Home: $data');
       }
     });
-  }
-
-  Future<void> _loadInitialFilter() async {
-    final pos = await UserPositionService.getPosition();
-    if (pos != null) {
-      currentFloor = pos.level;
-      notifyListeners();
-    }
   }
 
   void _startHealthCheckTimer() {
@@ -90,13 +79,6 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
     if (value) {
       _checkCongestionHealth();
-    }
-  }
-
-  void setFloor(int floor) {
-    if (currentFloor != floor) {
-      currentFloor = floor;
-      notifyListeners();
     }
   }
 

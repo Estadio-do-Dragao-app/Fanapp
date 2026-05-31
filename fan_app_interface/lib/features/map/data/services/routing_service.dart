@@ -15,9 +15,6 @@ class RoutingService {
 
   static String get baseUrl => ApiConfig.routingService;
 
-  // Bloqueio de concorrência para evitar Race Conditions (vários pedidos em simultâneo)
-  bool _isRouting = false;
-
   Future<http.Response> _performPost(String url, {Map<String, String>? headers, Object? body}) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -48,64 +45,54 @@ class RoutingService {
     required String destinationId,
     bool avoidStairs = false,
   }) async {
-    if (_isRouting) {
-      print('[RoutingService] Route calculation already in progress. Ignoring duplicate request.');
-      throw Exception('Route calculation already in progress');
+    // 1. Verificar Cache
+    final cacheKey = LocalMapCache.generateRouteKey(
+      startX: startX,
+      startY: startY,
+      startLevel: startLevel,
+      destinationType: destinationType,
+      destinationId: destinationId,
+      avoidStairs: avoidStairs,
+    );
+
+    final cachedRoute = LocalMapCache.getRouteFromCache(cacheKey);
+    if (cachedRoute != null) {
+      print('[RoutingService] Rota retornada do Cache LRU');
+      return RouteModel.fromJson(cachedRoute);
     }
 
-    _isRouting = true;
-    try {
-      // 1. Verificar Cache
-      final cacheKey = LocalMapCache.generateRouteKey(
-        startX: startX,
-        startY: startY,
-        startLevel: startLevel,
-        destinationType: destinationType,
-        destinationId: destinationId,
-        avoidStairs: avoidStairs,
+    final request = RouteRequest(
+      start: Coordinates(x: startX, y: startY, level: startLevel),
+      destinationType: destinationType,
+      destinationId: destinationId,
+      avoidStairs: avoidStairs,
+    );
+
+    print(
+      '[RoutingService] POST /api/route: startLevel=$startLevel, dest=$destinationType:$destinationId',
+    );
+
+    final response = await _performPost(
+      '$baseUrl/api/route',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': AppEnv.mapApiKey
+      },
+      body: json.encode(request.toJson()),
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = json.decode(response.body);
+
+      // 2. Guardar no Cache
+      LocalMapCache.saveRouteToCache(cacheKey, decoded);
+
+      return RouteModel.fromJson(decoded);
+    } else {
+      final errorBody = response.body;
+      throw Exception(
+        'Failed to get route: ${response.statusCode} - $errorBody',
       );
-
-      final cachedRoute = LocalMapCache.getRouteFromCache(cacheKey);
-      if (cachedRoute != null) {
-        print('[RoutingService] Rota retornada do Cache LRU');
-        return RouteModel.fromJson(cachedRoute);
-      }
-
-      final request = RouteRequest(
-        start: Coordinates(x: startX, y: startY, level: startLevel),
-        destinationType: destinationType,
-        destinationId: destinationId,
-        avoidStairs: avoidStairs,
-      );
-
-      print(
-        '[RoutingService] POST /api/route: startLevel=$startLevel, dest=$destinationType:$destinationId',
-      );
-
-      final response = await _performPost(
-        '$baseUrl/api/route',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': AppEnv.mapApiKey
-        },
-        body: json.encode(request.toJson()),
-      );
-
-      if (response.statusCode == 200) {
-        final decoded = json.decode(response.body);
-        
-        // 2. Guardar no Cache
-        LocalMapCache.saveRouteToCache(cacheKey, decoded);
-        
-        return RouteModel.fromJson(decoded);
-      } else {
-        final errorBody = response.body;
-        throw Exception(
-          'Failed to get route: ${response.statusCode} - $errorBody',
-        );
-      }
-    } finally {
-      _isRouting = false;
     }
   }
 
