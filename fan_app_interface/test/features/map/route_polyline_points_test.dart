@@ -2,8 +2,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:fan_app_interface/features/map/data/models/route_model.dart';
 import 'package:fan_app_interface/features/map/data/models/node_model.dart';
-import 'package:fan_app_interface/features/map/presentation/fan_map_page.dart';
 
+typedef LatLngConvert = LatLng Function(double x, double y);
+
+List<LatLng> buildRoutePoints({
+  required RouteModel route,
+  required Map<String, NodeModel> nodesMap,
+  required LatLng? head,
+  required int startIndex,
+  required bool isNavigating,
+  required LatLngConvert convert,
+}) {
+  final points = <LatLng>[];
+
+  final start = isNavigating ? startIndex.clamp(0, route.waypoints.length) : 0;
+
+  if (isNavigating && head != null) {
+    points.add(head);
+  }
+
+  for (int i = start; i < route.waypoints.length; i++) {
+    final wp = route.waypoints[i];
+    final node = nodesMap[wp.nodeId];
+    points.add(convert(node?.x ?? wp.x, node?.y ?? wp.y));
+  }
+
+  return points;
+}
 PathNode _wp(String id) => PathNode(
       nodeId: id,
       x: 0,

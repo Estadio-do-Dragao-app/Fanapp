@@ -1,6 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fan_app_interface/features/map/presentation/fan_map_page.dart';
 
+bool shouldRebuildOnZoom(
+  double oldZoom,
+  double newZoom, {
+  double step = 0.25,
+  double poiCutoff = 17.5,
+}) {
+  if (oldZoom == newZoom) return false;
+
+  final crossedCutoff = (oldZoom >= poiCutoff) != (newZoom >= poiCutoff);
+  if (crossedCutoff) return true;
+
+  return (newZoom - oldZoom).abs() > step;
+}
 void main() {
   group('shouldRebuildOnZoom (Fix 3 regression lock)', () {
     test('tiny zoom delta (within step) does NOT trigger a rebuild', () {

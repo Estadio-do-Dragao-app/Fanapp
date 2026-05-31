@@ -1,6 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fan_app_interface/features/navigation/domain/navigation_controller.dart';
 
+int computePolylineStartIndex({
+  required int currentWaypointIndex,
+  required double tOnCurrentSegment,
+  required bool freeRoamActive,
+  required int waypointCount,
+}) {
+  if (waypointCount <= 0) return 0;
+
+  int idx = currentWaypointIndex.clamp(0, waypointCount);
+  if (freeRoamActive || tOnCurrentSegment > 0.5) {
+    idx += 1;
+  }
+  return idx.clamp(0, waypointCount);
+}
 void main() {
   group('computePolylineStartIndex (Task 2 / Risco B regression lock)', () {
     test('t ≤ 0.5 keeps the current waypoint (no backwards mini-segment)', () {

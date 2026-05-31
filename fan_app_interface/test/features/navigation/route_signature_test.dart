@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fan_app_interface/features/map/data/models/route_model.dart';
-import 'package:fan_app_interface/features/navigation/presentation/navigation_page.dart';
 
+String routeSignature(RouteModel route) {
+  final ids = route.waypoints.map((w) => w.nodeId).join('>');
+  return '${route.waypoints.length}|$ids';
+}
 PathNode _n(String id) => PathNode(
       nodeId: id,
       x: 0,

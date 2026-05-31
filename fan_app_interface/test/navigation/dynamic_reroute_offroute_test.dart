@@ -102,7 +102,7 @@ void main() {
     expect(fakeRouting.getRouteCalls, 0);
 
     // Sustentar off-route por > 3 s e emitir nova amostra.
-    await Future<void>.delayed(const Duration(seconds: 4));
+    await Future<void>.delayed(const Duration(milliseconds: 3200));
     controller.add((x: -8.629900, y: 41.160300));
     await Future<void>.delayed(const Duration(milliseconds: 120));
 
