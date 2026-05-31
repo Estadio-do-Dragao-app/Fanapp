@@ -88,36 +88,53 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
 
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Static decoration kept out of the AnimatedBuilder so we don't rebuild
+  // BoxDecoration/BoxShadow at 60 fps while the height tween runs.
+  static final BoxDecoration _sheetDecoration = BoxDecoration(
+    color: const Color(0xFF1E1E3F),
+    borderRadius: BorderRadius.circular(24),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.3),
+        blurRadius: 16,
+        offset: const Offset(0, -4),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
+
+    // Child is built once per expansion toggle (not per animation frame).
+    final content = RepaintBoundary(
+      child: _isExpanded
+          ? _buildExpandedContent(loc)
+          : _buildCollapsedContent(loc),
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onVerticalDragStart: _onVerticalDragStart,
       onVerticalDragUpdate: _onVerticalDragUpdate,
       onVerticalDragEnd: _onVerticalDragEnd,
+      // AnimatedBuilder rebuilds ONLY the SizedBox wrapper — decoration and
+      // content are captured by closure and reused frame-to-frame.
       child: AnimatedBuilder(
         animation: _heightAnimation,
-        builder: (context, _) {
-          return Container(
+        builder: (context, child) {
+          return SizedBox(
             height: _heightAnimation.value,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E3F),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 16,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: _isExpanded
-                ? _buildExpandedContent(loc)
-                : _buildCollapsedContent(loc),
+            child: child,
           );
         },
+        child: DecoratedBox(
+          decoration: _sheetDecoration,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: content,
+          ),
+        ),
       ),
     );
   }

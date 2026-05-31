@@ -161,9 +161,7 @@ class _NavigationPageState extends State<NavigationPage>
       }
     });
 
-    if (_isFollowingUser) {
-      _followUserPosition();
-    }
+    // Following é gerido pelo AlignOnUpdate.always do plugin sobre o seu próprio stream GPS.
 
     if (_controller.hasArrived) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -349,7 +347,7 @@ class _NavigationPageState extends State<NavigationPage>
               userPosition: userPosition,
               userHeading: _controller.heading,
               routeStartWaypointIndex: _controller.routeStartWaypointIndex,
-              initialFloor: _controller.currentLevel,
+              positionStream: _controller.markerPositionStream,
               showHeatmap: _showHeatmap,
               isEmergency: widget.isEmergency,
               onTapPOI: widget.isEmergency ? null : _showSwitchDestinationSheet,
