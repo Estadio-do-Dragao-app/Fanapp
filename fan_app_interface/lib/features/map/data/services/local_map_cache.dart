@@ -14,6 +14,7 @@ class LocalMapCache {
   static const String keyEdges = 'edges';
   static const String keyPOIs = 'pois';
   static const String keyCacheTime = 'last_update';
+  static const String keyCacheSource = 'cache_source';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -85,6 +86,14 @@ class LocalMapCache {
 
   /// Verifica se existe cache de POIs válido
   static bool hasPOICache() => _box.containsKey(keyPOIs);
+
+  /// Obtém a fonte (base URL) que gerou o cache atual
+  static String? getCacheSource() => _box.get(keyCacheSource) as String?;
+
+  /// Persiste a base URL que originou o cache
+  static Future<void> saveCacheSource(String url) async {
+    await _box.put(keyCacheSource, url);
+  }
 
   /// Limpa o cache
   static Future<void> clear() async {
