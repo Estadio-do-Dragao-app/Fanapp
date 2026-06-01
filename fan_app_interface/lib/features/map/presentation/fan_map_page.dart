@@ -1033,6 +1033,8 @@ class FanMapPageState extends State<FanMapPage>
                                     initialX: _userPositionX,
                                     initialY: _userPositionY,
                                     initialLevel: _userLevel,
+                                    showHeatmap: widget.showHeatmap,
+                                    avoidStairs: widget.avoidStairs,
                                   ),
                                 ),
                               ).then((_) => loadUserPosition());
