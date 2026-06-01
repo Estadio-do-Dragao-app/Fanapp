@@ -341,7 +341,18 @@ class RouteTracker {
       );
     }
 
-    final nextTurnIndex = _findNextRealTurn(_currentWaypointIndex);
+    // Find the next turn that is actually ahead (>= 1 m away).
+    // Skipping turns closer than 1 m prevents the header from briefly
+    // showing "<1 m" when accumulated distance nearly equals _cumLen of
+    // the next waypoint (segment-end precision artefact).
+    int nextTurnIndex = _findNextRealTurn(_currentWaypointIndex);
+    while (nextTurnIndex < route.waypoints.length - 1 &&
+        nextTurnIndex < _cumLen.length) {
+      final lenToTurn = (_cumLen[nextTurnIndex] - _accumulatedDistanceMeters)
+          .clamp(0.0, double.infinity);
+      if (lenToTurn >= 1.0) break;
+      nextTurnIndex = _findNextRealTurn(nextTurnIndex + 1);
+    }
 
     double totalDist = remainingDistance;
     if (nextTurnIndex < route.waypoints.length &&

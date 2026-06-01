@@ -190,6 +190,11 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String queuePeople(int count) {
+    return '$count pessoas';
+  }
+
+  @override
   String walkTime(int min) {
     return '$min min';
   }

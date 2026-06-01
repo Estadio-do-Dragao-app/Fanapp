@@ -21,7 +21,7 @@ import 'package:fan_app_interface/l10n/app_localizations.dart';
 class POIWithRoute {
   final POIModel poi;
   RouteModel? route;
-  final double estimatedDistance; // Distância euclidiana (fallback)
+  final double estimatedDistance; // DistÃ¢ncia euclidiana (fallback)
 
   POIWithRoute({
     required this.poi,
@@ -34,11 +34,11 @@ class POIWithRoute {
     if (route != null) {
       return (route!.etaSeconds / 60).round();
     }
-    // Fallback: estimar baseado em distância euclidiana
+    // Fallback: estimar baseado em distÃ¢ncia euclidiana
     return ((estimatedDistance * 1.5) / 1.4 / 60).round().clamp(1, 99);
   }
 
-  /// Tempo de espera na fila em minutos (0 se não disponível)
+  /// Tempo de espera na fila em minutos (0 se nÃ£o disponÃ­vel)
   int get waitMinutes {
     // First try MQTT cache (real-time)
     final cachedWait = WaittimeCache().getWaitTime(poi.id);
@@ -52,10 +52,10 @@ class POIWithRoute {
     return 0;
   }
 
-  /// Tempo TOTAL = caminhada + espera (usado para determinar "mais rápido")
+  /// Tempo TOTAL = caminhada + espera (usado para determinar "mais rÃ¡pido")
   int get totalEtaMinutes => walkingMinutes + waitMinutes;
 
-  /// Distância real se rota calculada, senão estimativa
+  /// DistÃ¢ncia real se rota calculada, senÃ£o estimativa
   double get distance => route?.distance ?? estimatedDistance;
 
   bool get hasRoute => route != null;
@@ -65,12 +65,14 @@ class DestinationSelectionPage extends StatefulWidget {
   final String categoryId;
   final String? preselectedSeatInfo;
   final bool avoidStairs;
+  final bool showHeatmap;
 
   const DestinationSelectionPage({
     Key? key,
     required this.categoryId,
     this.preselectedSeatInfo,
     this.avoidStairs = false,
+    this.showHeatmap = false,
   }) : super(key: key);
 
   @override
@@ -90,17 +92,17 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Estado do cálculo de rotas em background
+  // Estado do cÃ¡lculo de rotas em background
   bool _isCalculatingAllRoutes = false;
   bool _allRoutesCalculated = false;
   int?
-  _fastestIndex; // Índice do POI mais rápido (após calcular todas as rotas)
+  _fastestIndex; // Ãndice do POI mais rÃ¡pido (apÃ³s calcular todas as rotas)
 
   // Rota selecionada
   RouteModel? _selectedRoute;
   bool _isCalculatingSelectedRoute = false;
 
-  // Posição do utilizador
+  // PosiÃ§Ã£o do utilizador
   double _userX = 0.0;
   double _userY = 0.0;
   int _userLevel = 0;
@@ -131,6 +133,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       case 'bar':
       case 'bar_p':
       case 'restaurant':
+      case 'cafe':
         return 'food';
       case 'restroom':
       case 'toilet':
@@ -152,6 +155,13 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       case 'information':
       case 'info':
       case 'poi':
+      case 'department':
+      case 'departments':
+      case 'departamento':
+      case 'library':
+      case 'cgd':
+      case 'atm':
+      case 'shop':
         return 'poi';
       default:
         return category;
@@ -162,8 +172,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
   }
 
-  /// Sem GPS, garante que o POI selecionado por defeito (índice 0) também faz zoom.
-  /// O segundo zoom curto cobre casos em que o mapa ainda está a terminar o carregamento.
+  /// Sem GPS, garante que o POI selecionado por defeito (Ã­ndice 0) tambÃ©m faz zoom.
+  /// O segundo zoom curto cobre casos em que o mapa ainda estÃ¡ a terminar o carregamento.
   void _scheduleDefaultPOIAutoZoom() {
     if (_hasValidLocation || _poisWithRoutes.isEmpty || selectedIndex != 0)
       return;
@@ -203,7 +213,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     });
   }
 
-  /// Carrega POIs e inicia cálculo de rotas em background
+  /// Carrega POIs e inicia cÃ¡lculo de rotas em background
   Future<void> _loadPOIs() async {
     setState(() {
       _isLoading = true;
@@ -218,11 +228,11 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       final allPois = await _mapService.getAllPOIs();
       final allNodes = await _mapService.getAllNodes();
 
-      // Carregar posição real do utilizador (GPS ou Saved)
+      // Carregar posiÃ§Ã£o real do utilizador (GPS ou Saved)
       final userPos = await GeographicUtils.getCurrentUserPosition();
 
       if (userPos == null) {
-        // Se não houver GPS, mostramos o aviso mas deixamos ver a lista
+        // Se nÃ£o houver GPS, mostramos o aviso mas deixamos ver a lista
         _userX = 0.0;
         _userY = 0.0;
         _userLevel = 0;
@@ -242,7 +252,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       }
 
       print(
-        '[DestinationSelection] Usando posição real/guardada: ($_userX, $_userY, level=$_userLevel)',
+        '[DestinationSelection] Usando posiÃ§Ã£o real/guardada: ($_userX, $_userY, level=$_userLevel)',
       );
 
       _allNodes = allNodes;
@@ -253,7 +263,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
             widget.categoryId.toLowerCase();
       }).toList();
 
-      // Criar lista com distâncias estimadas (usando posição real do utilizador)
+      // Criar lista com distÃ¢ncias estimadas (usando posiÃ§Ã£o real do utilizador)
       List<POIWithRoute> poisWithRoutes = categoryPois.map((poi) {
         final distance = _hasValidLocation
             ? _euclideanDistance(_userX, _userY, poi.x, poi.y)
@@ -262,7 +272,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       }).toList();
 
       if (_hasValidLocation) {
-        // Ordenar por distância euclidiana (aproximação inicial)
+        // Ordenar por distÃ¢ncia euclidiana (aproximaÃ§Ã£o inicial)
         poisWithRoutes.sort(
           (a, b) => a.estimatedDistance.compareTo(b.estimatedDistance),
         );
@@ -280,7 +290,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
         }
       });
 
-      // Iniciar cálculo de TODAS as rotas em paralelo (background)
+      // Iniciar cÃ¡lculo de TODAS as rotas em paralelo (background)
       _calculateAllRoutesInBackground();
 
       // Calcular rota do primeiro selecionado imediatamente
@@ -299,7 +309,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     }
   }
 
-  /// Calcula todas as rotas em paralelo no background
+  /// Calcula todas as rotas em pequenos lotes no background
   Future<void> _calculateAllRoutesInBackground() async {
     if (_poisWithRoutes.isEmpty || !_hasValidLocation) {
       if (mounted && !_hasValidLocation) {
@@ -315,53 +325,44 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     });
 
     try {
-      // Calcular todas as rotas em paralelo
-      final futures = _poisWithRoutes.map((item) async {
-        try {
-          final route = await _routingService.getRouteToPOI(
-            startX: _userX,
-            startY: _userY,
-            startLevel: _userLevel,
-            poiId: item.poi.id,
-            avoidStairs: widget.avoidStairs,
-          );
-          item.route = route;
-        } catch (e) {
-          print(
-            '[DestinationSelection] Erro ao calcular rota para ${item.poi.name}: $e',
-          );
-          // Manter route como null - usará estimativa
-        }
-      }).toList();
-
-      await Future.wait(futures);
+      const batchSize = 4;
+      for (var i = 0; i < _poisWithRoutes.length; i += batchSize) {
+        final batch = _poisWithRoutes.skip(i).take(batchSize).toList();
+        await Future.wait(batch.map(_calculateRouteForItem));
+        // Rebuild after each batch so walking times appear progressively
+        if (mounted) setState(() {});
+      }
 
       if (mounted) {
         if (_hasValidLocation) {
           // Reordenar a lista pelo tempo total (Menor tempo primeiro)
           _poisWithRoutes.sort(
-            (a, b) => a.totalEtaMinutes.compareTo(b.totalEtaMinutes),
+            (a, b) {
+              if (a.hasRoute != b.hasRoute) {
+                return a.hasRoute ? -1 : 1;
+              }
+              return a.totalEtaMinutes.compareTo(b.totalEtaMinutes);
+            },
           );
         }
 
-        // Como ordenámos, o mais rápido é o primeiro (índice 0)
-        int fastestIdx = 0;
+        // Como ordenÃ¡mos, o mais rÃ¡pido com rota vÃ¡lida fica primeiro.
+        final fastestIdx = _poisWithRoutes.indexWhere((item) => item.hasRoute);
+        final selectedAfterSort = fastestIdx == -1 ? 0 : fastestIdx;
 
         setState(() {
           _isCalculatingAllRoutes = false;
           _allRoutesCalculated = true;
-          _fastestIndex = fastestIdx;
+          _fastestIndex = fastestIdx == -1 ? null : fastestIdx;
 
-          // Selecionar automaticamente o primeiro (mais rápido)
+          // Selecionar automaticamente o primeiro (mais rÃ¡pido)
           if (_poisWithRoutes.isNotEmpty) {
-            selectedIndex = 0;
-            if (_poisWithRoutes[0].hasRoute) {
-              _selectedRoute = _poisWithRoutes[0].route;
-            }
+            selectedIndex = selectedAfterSort;
+            _selectedRoute = _poisWithRoutes[selectedAfterSort].route;
           }
         });
 
-        // Atualizar zoom para a rota do mais rápido
+        // Atualizar zoom para a rota do mais rÃ¡pido
         if (_selectedRoute != null) {
           // Pequeno delay para garantir que o UI atualizou a lista
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -370,7 +371,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
         }
       }
     } catch (e) {
-      print('[DestinationSelection] Erro no cálculo em background: $e');
+      print('[DestinationSelection] Erro no cÃ¡lculo em background: $e');
       if (mounted) {
         setState(() {
           _isCalculatingAllRoutes = false;
@@ -379,11 +380,36 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     }
   }
 
-  /// Calcula rota para o POI selecionado (se ainda não calculada)
+  /// Calcula rota para um POI da lista de fundo, com uma tentativa extra.
+  Future<void> _calculateRouteForItem(POIWithRoute item) async {
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      try {
+        final route = await _routingService.getRouteToPOI(
+          startX: _userX,
+          startY: _userY,
+          startLevel: _userLevel,
+          poiId: item.poi.id,
+          avoidStairs: widget.avoidStairs,
+        );
+        item.route = route;
+        return;
+      } catch (e) {
+        print(
+          '[DestinationSelection] Erro ao calcular rota para ${item.poi.name} '
+          '(tentativa $attempt): $e',
+        );
+        if (attempt == 1) {
+          await Future.delayed(const Duration(milliseconds: 150));
+        }
+      }
+    }
+  }
+
+  /// Calcula rota para o POI selecionado (se ainda nÃ£o calculada)
   Future<void> _calculateRouteForSelected(int index) async {
     final item = _poisWithRoutes[index];
 
-    // Se já tem rota, usa diretamente
+    // Se jÃ¡ tem rota, usa diretamente
     if (item.hasRoute) {
       setState(() {
         _selectedRoute = item.route;
@@ -414,7 +440,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
           _selectedRoute = route;
           _isCalculatingSelectedRoute = false;
         });
-        // Atrasar zoom para garantir que o mapa está pronto (especialmente na primeira vez)
+        // Atrasar zoom para garantir que o mapa estÃ¡ pronto (especialmente na primeira vez)
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             _zoomToRoute(route);
@@ -436,15 +462,15 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     return LatLng(y, x);
   }
 
-  /// Faz zoom para mostrar o início e fim da rota
+  /// Faz zoom para mostrar o inÃ­cio e fim da rota
   void _zoomToRoute(RouteModel route) {
     if (route.path.isEmpty) return;
 
-    // Obter posição do utilizador (real) e do destino
+    // Obter posiÃ§Ã£o do utilizador (real) e do destino
     final startLatLng = _convertToLatLng(_userX, _userY);
     final endLatLng = _convertToLatLng(route.path.last.x, route.path.last.y);
 
-    // Calcular bounds para incluir início e fim
+    // Calcular bounds para incluir inÃ­cio e fim
     final minLat = min(startLatLng.latitude, endLatLng.latitude);
     final maxLat = max(startLatLng.latitude, endLatLng.latitude);
     final minLng = min(startLatLng.longitude, endLatLng.longitude);
@@ -454,17 +480,17 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     final latPadding = (maxLat - minLat) * 0.3;
     final lngPadding = (maxLng - minLng) * 0.3;
 
-    // Fazer zoom para mostrar início e fim
+    // Fazer zoom para mostrar inÃ­cio e fim
     try {
       final centerLat = (minLat + maxLat) / 2;
       final centerLng = (minLng + maxLng) / 2;
 
-      // Calcular zoom level baseado na distância
+      // Calcular zoom level baseado na distÃ¢ncia
       final latDiff = maxLat - minLat + 2 * latPadding;
       final lngDiff = maxLng - minLng + 2 * lngPadding;
       final maxDiff = max(latDiff, lngDiff);
 
-      // Zoom: maior diferença = menor zoom
+      // Zoom: maior diferenÃ§a = menor zoom
       double zoom = 18.0;
       if (maxDiff > 0.001) zoom = 17.0;
       if (maxDiff > 0.002) zoom = 16.5;
@@ -479,7 +505,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
     }
   }
 
-  /// Faz zoom para um POI específico (usado quando não há GPS)
+  /// Faz zoom para um POI especÃ­fico (usado quando nÃ£o hÃ¡ GPS)
   void _zoomToPOI(POIModel poi) {
     try {
       _animatedMapController.animateTo(
@@ -557,7 +583,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
             ),
           ),
 
-          // Botão voltar
+          // BotÃ£o voltar
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 16,
@@ -625,7 +651,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
             ),
           ),
 
-          // Botão confirmar
+          // BotÃ£o confirmar
           if (!_isLoading && _errorMessage == null)
             Positioned(
               bottom: 24,
@@ -635,7 +661,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo[200],
                   disabledBackgroundColor:
-                      Colors.grey[700], // Fundo cinzento quando indisponível
+                      Colors.grey[700], // Fundo cinzento quando indisponÃ­vel
                   disabledForegroundColor: Colors.white70, // Texto mais fraco
                   minimumSize: const Size(double.infinity, 48),
                   shape: RoundedRectangleBorder(
@@ -671,6 +697,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                               initialY: _userY,
                               initialLevel: _userLevel,
                               avoidStairs: widget.avoidStairs,
+                              showHeatmap: widget.showHeatmap,
                             ),
                           ),
                         );
@@ -749,7 +776,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                     _selectedRoute = item.route;
                   });
                   if (item.hasRoute) {
-                    // Já tem rota - fazer zoom (atrasar para evitar conflito com build)
+                    // JÃ¡ tem rota - fazer zoom (atrasar para evitar conflito com build)
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) {
                         _zoomToRoute(item.route!);
@@ -763,7 +790,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                       }
                     });
                   } else {
-                    // Calcular rota (zoom será feito após cálculo no _calculateRouteForSelected)
+                    // Calcular rota (zoom serÃ¡ feito apÃ³s cÃ¡lculo no _calculateRouteForSelected)
                     _calculateRouteForSelected(index);
                   }
                 },
@@ -827,7 +854,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                                       'bar_p',
                                     ].contains(item.poi.category) ||
                                     item.poi.name.toLowerCase().contains(
-                                      'farmácia',
+                                      'farmÃ¡cia',
                                     ))
                                   AnimatedSelectionGlow(
                                     play: isSelected,
@@ -838,7 +865,7 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
                                       ),
                                     ),
                                   ),
-                                // Badge "Mais rápido"
+                                // Badge "Mais rÃ¡pido"
                                 if (isFastest)
                                   Container(
                                     padding: const EdgeInsets.symmetric(

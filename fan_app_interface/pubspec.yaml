@@ -61,6 +61,7 @@ dependencies:
   flutter_map_heatmap: ^0.0.8
   geolocator: ^13.0.2
   cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.3.0
 
   # Location and Identity
   uuid: ^4.4.0
