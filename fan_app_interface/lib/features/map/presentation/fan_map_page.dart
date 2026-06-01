@@ -177,7 +177,13 @@ class FanMapPageState extends State<FanMapPage>
       vsync: this,
     )..repeat(reverse: true);
 
-    _checkLocationLayerAvailability();
+    // In navigation mode, GPS is already confirmed available (can't start nav without it),
+    // so show the location dot immediately without waiting for the async permission check.
+    if (widget.isNavigating) {
+      _isLocationLayerAvailable = true;
+    } else {
+      _checkLocationLayerAvailability();
+    }
     loadUserPosition(); // Carregar posição guardada
     _loadMapData();
 
@@ -960,9 +966,9 @@ class FanMapPageState extends State<FanMapPage>
                             ].contains(_selectedPOI!.category) ||
                             _selectedPOI!.name.toLowerCase().contains(
                               'farmácia',
-                            ))
+                            )) ...[
                           _buildInfoChip(
-                            icon: Icons.group,
+                            icon: Icons.timer_outlined,
                             label: AppLocalizations.of(context)!.queueTime(
                               WaittimeCache()
                                       .getWaitTime(_selectedPOI!.id)
@@ -971,6 +977,13 @@ class FanMapPageState extends State<FanMapPage>
                                   0,
                             ),
                           ),
+                          _buildInfoChip(
+                            icon: Icons.people,
+                            label: AppLocalizations.of(context)!.queuePeople(
+                              WaittimeCache().getQueueLength(_selectedPOI!.id) ?? 0,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   const SizedBox(height: 20),
@@ -1120,6 +1133,7 @@ class FanMapPageState extends State<FanMapPage>
             userAgentPackageName: 'com.dragao.fanapp',
             retinaMode: RetinaMode.isHighDensity(context),
             maxNativeZoom: 19,
+            panBuffer: 1,
           ),
 
         // Remove a atribuição padrão do flutter_map

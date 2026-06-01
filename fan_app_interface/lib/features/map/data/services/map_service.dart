@@ -154,6 +154,8 @@ class MapService {
       'cafe',
       'restaurant',
       'cgd',
+      'atm',
+      'shop',
       'departments',
       'department',
       'departamento',

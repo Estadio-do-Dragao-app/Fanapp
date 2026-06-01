@@ -301,6 +301,48 @@ class MqttService {
     _subscribeToTopics(); // Re-subscribe to topics after auto-reconnection
   }
 
+  /// Publish a waypoint to the broker
+  void publishWaypoint(String ticketId, String nodeId) {
+    if (_client == null || !_isConnected) return;
+
+    final Map<String, dynamic> message = {
+      'node_id': nodeId,
+      'timestamp': DateTime.now().millisecondsSinceEpoch / 1000.0,
+    };
+
+    final builder = MqttClientPayloadBuilder();
+    builder.addString(json.encode(message));
+
+    _client!.publishMessage(
+      'stadium/clients/$ticketId/waypoint',
+      MqttQos.atMostOnce,
+      builder.payload!,
+    );
+    debugPrint('[MqttService] Published waypoint $nodeId for ticket $ticketId');
+  }
+
+  /// Publish a heartbeat to the broker
+  void publishHeartbeat(String ticketId, double lat, double lng, int level) {
+    if (_client == null || !_isConnected) return;
+
+    final Map<String, dynamic> message = {
+      'x': lng,
+      'y': lat,
+      'level': level,
+      'timestamp': DateTime.now().millisecondsSinceEpoch / 1000.0,
+    };
+
+    final builder = MqttClientPayloadBuilder();
+    builder.addString(json.encode(message));
+
+    _client!.publishMessage(
+      'stadium/clients/$ticketId/heartbeat',
+      MqttQos.atMostOnce,
+      builder.payload!,
+    );
+    debugPrint('[MqttService] Published heartbeat for ticket $ticketId at ($lng, $lat, level $level)');
+  }
+
   /// Dispose resources
   void dispose() {
     disconnect();

@@ -27,6 +27,7 @@ class NavigationPage extends StatefulWidget {
   final int? initialLevel;
   final bool isEmergency;
   final bool avoidStairs;
+  final bool showHeatmap;
 
   const NavigationPage({
     super.key,
@@ -38,6 +39,7 @@ class NavigationPage extends StatefulWidget {
     this.initialLevel,
     this.isEmergency = false,
     this.avoidStairs = false,
+    this.showHeatmap = false,
   });
 
   @override
@@ -50,7 +52,7 @@ class _NavigationPageState extends State<NavigationPage>
   late final AnimatedMapController _animatedMapController;
   final RoutingService _routingService = RoutingService();
 
-  bool _showHeatmap = false;
+  late bool _showHeatmap;
 
   // State for reroute popup
   bool _showReroutePopup = false;
@@ -83,6 +85,7 @@ class _NavigationPageState extends State<NavigationPage>
     _lastRouteSignature = _routeSignature(widget.route);
     _currentDestination = widget.destination;
     _activeRoute = widget.route;
+    _showHeatmap = widget.showHeatmap;
 
     // Plugin: controlador com animações suaves
     _animatedMapController = AnimatedMapController(
@@ -264,6 +267,7 @@ class _NavigationPageState extends State<NavigationPage>
                     initialY: _controller.tracker.currentY,
                     initialLevel: _controller.currentLevel,
                     avoidStairs: widget.avoidStairs,
+                    showHeatmap: _showHeatmap,
                   ),
                 ),
               );

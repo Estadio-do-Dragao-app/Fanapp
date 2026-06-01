@@ -47,6 +47,11 @@ class SecureHttpOverrides extends HttpOverrides {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Increase Flutter's decoded-image cache so map tiles survive page transitions.
+  // Default is 10 MB (~10 retina tiles). 50 MB holds ~50 retina tiles in memory.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = 500;
+
   // Bloquear a rotação do telemóvel para o modo vertical (Portrait)
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
