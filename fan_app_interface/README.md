@@ -35,24 +35,24 @@ Due to Android security restrictions, non-rooted physical devices cannot listen 
 2. **Execute the Application**:
    Launch the app pointing to the local configuration file:
    ```bash
-   flutter run --dart-define-from-file=config_local.json
+   flutter run --dart-define-from-file=config_local.env
    ```
 
 > [!NOTE]
-> The `config_local.json` is configured to use `https://127.0.0.1:8443`. ADB routes this port to port `443` on your computer, meaning you don't have to keep looking up or updating your computer's local IP address!
+> The `config_local.env` is configured to use `https://127.0.0.1:8443`. ADB routes this port to port `443` on your computer, meaning you don't have to keep looking up or updating your computer's local IP address!
 
 ---
 
 ### Option B: Android Emulator 🖥️
 The Android emulator runs on a virtual router. It sees `127.0.0.1` as the virtual phone itself. To connect to your PC's local server:
 
-1. Open your [config_local.json](config_local.json) and change `API_BASE_URL` to point to `10.0.2.2` (without a port, since Nginx runs on default 443):
-   ```json
-   "API_BASE_URL": "https://10.0.2.2"
+1. Open your `config_local.env` and change `API_BASE_URL` to point to `10.0.2.2` (without a port, since Nginx runs on default 443):
+   ```env
+   API_BASE_URL=https://10.0.2.2
    ```
 2. Launch the application:
    ```bash
-   flutter run --dart-define-from-file=config_local.json
+   flutter run --dart-define-from-file=config_local.env
    ```
 
 ---
@@ -62,7 +62,7 @@ If you want to connect the app to a remote backend environment (e.g. running on 
 
 Run the app pointing to the VM configuration file:
 ```bash
-flutter run --dart-define-from-file=config_vm.json
+flutter run --dart-define-from-file=config_vm.env
 ```
 
 ---
@@ -71,11 +71,13 @@ flutter run --dart-define-from-file=config_vm.json
 
 The app uses two target configuration files within the root of the `fan_app_interface` directory:
 
-### `config_local.json`
+### `config_local.env`
 Used for running against your local PC's docker-compose stack.
 
-### `config_vm.json`
+
+### `config_vm.env`
 Used for connecting to the remote virtual machine environment.
+
 ---
 
 ## ⚙️ Running via VS Code (F5)

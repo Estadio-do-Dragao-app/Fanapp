@@ -48,6 +48,6 @@ app.*.map.json
 assets/certs/
 
 # Local configurations
-config_local.json
-config_vm.json
+config_local.env
+config_vm.env
 
