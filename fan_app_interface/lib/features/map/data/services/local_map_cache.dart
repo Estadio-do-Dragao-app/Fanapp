@@ -1,6 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/node_model.dart';
 import '../models/edge_model.dart';
+import '../models/poi_model.dart';
 import 'dart:convert';
 import 'dart:collection';
 
@@ -61,6 +62,29 @@ class LocalMapCache {
       return [];
     }
   }
+
+  /// Salva POIs no cache
+  static Future<void> savePOIs(List<POIModel> pois) async {
+    final jsonList = pois.map((p) => p.toJson()).toList();
+    await _box.put(keyPOIs, jsonEncode(jsonList));
+  }
+
+  /// Obtém POIs do cache
+  static List<POIModel> getPOIs() {
+    final jsonString = _box.get(keyPOIs);
+    if (jsonString == null) return [];
+
+    try {
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      return jsonList.map((j) => POIModel.fromJson(j)).toList();
+    } catch (e) {
+      print('Erro ao ler POIs do cache: $e');
+      return [];
+    }
+  }
+
+  /// Verifica se existe cache de POIs válido
+  static bool hasPOICache() => _box.containsKey(keyPOIs);
 
   /// Limpa o cache
   static Future<void> clear() async {

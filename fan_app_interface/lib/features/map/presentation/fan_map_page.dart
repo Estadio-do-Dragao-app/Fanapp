@@ -418,10 +418,15 @@ class FanMapPageState extends State<FanMapPage>
     });
 
     try {
-      // Carregar POIs, nós e arestas (todos os pisos — não há mais filtro)
-      final pois = await _mapService.getAllPOIs();
-      final nodes = await _mapService.getAllNodes();
-      final edges = await _mapService.getAllEdges();
+      // Load POIs, nodes, and edges in parallel to avoid sequential wait
+      final results = await Future.wait([
+        _mapService.getAllPOIs(),
+        _mapService.getAllNodes(),
+        _mapService.getAllEdges(),
+      ]);
+      final pois = results[0] as List<POIModel>;
+      final nodes = results[1] as List<NodeModel>;
+      final edges = results[2] as List<EdgeModel>;
 
       if (!mounted) return;
 
