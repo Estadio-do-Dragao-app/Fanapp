@@ -10,12 +10,14 @@ import 'package:fan_app_interface/core/widgets/poi_icon.dart';
 class Navbar extends StatefulWidget {
   final VoidCallback? onNavigationEnd;
   final bool avoidStairs;
+  final bool showHeatmap;
   final Widget? filterButton;
 
   const Navbar({
     Key? key,
     this.onNavigationEnd,
     this.avoidStairs = false,
+    this.showHeatmap = false,
     this.filterButton,
   }) : super(key: key);
 
@@ -40,6 +42,7 @@ class _NavbarState extends State<Navbar> {
             DestinationSelectionPage(
               categoryId: categoryIds[i],
               avoidStairs: widget.avoidStairs,
+              showHeatmap: widget.showHeatmap,
             ),
         transitionsBuilder: _buildSlideTransition,
       ),

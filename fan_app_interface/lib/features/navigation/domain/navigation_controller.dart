@@ -13,6 +13,7 @@ import 'models/reroute_event.dart';
 import 'route_tracker.dart';
 import 'dynamic_route_manager.dart';
 import '../../map/data/services/routing_service.dart';
+import '../../map/data/services/map_service.dart';
 import '../../../core/utils/geographic_utils.dart';
 
 /// Controlador principal da navegação
@@ -60,6 +61,7 @@ class NavigationController extends ChangeNotifier {
 
   // Subscription para MQTT routing stream
   StreamSubscription<Map<String, dynamic>>? _mqttSubscription;
+  Timer? _heartbeatTimer;
 
   bool _isNavigating = true;
   NavigationInstruction? _currentInstruction;
@@ -179,6 +181,39 @@ class NavigationController extends ChangeNotifier {
     // Escutar eventos MQTT (Reroute) e guardar subscription
     _mqttSubscription = MqttService().routingStream.listen(_onMqttEvent);
 
+    // Setup heartbeat timer to keep session alive in backend
+    if (route.ticketId != null) {
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (!_isDisposed && _isNavigating) {
+          MqttService().publishHeartbeat(route.ticketId!, _tracker.currentY, _tracker.currentX, _currentLevel);
+        }
+      });
+    }
+
+    // Seed tracker + emit dot position SYNCHRONOUSLY from the already-known
+    // initialX/Y so the location dot appears at frame 0, before _initialize()
+    // completes its async GPS fetch.
+    if (initialX != null && initialY != null) {
+      final seedX = initialX!;
+      final seedY = initialY!;
+      final seedLevel = initialLevel ?? 0;
+      _currentLevel = seedLevel;
+      _tracker.seedUserPositionForNewRoute(seedX, seedY, level: seedLevel);
+      // Delay matches the page transition animation so the dot appears
+      // exactly when the navigation screen is fully visible.
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (!_markerPositionStream.isClosed) {
+          _markerPositionStream.add(
+            LocationMarkerPosition(
+              latitude: seedY,
+              longitude: seedX,
+              accuracy: 5.0,
+            ),
+          );
+        }
+      });
+    }
+
     _initialize();
   }
 
@@ -293,6 +328,20 @@ class NavigationController extends ChangeNotifier {
 
     _isInitializing = false;
     _updateInstruction();
+
+    // Emit the resolved starting position immediately so the location dot
+    // appears at once, without waiting for the first GPS stream event
+    // (which can be delayed by distanceFilter or cold-start latency).
+    if (!_markerPositionStream.isClosed) {
+      _markerPositionStream.add(
+        LocationMarkerPosition(
+          latitude: startY,
+          longitude: startX,
+          accuracy: 5.0,
+        ),
+      );
+    }
+
     notifyListeners();
 
     print(
@@ -419,6 +468,8 @@ class NavigationController extends ChangeNotifier {
 
   /// Atualiza posição (para integração com GPS real)
   void updateUserPosition(double x, double y) {
+    final int previousWaypointIndex = _tracker.currentWaypointIndex;
+
     // Atualizar piso candidato via nó mais próximo. O ZAxisGuard interno
     // do tracker decide se aceita a transição (precisa de stairs/ramp na rota).
     final candidateLevel = _findNearestNode(x, y).level;
@@ -428,6 +479,14 @@ class NavigationController extends ChangeNotifier {
     // Sincronizar o índice de progresso com o gestor de rota dinâmica
     // para que a verificação off-route ignore segmentos já ultrapassados
     _routeManager.currentWaypointIndex = _tracker.currentWaypointIndex;
+
+    // Publish waypoint if index advanced
+    if (_tracker.currentWaypointIndex > previousWaypointIndex && route.ticketId != null) {
+      if (_tracker.currentWaypointIndex < route.waypoints.length) {
+        final currentNodeId = route.waypoints[_tracker.currentWaypointIndex].nodeId;
+        MqttService().publishWaypoint(route.ticketId!, currentNodeId);
+      }
+    }
 
     // Sinalizar atalho válido (heading alinhado + a mover-se) ao gestor
     // de rota dinâmica para suprimir trigger de hysteresis prematuro.
@@ -606,7 +665,7 @@ class NavigationController extends ChangeNotifier {
   }
 
   /// Processa eventos recebidos via MQTT
-  void _onMqttEvent(Map<String, dynamic> event) {
+  void _onMqttEvent(Map<String, dynamic> event) async {
     if (_isDisposed) {
       // Controller disposed, ignore any incoming MQTT events
       print('[NavigationController]  Ignoring MQTT event after dispose');
@@ -687,13 +746,29 @@ class NavigationController extends ChangeNotifier {
           }
         }
 
+        String locationName = event['new_destination'] ?? "Better Route Found";
+        String destId = event['new_destination'] ?? '';
+
+        // Try to fetch the actual POI name instead of showing the ID
+        if (destId.isNotEmpty) {
+          try {
+            final mapService = MapService();
+            final allPOIs = await mapService.getAllPOIs();
+            final matchedPoi = allPOIs.where((p) => p.id == destId).firstOrNull;
+            if (matchedPoi != null && matchedPoi.name.isNotEmpty) {
+              locationName = matchedPoi.name;
+            }
+          } catch (e) {
+            print('[NavigationController] Failed to resolve POI name for reroute popup: $e');
+          }
+        }
+
         final rerouteEvent = RerouteEvent(
           arrivalTime: newArrivalDisplay, // "14:30"
           duration: newDurationDisplay, // "15 min"
           distance: newRouteDistance.round(), // Distância real calculada
-          locationName: event['new_destination'] ?? "Better Route Found",
-          newDestinationId:
-              event['new_destination'] ?? '', // O novo POI de destino
+          locationName: locationName,
+          newDestinationId: destId, // O novo POI de destino
           category:
               event['category']
                   as String?, // POI category for nearest_category lookup
@@ -722,6 +797,7 @@ class NavigationController extends ChangeNotifier {
       _mqttSubscription?.cancel();
       _mqttSubscription = null;
     }
+    _heartbeatTimer?.cancel();
     _gpsSubscription?.cancel();
     _positionStream.close();
     _markerPositionStream.close();

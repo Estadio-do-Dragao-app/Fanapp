@@ -177,7 +177,13 @@ class FanMapPageState extends State<FanMapPage>
       vsync: this,
     )..repeat(reverse: true);
 
-    _checkLocationLayerAvailability();
+    // In navigation mode, GPS is already confirmed available (can't start nav without it),
+    // so show the location dot immediately without waiting for the async permission check.
+    if (widget.isNavigating) {
+      _isLocationLayerAvailable = true;
+    } else {
+      _checkLocationLayerAvailability();
+    }
     loadUserPosition(); // Carregar posição guardada
     _loadMapData();
 
@@ -412,10 +418,15 @@ class FanMapPageState extends State<FanMapPage>
     });
 
     try {
-      // Carregar POIs, nós e arestas (todos os pisos — não há mais filtro)
-      final pois = await _mapService.getAllPOIs();
-      final nodes = await _mapService.getAllNodes();
-      final edges = await _mapService.getAllEdges();
+      // Load POIs, nodes, and edges in parallel to avoid sequential wait
+      final results = await Future.wait([
+        _mapService.getAllPOIs(),
+        _mapService.getAllNodes(),
+        _mapService.getAllEdges(),
+      ]);
+      final pois = results[0] as List<POIModel>;
+      final nodes = results[1] as List<NodeModel>;
+      final edges = results[2] as List<EdgeModel>;
 
       if (!mounted) return;
 
@@ -960,9 +971,9 @@ class FanMapPageState extends State<FanMapPage>
                             ].contains(_selectedPOI!.category) ||
                             _selectedPOI!.name.toLowerCase().contains(
                               'farmácia',
-                            ))
+                            )) ...[
                           _buildInfoChip(
-                            icon: Icons.group,
+                            icon: Icons.timer_outlined,
                             label: AppLocalizations.of(context)!.queueTime(
                               WaittimeCache()
                                       .getWaitTime(_selectedPOI!.id)
@@ -971,6 +982,13 @@ class FanMapPageState extends State<FanMapPage>
                                   0,
                             ),
                           ),
+                          _buildInfoChip(
+                            icon: Icons.people,
+                            label: AppLocalizations.of(context)!.queuePeople(
+                              WaittimeCache().getQueueLength(_selectedPOI!.id) ?? 0,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   const SizedBox(height: 20),
@@ -1015,6 +1033,8 @@ class FanMapPageState extends State<FanMapPage>
                                     initialX: _userPositionX,
                                     initialY: _userPositionY,
                                     initialLevel: _userLevel,
+                                    showHeatmap: widget.showHeatmap,
+                                    avoidStairs: widget.avoidStairs,
                                   ),
                                 ),
                               ).then((_) => loadUserPosition());
@@ -1120,6 +1140,7 @@ class FanMapPageState extends State<FanMapPage>
             userAgentPackageName: 'com.dragao.fanapp',
             retinaMode: RetinaMode.isHighDensity(context),
             maxNativeZoom: 19,
+            panBuffer: 1,
           ),
 
         // Remove a atribuição padrão do flutter_map

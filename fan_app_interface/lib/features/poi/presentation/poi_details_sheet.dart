@@ -4,6 +4,7 @@ import '../../map/data/models/poi_model.dart';
 import '../../map/data/models/route_model.dart';
 import '../../map/data/models/node_model.dart';
 import '../../map/data/services/saved_places_service.dart';
+import '../../map/data/services/waittime_cache.dart';
 import '../../navigation/presentation/navigation_page.dart';
 
 /// Bottom sheet que mostra detalhes de um POI
@@ -172,12 +173,19 @@ class _POIDetailsSheetState extends State<POIDetailsSheet> {
                   widget.poi.name.toLowerCase().contains('farmácia')) ...[
                 const SizedBox(width: 24),
                 _buildTimeInfo(
-                  icon: Icons.group,
+                  icon: Icons.timer_outlined,
                   label: widget.route?.waitTime != null
                       ? AppLocalizations.of(
                           context,
                         )!.queueTime(widget.route!.waitTime!.round())
                       : AppLocalizations.of(context)!.queueTime(0),
+                ),
+                const SizedBox(width: 24),
+                _buildTimeInfo(
+                  icon: Icons.people,
+                  label: AppLocalizations.of(context)!.queuePeople(
+                    WaittimeCache().getQueueLength(widget.poi.id) ?? 0,
+                  ),
                 ),
               ],
             ],

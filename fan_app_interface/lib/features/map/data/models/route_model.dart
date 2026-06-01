@@ -52,6 +52,8 @@ class RouteModel {
   final double congestionLevel; // 0.0 to 1.0
   final double? waitTime; // Optional wait time in minutes
   final List<String> warnings;
+  final String? sessionId;
+  final String? ticketId;
 
   RouteModel({
     required this.path,
@@ -60,6 +62,8 @@ class RouteModel {
     required this.congestionLevel,
     this.waitTime,
     required this.warnings,
+    this.sessionId,
+    this.ticketId,
   });
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
@@ -81,6 +85,8 @@ class RouteModel {
       warnings: json['warnings'] != null
           ? List<String>.from(json['warnings'])
           : [],
+      sessionId: json['session_id'],
+      ticketId: json['ticket_id'],
     );
   }
 
@@ -118,6 +124,8 @@ class RouteModel {
       congestionLevel: congestionLevel,
       waitTime: waitTime,
       warnings: List<String>.from(warnings),
+      sessionId: sessionId,
+      ticketId: ticketId,
     );
   }
 }

@@ -77,6 +77,7 @@ class _HomeState extends State<Home> {
                   height: 240,
                   child: Navbar(
                     avoidStairs: _viewModel.avoidStairs,
+                    showHeatmap: _viewModel.showHeatmap,
                     onNavigationEnd: () {
                       _mapPageKey.currentState?.reloadUserPosition();
                     },

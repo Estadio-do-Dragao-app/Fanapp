@@ -1,6 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/node_model.dart';
 import '../models/edge_model.dart';
+import '../models/poi_model.dart';
 import 'dart:convert';
 import 'dart:collection';
 
@@ -13,6 +14,7 @@ class LocalMapCache {
   static const String keyEdges = 'edges';
   static const String keyPOIs = 'pois';
   static const String keyCacheTime = 'last_update';
+  static const String keyCacheSource = 'cache_source';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -60,6 +62,37 @@ class LocalMapCache {
       print('Erro ao ler edges do cache: $e');
       return [];
     }
+  }
+
+  /// Salva POIs no cache
+  static Future<void> savePOIs(List<POIModel> pois) async {
+    final jsonList = pois.map((p) => p.toJson()).toList();
+    await _box.put(keyPOIs, jsonEncode(jsonList));
+  }
+
+  /// Obtém POIs do cache
+  static List<POIModel> getPOIs() {
+    final jsonString = _box.get(keyPOIs);
+    if (jsonString == null) return [];
+
+    try {
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      return jsonList.map((j) => POIModel.fromJson(j)).toList();
+    } catch (e) {
+      print('Erro ao ler POIs do cache: $e');
+      return [];
+    }
+  }
+
+  /// Verifica se existe cache de POIs válido
+  static bool hasPOICache() => _box.containsKey(keyPOIs);
+
+  /// Obtém a fonte (base URL) que gerou o cache atual
+  static String? getCacheSource() => _box.get(keyCacheSource) as String?;
+
+  /// Persiste a base URL que originou o cache
+  static Future<void> saveCacheSource(String url) async {
+    await _box.put(keyCacheSource, url);
   }
 
   /// Limpa o cache

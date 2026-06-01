@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../../../core/services/mqtt_service.dart';
 import '../../../../core/config/api_config.dart';
-
+import '../../../../core/config/app_env.dart';
 /// Service that caches wait times from MQTT updates or HTTP polling
 /// Use WaittimeCache.getWaitTime(poiId) to get latest value
 class WaittimeCache extends ChangeNotifier {
@@ -19,6 +19,9 @@ class WaittimeCache extends ChangeNotifier {
 
   // Cache: poi_id -> wait_minutes
   final Map<String, double> _cache = {};
+
+  // Cache: poi_id -> queue_length (number of people)
+  final Map<String, int> _queueLengthCache = {};
 
   /// Start listening to MQTT wait time updates or HTTP polling
   void start() {
@@ -49,7 +52,10 @@ class WaittimeCache extends ChangeNotifier {
   Future<void> _fetchWaitTimes() async {
     try {
       final url = Uri.parse('${ApiConfig.waitTimeService}/api/waittime/all');
-      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      final response = await http.get(
+        url,
+        headers: {'X-API-Key': AppEnv.mapApiKey},
+      ).timeout(const Duration(seconds: 5));
       
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -58,12 +64,20 @@ class WaittimeCache extends ChangeNotifier {
         for (var item in data) {
           final poiId = item['poi_id'] as String?;
           final minutes = item['wait_minutes'];
-          
+          final queueLen = item['queue_length'];
+
           if (poiId != null && minutes != null) {
             final double val = (minutes is int) ? minutes.toDouble() : minutes as double;
             if (_cache[poiId] != val) {
               _cache[poiId] = val;
               changed = true;
+            }
+            if (queueLen != null) {
+              final int len = (queueLen is int) ? queueLen : (queueLen as num).toInt();
+              if (_queueLengthCache[poiId] != len) {
+                _queueLengthCache[poiId] = len;
+                changed = true;
+              }
             }
           }
         }
@@ -82,16 +96,23 @@ class WaittimeCache extends ChangeNotifier {
     // Format from WaitTime-Service MQTT: {type, poi, minutes, ci95, status, queue_length, ts}
     final poiId = data['poi'] as String?;
     final minutes = data['minutes'];
+    final queueLen = data['queue_length'];
 
     if (poiId != null && minutes != null) {
       _cache[poiId] = (minutes is int) ? minutes.toDouble() : minutes as double;
-      debugPrint('[WaittimeCache] MQTT Updated $poiId: ${_cache[poiId]} min');
+      if (queueLen != null) {
+        _queueLengthCache[poiId] = (queueLen is int) ? queueLen : (queueLen as num).toInt();
+      }
+      debugPrint('[WaittimeCache] MQTT Updated $poiId: ${_cache[poiId]} min, queue=${_queueLengthCache[poiId]}');
       notifyListeners();
     }
   }
 
   /// Get cached wait time for a POI (null if not available)
   double? getWaitTime(String poiId) => _cache[poiId];
+
+  /// Get cached queue length (number of people) for a POI (null if not available)
+  int? getQueueLength(String poiId) => _queueLengthCache[poiId];
 
   /// Get all cached wait times
   Map<String, double> get allWaitTimes => Map.unmodifiable(_cache);
