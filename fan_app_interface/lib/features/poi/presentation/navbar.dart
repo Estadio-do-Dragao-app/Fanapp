@@ -26,7 +26,7 @@ class Navbar extends StatefulWidget {
 }
 
 class _NavbarState extends State<Navbar> {
-  final List<String> categoryIds = ['food', 'first_aid', 'wc', 'poi'];
+  final List<String> categoryIds = ['food', 'first_aid', 'wc', 'department'];
   int selected = 0;
 
   Future<void> _handleCategorySelect(
