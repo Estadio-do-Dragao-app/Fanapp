@@ -47,6 +47,11 @@ class SecureHttpOverrides extends HttpOverrides {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Increase Flutter's decoded-image cache so map tiles survive page transitions.
+  // Default is 10 MB (~10 retina tiles). 50 MB holds ~50 retina tiles in memory.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = 500;
+
   // Bloquear a rotação do telemóvel para o modo vertical (Portrait)
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -67,6 +72,14 @@ Future<void> main() async {
 
   await LocalMapCache.init();
   await ApiConfig.init(); // Detetar backend (VM ou Local)
+
+  // Invalidate stale cache if the backend changed since last run
+  final cachedSource = LocalMapCache.getCacheSource();
+  if (cachedSource != ApiConfig.baseHost) {
+    debugPrint('[Cache] Backend changed from "$cachedSource" to "${ApiConfig.baseHost}". Clearing local cache.');
+    await LocalMapCache.clear();
+    await LocalMapCache.saveCacheSource(ApiConfig.baseHost);
+  }
   
   
   // Iniciar tracking GPS anónimo

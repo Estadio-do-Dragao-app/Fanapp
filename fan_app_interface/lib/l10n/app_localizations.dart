@@ -425,6 +425,12 @@ abstract class AppLocalizations {
   /// **'{min} min queue'**
   String queueTime(int min);
 
+  /// No description provided for @queuePeople.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} people'**
+  String queuePeople(int count);
+
   /// No description provided for @walkTime.
   ///
   /// In en, this message translates to:

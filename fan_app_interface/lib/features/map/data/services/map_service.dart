@@ -138,6 +138,12 @@ class MapService {
   /// O endpoint /pois do backend é muito restritivo, por isso filtramos client-side
   /// Tipos POI: restroom, food, bar, emergency_exit, first_aid, information
   Future<List<POIModel>> getAllPOIs() async {
+    // Return cached POIs immediately — they share the same TTL as nodes/edges
+    if (LocalMapCache.hasPOICache()) {
+      final cachedPOIs = LocalMapCache.getPOIs();
+      if (cachedPOIs.isNotEmpty) return cachedPOIs;
+    }
+
     // Tipos que consideramos POIs (excluindo corridor, normal, seat, row_aisle)
     const poiTypes = [
       'restroom',
@@ -154,6 +160,11 @@ class MapService {
       'cafe',
       'restaurant',
       'cgd',
+      'atm',
+      'shop',
+      'departments',
+      'department',
+      'departamento',
     ];
 
     final response = await _performGet('$baseUrl/nodes');
@@ -191,7 +202,7 @@ class MapService {
       }
     }
 
-    return staticPois
+    final result = staticPois
         .map(_applyForcedEmergencyExit)
         .where(
           (poi) =>
@@ -199,6 +210,11 @@ class MapService {
               poi.category.toLowerCase() != 'ramp',
         )
         .toList();
+
+    // Persist to cache so future launches skip the network call
+    await LocalMapCache.savePOIs(result);
+
+    return result;
   }
 
   /// GET /pois/osm - Buscar POIs dinâmicos do OpenStreetMap

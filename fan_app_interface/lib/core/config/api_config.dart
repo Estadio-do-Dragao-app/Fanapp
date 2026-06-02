@@ -49,6 +49,8 @@ class ApiConfig {
 
   // ==================== SERVIÇOS ====================
 
+  static String get baseHost => _baseHost;
+
   static String get mapService => '$_baseHost/maps';
   static String get waitTimeService => '$_baseHost/waittime';
   static String get routingService => '$_baseHost/routing';

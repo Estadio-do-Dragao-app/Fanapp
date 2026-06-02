@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/services/mqtt_service.dart';
 import '../../map/data/models/route_model.dart';
@@ -12,6 +13,7 @@ import 'models/reroute_event.dart';
 import 'route_tracker.dart';
 import 'dynamic_route_manager.dart';
 import '../../map/data/services/routing_service.dart';
+import '../../map/data/services/map_service.dart';
 import '../../../core/utils/geographic_utils.dart';
 
 /// Controlador principal da navegação
@@ -35,6 +37,15 @@ class NavigationController extends ChangeNotifier {
   final StreamController<({double x, double y})> _positionStream =
       StreamController.broadcast();
 
+  // Stream para alimentar o CurrentLocationLayer com a MESMA posição que
+  // o tracker conhece. Garante que o dot do plugin e o início da linha
+  // de rota (que usa tracker.currentX/Y) estão sempre sincronizados —
+  // sem isto o plugin usa o seu GPS interno e desencontra-se do traço.
+  final StreamController<LocationMarkerPosition?> _markerPositionStream =
+      StreamController<LocationMarkerPosition?>.broadcast();
+  Stream<LocationMarkerPosition?> get markerPositionStream =>
+      _markerPositionStream.stream;
+
   // Stream para eventos de reroute (ex: melhor rota encontrada)
   final StreamController<RerouteEvent> _rerouteStream =
       StreamController.broadcast();
@@ -50,6 +61,7 @@ class NavigationController extends ChangeNotifier {
 
   // Subscription para MQTT routing stream
   StreamSubscription<Map<String, dynamic>>? _mqttSubscription;
+  Timer? _heartbeatTimer;
 
   bool _isNavigating = true;
   NavigationInstruction? _currentInstruction;
@@ -104,15 +116,21 @@ class NavigationController extends ChangeNotifier {
       allNodes: allNodes,
       initialRoute: route,
       avoidStairs: avoidStairs,
+      recentlyCrossedTransitionProvider: () {
+        final at = _tracker.zGuard.lastVisitedTransitionAt;
+        if (at == null) return false;
+        return DateTime.now().difference(at) < const Duration(seconds: 60);
+      },
     );
 
     // Callback quando rota é recalculada
     _routeManager.onRouteUpdated = (newRoute) {
       print('[NavigationController]  Rota atualizada! ControllerHash: $hashCode');
       print('[NavigationController]  Old RouteObjHash: ${route.hashCode} Length: ${route.waypoints.length}');
-      // CRÍTICO: Preservar posição atual antes de recriar tracker
-      final currentX = _tracker.currentX;
-      final currentY = _tracker.currentY;
+      // CRÍTICO: Preservar posição RAW (GPS cru) antes de recriar tracker
+      // Snapped seria a projeção visual; reroute precisa do ponto físico.
+      final currentX = _tracker.rawX;
+      final currentY = _tracker.rawY;
 
       final rawNodeIds = newRoute.path.map((p) => p.nodeId).toList();
       print('[NavigationController] Rota recebida (raw): $rawNodeIds');
@@ -162,6 +180,39 @@ class NavigationController extends ChangeNotifier {
 
     // Escutar eventos MQTT (Reroute) e guardar subscription
     _mqttSubscription = MqttService().routingStream.listen(_onMqttEvent);
+
+    // Setup heartbeat timer to keep session alive in backend
+    if (route.ticketId != null) {
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (!_isDisposed && _isNavigating) {
+          MqttService().publishHeartbeat(route.ticketId!, _tracker.currentY, _tracker.currentX, _currentLevel);
+        }
+      });
+    }
+
+    // Seed tracker + emit dot position SYNCHRONOUSLY from the already-known
+    // initialX/Y so the location dot appears at frame 0, before _initialize()
+    // completes its async GPS fetch.
+    if (initialX != null && initialY != null) {
+      final seedX = initialX!;
+      final seedY = initialY!;
+      final seedLevel = initialLevel ?? 0;
+      _currentLevel = seedLevel;
+      _tracker.seedUserPositionForNewRoute(seedX, seedY, level: seedLevel);
+      // Delay matches the page transition animation so the dot appears
+      // exactly when the navigation screen is fully visible.
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (!_markerPositionStream.isClosed) {
+          _markerPositionStream.add(
+            LocationMarkerPosition(
+              latitude: seedY,
+              longitude: seedX,
+              accuracy: 5.0,
+            ),
+          );
+        }
+      });
+    }
 
     _initialize();
   }
@@ -277,6 +328,20 @@ class NavigationController extends ChangeNotifier {
 
     _isInitializing = false;
     _updateInstruction();
+
+    // Emit the resolved starting position immediately so the location dot
+    // appears at once, without waiting for the first GPS stream event
+    // (which can be delayed by distanceFilter or cold-start latency).
+    if (!_markerPositionStream.isClosed) {
+      _markerPositionStream.add(
+        LocationMarkerPosition(
+          latitude: startY,
+          longitude: startX,
+          accuracy: 5.0,
+        ),
+      );
+    }
+
     notifyListeners();
 
     print(
@@ -365,6 +430,17 @@ class NavigationController extends ChangeNotifier {
 
           // Emit to trigger dynamic route manager updates
           _positionStream.add((x: newX, y: newY));
+
+          // Emit to plugin so the dot moves at the same time the trace moves.
+          if (!_markerPositionStream.isClosed) {
+            _markerPositionStream.add(
+              LocationMarkerPosition(
+                latitude: newY,
+                longitude: newX,
+                accuracy: position.accuracy,
+              ),
+            );
+          }
         });
   }
 
@@ -392,12 +468,32 @@ class NavigationController extends ChangeNotifier {
 
   /// Atualiza posição (para integração com GPS real)
   void updateUserPosition(double x, double y) {
-    // Atualizar piso atual a partir do nó mais próximo para manter o tracker consistente.
-    _currentLevel = _findNearestNode(x, y).level;
-    _tracker.updateUserPosition(x, y, level: _currentLevel);
+    final int previousWaypointIndex = _tracker.currentWaypointIndex;
+
+    // Atualizar piso candidato via nó mais próximo. O ZAxisGuard interno
+    // do tracker decide se aceita a transição (precisa de stairs/ramp na rota).
+    final candidateLevel = _findNearestNode(x, y).level;
+    _tracker.updateUserPosition(x, y, level: candidateLevel);
+    _currentLevel = _tracker.currentLevel; // pode ter sido rejeitado pelo z-guard
+
     // Sincronizar o índice de progresso com o gestor de rota dinâmica
     // para que a verificação off-route ignore segmentos já ultrapassados
     _routeManager.currentWaypointIndex = _tracker.currentWaypointIndex;
+
+    // Publish waypoint if index advanced
+    if (_tracker.currentWaypointIndex > previousWaypointIndex && route.ticketId != null) {
+      if (_tracker.currentWaypointIndex < route.waypoints.length) {
+        final currentNodeId = route.waypoints[_tracker.currentWaypointIndex].nodeId;
+        MqttService().publishWaypoint(route.ticketId!, currentNodeId);
+      }
+    }
+
+    // Sinalizar atalho válido (heading alinhado + a mover-se) ao gestor
+    // de rota dinâmica para suprimir trigger de hysteresis prematuro.
+    final hv = _tracker.lastHeadingValidation;
+    _routeManager.shortcutValid =
+        hv != null && hv.isMovingForward && hv.isAlignedWithReference;
+
     _updateInstruction();
 
     if (_tracker.hasArrived) {
@@ -410,9 +506,9 @@ class NavigationController extends ChangeNotifier {
     _isNavigating = false;
     _gpsSubscription?.cancel();
 
-    // Guardar posição final como nova posição do usuário
-    final finalX = _tracker.currentX;
-    final finalY = _tracker.currentY;
+    // Guardar posição final como nova posição do usuário (GPS cru)
+    final finalX = _tracker.rawX;
+    final finalY = _tracker.rawY;
     final finalNode = _findNearestNode(finalX, finalY);
 
     await UserPositionService.savePosition(
@@ -433,9 +529,9 @@ class NavigationController extends ChangeNotifier {
     _isNavigating = false;
     _gpsSubscription?.cancel();
 
-    // Guardar posição atual antes de sair
-    final finalX = _tracker.currentX;
-    final finalY = _tracker.currentY;
+    // Guardar posição atual antes de sair (GPS cru)
+    final finalX = _tracker.rawX;
+    final finalY = _tracker.rawY;
     final finalNode = _findNearestNode(finalX, finalY);
 
     await UserPositionService.savePosition(
@@ -459,8 +555,8 @@ class NavigationController extends ChangeNotifier {
       '[NavigationController]  Applying new route with ${nodeIds.length} nodes',
     );
 
-    final currentX = _tracker.currentX;
-    final currentY = _tracker.currentY;
+    final currentX = _tracker.rawX;
+    final currentY = _tracker.rawY;
 
     // Mapear IDs para NodeModels
     final nodesMap = {for (var n in allNodes) n.id: n};
@@ -569,7 +665,7 @@ class NavigationController extends ChangeNotifier {
   }
 
   /// Processa eventos recebidos via MQTT
-  void _onMqttEvent(Map<String, dynamic> event) {
+  void _onMqttEvent(Map<String, dynamic> event) async {
     if (_isDisposed) {
       // Controller disposed, ignore any incoming MQTT events
       print('[NavigationController]  Ignoring MQTT event after dispose');
@@ -650,13 +746,29 @@ class NavigationController extends ChangeNotifier {
           }
         }
 
+        String locationName = event['new_destination'] ?? "Better Route Found";
+        String destId = event['new_destination'] ?? '';
+
+        // Try to fetch the actual POI name instead of showing the ID
+        if (destId.isNotEmpty) {
+          try {
+            final mapService = MapService();
+            final allPOIs = await mapService.getAllPOIs();
+            final matchedPoi = allPOIs.where((p) => p.id == destId).firstOrNull;
+            if (matchedPoi != null && matchedPoi.name.isNotEmpty) {
+              locationName = matchedPoi.name;
+            }
+          } catch (e) {
+            print('[NavigationController] Failed to resolve POI name for reroute popup: $e');
+          }
+        }
+
         final rerouteEvent = RerouteEvent(
           arrivalTime: newArrivalDisplay, // "14:30"
           duration: newDurationDisplay, // "15 min"
           distance: newRouteDistance.round(), // Distância real calculada
-          locationName: event['new_destination'] ?? "Better Route Found",
-          newDestinationId:
-              event['new_destination'] ?? '', // O novo POI de destino
+          locationName: locationName,
+          newDestinationId: destId, // O novo POI de destino
           category:
               event['category']
                   as String?, // POI category for nearest_category lookup
@@ -685,8 +797,10 @@ class NavigationController extends ChangeNotifier {
       _mqttSubscription?.cancel();
       _mqttSubscription = null;
     }
+    _heartbeatTimer?.cancel();
     _gpsSubscription?.cancel();
     _positionStream.close();
+    _markerPositionStream.close();
     _rerouteStream.close();
     _routeChangeController.close();
     _routeManager.dispose();
