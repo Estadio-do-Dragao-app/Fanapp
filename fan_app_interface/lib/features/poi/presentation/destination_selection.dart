@@ -152,12 +152,13 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       case 'firstaid':
       case 'first-aid':
         return 'first_aid';
-      case 'information':
-      case 'info':
-      case 'poi':
       case 'department':
       case 'departments':
       case 'departamento':
+        return 'department';
+      case 'information':
+      case 'info':
+      case 'poi':
       case 'library':
       case 'cgd':
       case 'atm':
@@ -258,8 +259,8 @@ class _DestinationSelectionPageState extends State<DestinationSelectionPage>
       _allNodes = allNodes;
 
       // Filtrar POIs da categoria
-      final categoryPois = allPois.where((poi) {
-        return _normalizeCategory(poi.category) ==
+      final categoryPois = allPois.where((department) {
+        return _normalizeCategory(department.category) ==
             widget.categoryId.toLowerCase();
       }).toList();
 
