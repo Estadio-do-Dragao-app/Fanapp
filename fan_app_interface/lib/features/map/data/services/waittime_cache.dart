@@ -103,6 +103,10 @@ class WaittimeCache extends ChangeNotifier {
     if (poiId != null && minutes != null) {
       _cache[poiId] = (minutes is int) ? minutes.toDouble() : minutes as double;
       
+      if (queueLen != null) {
+        _queueLengthCache[poiId] = (queueLen is int) ? queueLen : (queueLen as num).toInt();
+      }
+
       // Throttle UI updates to once per second
       if (_notifyTimer == null || !_notifyTimer!.isActive) {
         _notifyTimer = Timer(const Duration(seconds: 1), () {
