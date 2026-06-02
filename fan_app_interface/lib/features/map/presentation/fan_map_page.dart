@@ -967,12 +967,12 @@ class FanMapPageState extends State<FanMapPage>
                             ].contains(_selectedPOI!.category) ||
                             _selectedPOI!.name.toLowerCase().contains(
                               'farmácia',
-                            ))
+                            )) ...[
                           ListenableBuilder(
                             listenable: WaittimeCache(),
                             builder: (context, _) {
                               return _buildInfoChip(
-                                icon: Icons.group,
+                                icon: Icons.timer_outlined,
                                 label: AppLocalizations.of(context)!.queueTime(
                                   WaittimeCache()
                                           .getWaitTime(_selectedPOI!.id)
@@ -983,11 +983,16 @@ class FanMapPageState extends State<FanMapPage>
                               );
                             },
                           ),
-                          _buildInfoChip(
-                            icon: Icons.people,
-                            label: AppLocalizations.of(context)!.queuePeople(
-                              WaittimeCache().getQueueLength(_selectedPOI!.id) ?? 0,
-                            ),
+                          ListenableBuilder(
+                            listenable: WaittimeCache(),
+                            builder: (context, _) {
+                              return _buildInfoChip(
+                                icon: Icons.people,
+                                label: AppLocalizations.of(context)!.queuePeople(
+                                  WaittimeCache().getQueueLength(_selectedPOI!.id) ?? 0,
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ],
