@@ -215,7 +215,7 @@ class MqttService {
 
       _routeMessage(topic, parsedData);
 
-      debugPrint('[MqttService] Received on $topic: ${parsedData.keys.toList()}');
+      // Removed debugPrint for every message to prevent UI freezing
     } catch (e) {
       debugPrint('[MqttService] Error parsing message on $topic: $e');
     }
@@ -240,12 +240,10 @@ class MqttService {
 
   void _routeMessage(String topic, Map<String, dynamic> jsonData) {
     if (topic.startsWith(topicQueues.replaceAll('#', ''))) {
-      debugPrint('[MqttService] Emitting to queuesStream: ${jsonData['poi']} = ${jsonData['minutes']} min');
       _queuesController.add(jsonData);
     } else if (topic.startsWith(topicRouting.replaceAll('#', ''))) {
       _routingController.add(jsonData);
     } else if (topic == topicCongestion) {
-      debugPrint('[MqttService] Congestion message received: ${jsonData['cell_id']}');
       _congestionController.add(jsonData);
     } else if (topic == topicAlerts) {
       _handleAlertMessage(jsonData);

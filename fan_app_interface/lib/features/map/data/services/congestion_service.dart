@@ -74,13 +74,16 @@ class CongestionService {
   final Map<String, DateTime> _lastUpdate = {}; // Track expiration
   StreamSubscription? _mqttSubscription;
   bool _isConnected = false;
+  
+  // Throttle timer for UI updates
+  Timer? _throttleTimer;
+  final StreamController<StadiumHeatmapData> _heatmapController = StreamController<StadiumHeatmapData>.broadcast();
 
   /// Check if connected to MQTT broker
   bool get isConnected => _isConnected;
 
   /// Stream of heatmap data for UI
-  Stream<StadiumHeatmapData> get heatmapStream =>
-      _mqttService.congestionStream.map((_) => getStadiumHeatmap());
+  Stream<StadiumHeatmapData> get heatmapStream => _heatmapController.stream;
 
   /// Initialize connection to MQTT broker
   Future<bool> connect() async {
@@ -103,9 +106,12 @@ class CongestionService {
     _cellData[cellData.cellId] = cellData;
     _lastUpdate[cellData.cellId] = DateTime.now();
     
-    debugPrint(
-      '[CongestionService] Stored cell ${cellData.cellId} with level ${cellData.congestionLevel}. Total cells: ${_cellData.length}',
-    );
+    // Throttle UI updates to once per 10 seconds to save battery and performance
+    if (_throttleTimer == null || !_throttleTimer!.isActive) {
+      _throttleTimer = Timer(const Duration(seconds: 10), () {
+        _heatmapController.add(getStadiumHeatmap());
+      });
+    }
   }
 
   /// Get current heatmap data from MQTT cache
@@ -165,6 +171,8 @@ class CongestionService {
 
   /// Dispose resources
   void dispose() {
+    _throttleTimer?.cancel();
+    _heatmapController.close();
     _mqttSubscription?.cancel();
     _isConnected = false;
   }

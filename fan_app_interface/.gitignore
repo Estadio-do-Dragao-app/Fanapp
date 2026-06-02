@@ -47,7 +47,4 @@ app.*.map.json
 # Certificados locais gerados
 assets/certs/
 
-# Local configurations
-config_local.env
-config_vm.env
-
+*.env

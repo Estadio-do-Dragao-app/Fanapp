@@ -92,6 +92,8 @@ class WaittimeCache extends ChangeNotifier {
     }
   }
 
+  Timer? _notifyTimer;
+
   void _onWaittimeUpdate(Map<String, dynamic> data) {
     // Format from WaitTime-Service MQTT: {type, poi, minutes, ci95, status, queue_length, ts}
     final poiId = data['poi'] as String?;
@@ -100,11 +102,13 @@ class WaittimeCache extends ChangeNotifier {
 
     if (poiId != null && minutes != null) {
       _cache[poiId] = (minutes is int) ? minutes.toDouble() : minutes as double;
-      if (queueLen != null) {
-        _queueLengthCache[poiId] = (queueLen is int) ? queueLen : (queueLen as num).toInt();
+      
+      // Throttle UI updates to once per second
+      if (_notifyTimer == null || !_notifyTimer!.isActive) {
+        _notifyTimer = Timer(const Duration(seconds: 1), () {
+          notifyListeners();
+        });
       }
-      debugPrint('[WaittimeCache] MQTT Updated $poiId: ${_cache[poiId]} min, queue=${_queueLengthCache[poiId]}');
-      notifyListeners();
     }
   }
 
@@ -128,6 +132,7 @@ class WaittimeCache extends ChangeNotifier {
   void stop() {
     _subscription?.cancel();
     _pollTimer?.cancel();
+    _notifyTimer?.cancel();
     _isListening = false;
   }
 }
