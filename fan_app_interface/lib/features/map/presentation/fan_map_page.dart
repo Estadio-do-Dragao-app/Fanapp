@@ -187,16 +187,13 @@ class FanMapPageState extends State<FanMapPage>
 
     // Start listening to wait time updates
     WaittimeCache().start();
-    WaittimeCache().addListener(_onWaittimeCacheUpdate);
-  }
-
-  void _onWaittimeCacheUpdate() {
-    if (mounted) {
-      setState(() {
-        // Just trigger rebuild to show fresh wait times in the panel
-      });
+    // Connect to MQTT for heatmap if already enabled at widget creation
+    if (widget.showHeatmap) {
+      _startHeatmapUpdates();
     }
   }
+
+
 
   Future<void> _checkLocationLayerAvailability() async {
     try {
@@ -228,7 +225,6 @@ class FanMapPageState extends State<FanMapPage>
     _alignPositionStreamController.close();
     _blinkController.dispose();
     _stopHeatmapUpdates();
-    WaittimeCache().removeListener(_onWaittimeCacheUpdate);
     super.dispose();
   }
 
@@ -417,10 +413,10 @@ class FanMapPageState extends State<FanMapPage>
   // Coordenadas da Universidade de Aveiro
   static const LatLng stadiumCenter = LatLng(40.6300, -8.6558);
 
-  // Bounding box da UA (aproximado)
+  // Bounding box da UA. Alargado para permitir testes mais distantes sem forçar o centro.
   static final LatLngBounds stadiumBounds = LatLngBounds(
-    const LatLng(40.6250, -8.6600), // Southwest
-    const LatLng(40.6350, -8.6500), // Northeast
+    const LatLng(40.5000, -8.8000), // Southwest
+    const LatLng(40.8000, -8.5000), // Northeast
   );
 
   Future<void> _loadMapData() async {
@@ -993,15 +989,20 @@ class FanMapPageState extends State<FanMapPage>
                             _selectedPOI!.name.toLowerCase().contains(
                               'farmácia',
                             ))
-                          _buildInfoChip(
-                            icon: Icons.group,
-                            label: AppLocalizations.of(context)!.queueTime(
-                              WaittimeCache()
-                                      .getWaitTime(_selectedPOI!.id)
-                                      ?.round() ??
-                                  route.waitTime?.round() ??
-                                  0,
-                            ),
+                          ListenableBuilder(
+                            listenable: WaittimeCache(),
+                            builder: (context, _) {
+                              return _buildInfoChip(
+                                icon: Icons.group,
+                                label: AppLocalizations.of(context)!.queueTime(
+                                  WaittimeCache()
+                                          .getWaitTime(_selectedPOI!.id)
+                                          ?.round() ??
+                                      route.waitTime?.round() ??
+                                      0,
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),
